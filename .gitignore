@@ -1,0 +1,58 @@
+# Rust / Cargo
+target/
+**/*.rs.bk
+Cargo.lock
+# Python (spike/test scripts)
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~
+
+# Build artifacts
+*.o
+*.so
+*.a
+
+# Kobo device binaries
+kothok/crates/kobo/kobo
+kothok/crates/kobo/grab-tester
+
+# Dev artifacts (explored fonts, test tools)
+kothok/crates/kobo/ui/NotoSans-Regular.ttf
+kothok/crates/kobo/ui/NotoSans-VF.ttf
+
+# Installer-downloaded fonts (fetched on demand by install-usb.ps1, not committed)
+kothok/dist/fonts/
+
+# Temp files
+kothok/crates/kobo/measure-baseline.sh
+graphify-out/
+
+# AGENTS.md (project config, not repo code)
+AGENTS.md
+
+# Local-only docs (kept for dev, not committed)
+docs/
+
+# Release binaries (built locally, downloaded from GitHub releases by users)
+release/
+
+# Kilo configuration (local dev tooling)
+.kilo/
+
+# Secrets — never commit. crates.io publish token lives in the global
+# ~/.cargo/credentials.json (created by `cargo login`), never in the repo.
+.env
+.env.*
+*.secret
+**/credentials.json
+.cargo/

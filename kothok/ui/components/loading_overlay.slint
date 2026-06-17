@@ -1,0 +1,43 @@
+export component LoadingOverlay inherits Rectangle {
+    in property <bool> visible-flag: false;
+    in property <int> loading-pct: 0;
+
+    y: root.height - 92px;
+    height: 70px;
+    visible: root.visible-flag;
+    background: #ffffff;
+
+    HorizontalLayout {
+        alignment: center;
+        spacing: 16px;
+        padding-top: 6px;
+
+        Text {
+            text: "Loading...";
+            color: #000000;
+            font-size: 24px;
+            vertical-alignment: center;
+        }
+
+        Rectangle {
+            width: 400px;
+            height: 14px;
+            background: #d0d0d0;
+            border-radius: 7px;
+            y: 28px;
+            Rectangle {
+                width: root.loading-pct * 400px / 100;
+                height: 100%;
+                background: #111111;
+                border-radius: 7px;
+            }
+        }
+
+        Text {
+            text: root.loading-pct + "%";
+            color: #000000;
+            font-size: 24px;
+            vertical-alignment: center;
+        }
+    }
+}

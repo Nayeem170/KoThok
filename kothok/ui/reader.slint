@@ -1,0 +1,174 @@
+import { Row, ChapterItem } from "types.slint";
+import { ContentArea } from "components/content.slint";
+import { ControlPanel } from "components/control_panel.slint";
+import { ChapterOverlay } from "components/chapter_overlay.slint";
+import { LoadingOverlay } from "components/loading_overlay.slint";
+
+export component Reader inherits Window {
+    preferred-width: 1072px;
+    preferred-height: 1448px;
+    background: #ffffff;
+
+    property <color> accent: #006A4E;
+    property <color> brand-green: #006A4E;
+    property <color> brand-red: #E00000;
+    property <color> brand-gray: #8a8a8a;
+    in-out property <[Row]> rows;
+    in-out property <int> cur-start;
+    in-out property <int> cur-end;
+    in-out property <bool> playing: false;
+    in-out property <bool> paused: false;
+    in-out property <bool> play-enabled: false;
+    callback play-pause-toggle();
+    in-out property <bool> nav-recent: false;
+    in-out property <int> taps: 0;
+    in-out property <string> status: "";
+    in-out property <int> page;
+    in-out property <int> page-count;
+    in-out property <int> saved-page: 0;
+
+    callback quit;
+
+    in-out property <bool> picker-active: false;
+
+    in-out property <bool> panel-open: false;
+    in-out property <string> current-sentence: "";
+    in-out property <int> battery-pct: 0;
+    in-out property <string> clock: "";
+    in-out property <int> brightness-val: 50;
+    in-out property <int> font-size-val: 36;
+    in-out property <string> tts-lang: "auto";
+    in-out property <string> tts-voice: "en-US-EmmaMultilingualNeural";
+    in-out property <string> tts-voice-label: "Emma (English)";
+    in-out property <int> tts-speed: 50;
+    in-out property <int> volume-val: 100;
+    in-out property <bool> wifi-on: true;
+    in-out property <bool> bt-on: true;
+    in-out property <string> wifi-name: "";
+    in-out property <string> bt-name: "";
+    in-out property <bool> chapter-overlay-open: false;
+    in-out property <[ChapterItem]> chapter-items;
+    in-out property <int> current-chapter-idx: 0;
+    in-out property <int> chapter-count: 1;
+    in-out property <string> chapter-name: "";
+    in-out property <string> book-title: "";
+    in-out property <string> book-author: "";
+    in-out property <image> book-title-img;
+    in-out property <int> book-title-img-h: 0;
+    in-out property <image> book-author-img;
+    in-out property <int> book-author-img-h: 0;
+    in-out property <image> chapter-name-img;
+    in-out property <int> chapter-name-img-h: 0;
+    in-out property <image> book-cover-img;
+    in-out property <int> chapter-preview-idx: -1;
+    in-out property <int> chapter-pending: -1;
+    in-out property <bool> loading-visible: false;
+    in-out property <int> loading-pct: 0;
+
+    callback panel-voice(string);
+    callback panel-wifi-toggle();
+    callback panel-bt-toggle();
+    callback panel-chapters();
+    callback progress-tap(float);
+    callback panel-brightness-up();
+    callback panel-brightness-down();
+    callback panel-speed-up();
+    callback panel-speed-down();
+    callback panel-font-size-up();
+    callback panel-font-size-down();
+    callback panel-volume-up();
+    callback panel-volume-down();
+    callback panel-frac(int, float);
+    callback panel-close();
+    callback chapter-selected(int);
+    callback jump-to-reading();
+
+    content-area := ContentArea {
+        x: 0px;
+        y: 0px;
+        width: root.width;
+        height: root.height;
+        rows: root.rows;
+        page: root.page;
+        page-count: root.page-count;
+        saved-page: root.saved-page;
+        playing: root.playing;
+        play-enabled: root.play-enabled;
+        status: root.status;
+        nav-recent: root.nav-recent;
+        picker-active: root.picker-active;
+        brand-green: root.brand-green;
+        brand-red: root.brand-red;
+        brand-gray: root.brand-gray;
+        play-pause-toggle => { root.play-pause-toggle(); }
+        progress-tap(f) => { root.progress-tap(f); }
+    }
+
+    control-panel := ControlPanel {
+        x: 0px;
+        y: 0px;
+        width: root.width;
+        height: root.height;
+        visible-flag: root.panel-open;
+        brightness-val: root.brightness-val;
+        tts-speed: root.tts-speed;
+        font-size-val: root.font-size-val;
+        volume-val: root.volume-val;
+        tts-voice-label: root.tts-voice-label;
+        wifi-on: root.wifi-on;
+        bt-on: root.bt-on;
+        wifi-name: root.wifi-name;
+        bt-name: root.bt-name;
+        clock: root.clock;
+        battery-pct: root.battery-pct;
+        book-title: root.book-title;
+        book-author: root.book-author;
+        chapter-name: root.chapter-name;
+        book-title-img: root.book-title-img;
+        book-title-img-h: root.book-title-img-h;
+        book-author-img: root.book-author-img;
+        book-author-img-h: root.book-author-img-h;
+        chapter-name-img: root.chapter-name-img;
+        chapter-name-img-h: root.chapter-name-img-h;
+        book-cover-img: root.book-cover-img;
+        page: root.page;
+        page-count: root.page-count;
+        brand-green: root.brand-green;
+        quit => { root.quit(); }
+        jump-to-reading => { root.jump-to-reading(); }
+        panel-close => { root.panel-close(); }
+        panel-brightness-up => { root.panel-brightness-up(); }
+        panel-brightness-down => { root.panel-brightness-down(); }
+        panel-speed-up => { root.panel-speed-up(); }
+        panel-speed-down => { root.panel-speed-down(); }
+        panel-font-size-up => { root.panel-font-size-up(); }
+        panel-font-size-down => { root.panel-font-size-down(); }
+        panel-volume-up => { root.panel-volume-up(); }
+        panel-volume-down => { root.panel-volume-down(); }
+        panel-frac(i, f) => { root.panel-frac(i, f); }
+        panel-voice(s) => { root.panel-voice(s); }
+        panel-wifi-toggle => { root.panel-wifi-toggle(); }
+        panel-bt-toggle => { root.panel-bt-toggle(); }
+        panel-chapters => { root.panel-chapters(); }
+    }
+
+    chapter-overlay := ChapterOverlay {
+        x: 0px;
+        y: 0px;
+        width: root.width;
+        height: root.height;
+        visible-flag <=> root.chapter-overlay-open;
+        chapter-preview-idx <=> root.chapter-preview-idx;
+        chapter-pending <=> root.chapter-pending;
+        current-chapter-idx: root.current-chapter-idx;
+        chapter-selected(i) => { root.chapter-selected(i); }
+    }
+
+    loading-overlay := LoadingOverlay {
+        x: 0px;
+        y: root.height - 92px;
+        width: root.width;
+        visible-flag: root.loading-visible;
+        loading-pct: root.loading-pct;
+    }
+}

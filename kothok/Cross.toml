@@ -1,0 +1,4 @@
+[target.armv7-unknown-linux-musleabihf]
+pre-build = [
+    "apt-get update && apt-get install --no-install-recommends -y fonts-dejavu-core fonts-noto fontconfig",
+]

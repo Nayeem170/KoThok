@@ -1,0 +1,25 @@
+# Normalize all text files to LF on checkout/checkin. CRLF is fatal here:
+#  - Rust sources fail the cross build (AGENTS.md: LF required, CRLF breaks build)
+#  - The installer (install-usb.ps1) emits device-side shell scripts (run.sh,
+#    deploy.sh) via literal here-strings; a CRLF copy produces a CRLF run.sh,
+#    whose "#!/bin/sh\r" shebang busybox cannot exec -> the KoThok launch hook
+#    silently fails. Force LF so Windows checkouts (core.autocrlf=true) cannot
+#    reintroduce CRLF.
+* text=auto eol=lf
+
+# Explicit overrides for the deploy-critical and source paths.
+*.ps1 text eol=lf
+*.sh  text eol=lf
+*.rs  text eol=lf
+*.slint text eol=lf
+*.toml text eol=lf
+
+# Generated/binary artifacts: never normalize or diff.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.mp3 binary
+*.epub binary
+*.ttf binary
+*.otf binary

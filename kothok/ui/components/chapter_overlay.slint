@@ -1,0 +1,49 @@
+import { ActionButton } from "button.slint";
+
+export component ChapterOverlay inherits Rectangle {
+    in-out property <bool> visible-flag: false;
+    in-out property <int> chapter-preview-idx: -1;
+    in-out property <int> chapter-pending: -1;
+    in property <int> current-chapter-idx: 0;
+
+    callback chapter-selected(int);
+
+    visible: root.visible-flag;
+    background: #ffffff;
+
+    VerticalLayout {
+        padding-left: 40px; padding-right: 40px;
+        padding-top: 48px; padding-bottom: 36px;
+        spacing: 16px;
+
+        HorizontalLayout {
+            height: 64px;
+            spacing: 16px;
+
+            Rectangle {
+                horizontal-stretch: 1; height: 64px;
+                Text { text: "Chapters"; color: #000000; font-size: 34px; vertical-alignment: center; }
+            }
+
+            ActionButton {
+                width: 140px; height: 64px;
+                label: "Close";
+                clicked => { root.chapter-preview-idx = -1; root.chapter-pending = -1; root.visible-flag = false; }
+            }
+        }
+
+        Rectangle {
+            vertical-stretch: 1;
+            background: transparent;
+        }
+
+        ActionButton {
+            height: 84px;
+            label: "Open";
+            font-size: 32px;
+            clicked => {
+                root.chapter-selected(root.chapter-preview-idx >= 0 ? root.chapter-preview-idx : root.current-chapter-idx);
+            }
+        }
+    }
+}

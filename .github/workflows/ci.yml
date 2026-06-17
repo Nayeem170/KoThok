@@ -1,0 +1,57 @@
+name: ci
+
+on:
+  pull_request:
+    paths:
+      - "kothok/crates/kobo/**"
+      - "kothok/crates/kothok-core/**"
+      - "kothok/crates/kobo-audio/**"
+      - ".github/workflows/ci.yml"
+  push:
+    branches: [main, master]
+    paths:
+      - "kothok/crates/kobo/**"
+      - "kothok/crates/kothok-core/**"
+      - "kothok/crates/kobo-audio/**"
+      - ".github/workflows/ci.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: kothok
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: kothok
+      - name: fmt
+        run: cargo fmt --all -- --check
+      # clippy runs WITHOUT -D warnings for now: the tree has outstanding
+      # lints (notably §1 too_many_arguments debt). Hardening to -D warnings
+      # is tracked separately. Failures here are informational.
+      - name: clippy
+        run: cargo clippy -p kobo -p kothok-core -p kobo-audio
+      - name: test
+        run: cargo test -p kobo -p kothok-core -p kobo-audio
+
+  cross-build:
+    # Smoke-check the device binary still compiles (no emulator; compile only).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: armv7-unknown-linux-musleabihf
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: kothok
+      - name: Install cross
+        run: cargo install cross --git https://github.com/cross-rs/cross --locked
+      - name: cross build
+        working-directory: kothok
+        run: cross build --target armv7-unknown-linux-musleabihf --release -p kobo

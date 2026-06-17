@@ -1,0 +1,43 @@
+export component ActionButton inherits Rectangle {
+    in property <string> label;
+    in property <string> value: "";
+    in property <length> font-size: 24px;
+    in property <color> bg: #006A4E;
+    in property <color> bg-pressed: #555555;
+    in property <color> fg: #ffffff;
+    callback clicked;
+
+    background: touch.pressed ? root.bg-pressed : root.bg;
+    border-radius: 10px;
+
+    HorizontalLayout {
+        padding-left: 16px;
+        padding-right: 16px;
+        spacing: 10px;
+        alignment: center;
+        Text {
+            text: root.label;
+            color: root.fg;
+            font-size: root.font-size;
+            vertical-alignment: center;
+            horizontal-stretch: root.value == "" ? 1 : 0;
+        }
+        if root.value != "" : Text {
+            text: root.value;
+            color: root.fg;
+            font-size: root.font-size;
+            horizontal-stretch: 1;
+            horizontal-alignment: right;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+        if root.value != "" : Text {
+            text: ">";
+            color: root.fg;
+            font-size: root.font-size;
+            vertical-alignment: center;
+        }
+    }
+
+    touch := TouchArea { clicked => { root.clicked(); } }
+}
