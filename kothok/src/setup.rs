@@ -123,7 +123,7 @@ fn scan_and_resolve(
         fb.present(rgb565_as_bytes_ref(&splash), w, h, false, y0, y1, WAVE_DU);
         std::thread::sleep(std::time::Duration::from_millis(80));
     }
-    render::paint_kothok_splash(&mut splash);
+    splash.fill(Rgb565Pixel(0xFFFF));
     fb.present(rgb565_as_bytes_ref(&splash), w, h, true, 0, 0, WAVE_GC16);
 
     font_handle.join().unwrap_or(());

@@ -105,8 +105,8 @@ export component ContentArea inherits Rectangle {
                   : ((root.playing || root.nav-recent)
                      ? ("Page " + (root.page + 1) + " of " + root.page-count)
                      : (root.play-enabled
-                        ? "Swipe down: menu · double-tap: play · swipe: pages"
-                        : "Connect WiFi & Bluetooth to play · swipe down: menu"));
+? "Swipe down: menu - double-tap: play - swipe: pages"
+                         : "Connect WiFi & Bluetooth to play - swipe down: menu"));
             color: #111111;
             font-size: 22px;
             horizontal-alignment: center;

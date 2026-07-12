@@ -49,6 +49,9 @@ release/
 # Kilo configuration (local dev tooling)
 .kilo/
 
+# Local kobo-core copy for cross-build patch
+kothok/kobo-core/
+
 # Secrets — never commit. crates.io publish token lives in the global
 # ~/.cargo/credentials.json (created by `cargo login`), never in the repo.
 .env

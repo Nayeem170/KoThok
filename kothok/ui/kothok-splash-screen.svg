@@ -50,9 +50,9 @@
   <!-- Background -->
   <rect width="100%" height="100%" fill="#FCFCFC" />
 
-  <!-- Line 1: Read · -->
+  <!-- Line 1: Read -->
   <text x="320" y="310" class="text-red">Read</text>
-  <!-- Line 2: Listen · -->
+  <!-- Line 2: Listen -->
   <text x="320" y="490" class="text-green">Listen</text>
   <!-- Line 3: Anywhere -->
   <text x="320" y="670" class="text-black">Anywhere</text>

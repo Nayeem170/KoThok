@@ -19,9 +19,9 @@ can be reused in other projects.
 
 ```mermaid
 flowchart TD
-    APP["<b>kothok-app</b><br/>Reader UI · audio · books"]
-    CORE["<b>kobo-core</b><br/>Device SDK · A2DP · e-ink"]
-    TTS["<b>kothok-edge-tts</b><br/>Edge TTS · 400+ voices"]
+    APP["<b>kothok-app</b><br/>Reader UI | audio | books"]
+    CORE["<b>kobo-core</b><br/>Device SDK | A2DP | e-ink"]
+    TTS["<b>kothok-edge-tts</b><br/>Edge TTS | 400+ voices"]
 
     APP ==>|"depends on"| CORE
     CORE -->|"uses"| TTS

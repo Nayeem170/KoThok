@@ -114,6 +114,15 @@ pub fn wake_from_sleep(st: &mut LoopState, ctx: &LoopContext) {
         reader.get_cur_start(),
         reader.get_cur_end()
     );
+    let utts = crate::audio::glue::page_utterances(current_page, state);
+    let target_idx = if wake_ce > wake_cs {
+        crate::audio::glue::utterance_index_for_offset(&utts, wake_cs as usize)
+    } else {
+        0
+    };
+    let _ = ctx.cmd_tx.send(Cmd::Reload(utts));
+    let _ = ctx.cmd_tx.send(Cmd::Seek(target_idx));
+    debug!("pwr: wake audio reload + seek to utt {}", target_idx);
     // Swap the screen from the sleep cover to the book page WHILE THE
     // FRONTLIGHT IS STILL OFF (it was dimmed in enter_sleep). Doing the content
     // swap in the dark means the cover is never seen lit; then the light comes

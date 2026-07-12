@@ -86,7 +86,7 @@ pub fn toggle_playback(
     } else {
         (0, 0)
     };
-    // best-effort: channel may be full
+    let _ = cmd_tx.send(Cmd::Reload(page_utts));
     let _ = cmd_tx.send(Cmd::Seek(target));
     let _ = cmd_tx.send(Cmd::Play);
     reader.set_playing(true);
