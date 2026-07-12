@@ -38,7 +38,7 @@ pub fn apply_book_voice(
         .voices
         .get(mapped)
         .cloned()
-        .or_else(|| voices.first().map(|v| v.id.to_string()))
+        .or_else(|| voices.first().map(|v| v.id().to_string()))
         .unwrap_or_else(|| {
             if is_bn {
                 BN_VOICE.to_string()
@@ -82,7 +82,7 @@ pub const SAMPLE_CHAPTER: &str = r#"<html><body>
 the Read Aloud reader on the Kobo Libra Colour. Each sentence is highlighted
 with a left accent bar as the playback clock advances.</p>
 <figure><img src="fox.png" alt="A fox"/>
-  <figcaption>Fig. 1 — the fox leaps.</figcaption></figure>
+  <figcaption>Fig. 1 - the fox leaps.</figcaption></figure>
 <p>Highlight and audio read one shared clock, so they cannot drift. Use the
 previous and next buttons to jump by sentence. Drag the seek bar to scrub.</p>
 <p>The real Player drives the clock from the A2DP audio sink; here we render a

@@ -59,7 +59,7 @@ sequenceDiagram
     DRV->>UI: Event::PageBreak
     UI->>UI: Advance visual page
     UI->>DRV: Cmd::Append(next page utterances)
-    Note over DRV: Audio continues seamlessly
+    Note over DRV: Audio continues without gap
     DRV->>BT: Next sentence PCM (no gap)
 ```
 

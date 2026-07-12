@@ -54,13 +54,13 @@ pub fn enter_sleep(st: &mut LoopState, ctx: &LoopContext, from_picker: bool, bt_
         }
     }
     // best-effort: channel may be full
-    let _ = cmd_tx.send(Cmd::Pause);
+    let _ = cmd_tx.send(Cmd::Stop);
     if plan.wifi_off {
         wifi_toggle(false);
     }
     // Only power BT down when it was actually on. On devices without a BT
     // adapter (e.g. Clara Colour, has_bt=false) the dbus-send call hangs
-    // forever — calling it unconditionally stalls enter_sleep and the whole
+    // forever - calling it unconditionally stalls enter_sleep and the whole
     // main loop, so power button sleep/wake appears dead. Wake mirrors this
     // with `if reader.get_bt_on()`.
     if plan.bt_off {
@@ -90,7 +90,7 @@ pub fn wake_from_sleep(st: &mut LoopState, ctx: &LoopContext) {
     let content_h = ctx.content_h;
     reader.set_page((chapter_offsets[current_chapter] + current_page) as i32);
     reader.set_page_count(*chapter_offsets.last().unwrap_or(&1) as i32);
-    // Capture the pre-sleep reading marker (where you left off) — the Slint
+    // Capture the pre-sleep reading marker (where you left off) - the Slint
     // properties survive sleep, but apply_page below resets them.
     let wake_cs = reader.get_cur_start();
     let wake_ce = reader.get_cur_end();
@@ -117,7 +117,7 @@ pub fn wake_from_sleep(st: &mut LoopState, ctx: &LoopContext) {
     // Swap the screen from the sleep cover to the book page WHILE THE
     // FRONTLIGHT IS STILL OFF (it was dimmed in enter_sleep). Doing the content
     // swap in the dark means the cover is never seen lit; then the light comes
-    // up on the already-drawn book page — one clean transition instead of the
+    // up on the already-drawn book page - one clean transition instead of the
     // cover-lit "double blink" on wake.
     let content_end = (PAD_TOP + content_h as usize).min(h);
     buffer[PAD_TOP * w..content_end * w].fill(Rgb565Pixel(0xFFFF));
@@ -162,11 +162,11 @@ pub fn wake_from_sleep(st: &mut LoopState, ctx: &LoopContext) {
     // the slow cold-panel refresh is seen mid-flight with the light on (the
     // long-sleep wake flicker). The mxcfb WAIT_FOR_UPDATE_COMPLETE ioctl is
     // kernel-version-specific and a wrong number corrupts the refresh, so use a
-    // fixed settle — the same proven duration the sleep side uses.
+    // fixed settle - the same proven duration the sleep side uses.
     std::thread::sleep(std::time::Duration::from_millis(SLEEP_COVER_SETTLE_MS));
     prev_buffer.copy_from_slice(buffer);
     // Now bring the frontlight up on the already-drawn book page. Do NOT toggle
-    // fb0/bl_power — that file controls the EPD display panel, and its
+    // fb0/bl_power - that file controls the EPD display panel, and its
     // powerdown/unblank cycle visibly blanks the screen (the wake flicker). The
     // frontlight (lm3630a_led/brightness) is a separate path.
     if let Some(ref path) = fl_path {
@@ -195,20 +195,21 @@ pub fn teardown(fb: &Fb, exit_flag: &Arc<AtomicBool>, power_dev: &str, w: usize,
     std::thread::sleep(std::time::Duration::from_millis(200));
     // Show the KoThok splash during the reboot window so the screen isn't a
     // frozen nickel frame. Exit always reboots (AGENTS.md), so we never restore
-    // nickel's framebuffer — the logo makes the shutdown look intentional.
+    // nickel's framebuffer - the logo makes the shutdown look intentional.
     {
         let mut splash = vec![Rgb565Pixel(0); w * h];
         crate::rendering::render::paint_kothok_splash(&mut splash);
         fb.present(rgb565_as_bytes_ref(&splash), w, h, true, 0, 0, WAVE_GC16);
-        // Animate the loader over the shutdown window so the close splash isn't
-        // a frozen frame. Partial-refresh only the spinner's row band.
-        let (_, spy, _, sph) = crate::rendering::render::splash_spinner_rect();
-        let y0 = (spy as usize).saturating_sub(4);
-        let y1 = ((spy + sph + 4) as usize).min(h);
+        let r = kobo_core::rendering::loader::spinner_rect(w as i32, h as i32);
+        let y0 = (r.y as usize).saturating_sub(4);
+        let y1 = ((r.y + r.h + 4) as usize).min(h);
         let mut angle = 0u32;
-        for _ in 0..4 {
-            angle = (angle + 340) % 360;
-            crate::rendering::render::paint_splash_spinner(&mut splash, angle);
+        for _ in 0..6 {
+            angle = (angle + 60) % 360;
+            kobo_core::rendering::loader::paint_spinner(
+                crate::rendering::common::rgb565_as_bytes(&mut splash),
+                w, h, angle,
+            );
             fb.present(rgb565_as_bytes_ref(&splash), w, h, false, y0, y1, WAVE_GC16);
             std::thread::sleep(std::time::Duration::from_millis(110));
         }
@@ -239,7 +240,7 @@ pub fn teardown(fb: &Fb, exit_flag: &Arc<AtomicBool>, power_dev: &str, w: usize,
             std::thread::sleep(std::time::Duration::from_millis(100));
             if let Ok(dev) = std::fs::OpenOptions::new().write(true).open(power_dev) {
                 let fd = dev.as_raw_fd();
-                // SAFETY: same as above — valid fd, [u8;24] source, best-effort power-key
+                // SAFETY: same as above - valid fd, [u8;24] source, best-effort power-key
                 // release event.
                 unsafe {
                     libc::write(fd, ie(EV_KEY, KEY_POWER, 0).as_ptr() as *const _, 24);

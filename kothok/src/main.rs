@@ -1,4 +1,4 @@
-//! KoThok reader — on-device EPUB render + Read Aloud (Layer 3a).
+//! KoThok reader - on-device EPUB render + Read Aloud (Layer 3a).
 //! Renders the page to the framebuffer, drives Slint via raw touch evdev, and
 //! runs the Edge-TTS -> A2DP `Player` on a worker thread (Play/Pause/Stop).
 
@@ -197,10 +197,4 @@ fn init_audio(
             volume: cfg.volume as u32,
         },
     )
-}
-
-#[cfg(test)]
-mod tests {
-    // TODO(§1): page_for_offset was removed; re-add tests when function is
-    // re-implemented in layout.rs.
 }

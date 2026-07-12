@@ -1,7 +1,7 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
-use slint::ComponentHandle;
+use slint::{ComponentHandle, SharedString};
 
 use crate::Reader;
 
@@ -16,7 +16,7 @@ pub struct Callbacks {
     pub panel_sp: Rc<Cell<i32>>,
     pub panel_fs: Rc<Cell<i32>>,
     pub panel_vol: Rc<Cell<i32>>,
-    pub panel_voice_cell: Rc<Cell<bool>>,
+    pub panel_voice_cell: Rc<Cell<i32>>,
     pub panel_frac: Rc<Cell<Option<(i32, f32)>>>,
     pub font_frac_in: Rc<Cell<Option<f32>>>,
     pub wifi_toggle_cell: Rc<Cell<bool>>,
@@ -156,10 +156,10 @@ pub fn register(reader: &Reader) -> Callbacks {
 
     let sliders = register_sliders(reader);
 
-    let panel_voice_cell = Rc::new(Cell::new(false));
+    let panel_voice_cell = Rc::new(Cell::new(0i32));
     let pv = panel_voice_cell.clone();
-    reader.on_panel_voice(move |_| {
-        pv.set(true);
+    reader.on_panel_voice(move |dir: SharedString| {
+        pv.set(if dir == "prev" { 2 } else { 1 });
     });
 
     let panel_frac = Rc::new(Cell::new(None::<(i32, f32)>));

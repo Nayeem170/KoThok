@@ -130,7 +130,7 @@ pub fn switch_chapter(
     let _ = cmd_tx.send(Cmd::Reload(st.state.utterances.clone()));
     // Only move the reading cursor for an actual playback progression
     // (auto-advance). When browsing/opening a chapter from the list, leave the
-    // cursor on the last reading line — like the saved-page tick, it must NOT
+    // cursor on the last reading line - like the saved-page tick, it must NOT
     // jump to the opened chapter's first line.
     if update_cursor {
         if let Some(&(s, e)) = st.state.pages.get(cp) {

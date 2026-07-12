@@ -49,7 +49,7 @@ impl Default for AppConfig {
 }
 
 /// Baseline slow-down applied at the "1x" center (slider 50). Edge-TTS neural
-/// voices — Bangla especially — run fast at native rate and words blur/overlap,
+/// voices - Bangla especially - run fast at native rate and words blur/overlap,
 /// so every speed is shifted slower by this many percentage points. The slider
 /// still spans the full -100%..+100% range around it.
 pub const RATE_BASELINE_OFFSET: i32 = -10;
@@ -171,7 +171,7 @@ mod tests {
 
     #[test]
     fn base_font_used_when_no_font_size_line() {
-        // First-launch on a device: no font_size in the file → the screen-scaled
+        // First-launch on a device: no font_size in the file -> the screen-scaled
         // base applies.
         let p = tmp_path("basefont-missing");
         std::fs::write(&p, "tts_rate=70\n").unwrap();

@@ -4,7 +4,7 @@ use super::*;
 
 #[test]
 fn sleep_plan_nevers_powers_bt_when_off() {
-    // BT off (or no adapter) MUST keep bt_off=false — the dbus call hangs
+    // BT off (or no adapter) MUST keep bt_off=false - the dbus call hangs
     // on BT-less devices, which previously stalled enter_sleep entirely.
     let plan = sleep_plan(false, &None, false, false);
     assert!(!plan.bt_off, "bt off -> must not call bt_toggle");
@@ -28,8 +28,8 @@ fn progress_target_max_maps_to_last_chapter() {
 #[test]
 fn progress_target_midpoint_splits_chapters_correctly() {
     // 3 chapters of 5 pages each: offsets = [0, 5, 10, 15]
-    // 500 per-mille → global = 500 * 15 / 1000 = 7
-    // chapter 0 covers [0,5), chapter 1 covers [5,10) → c=1, local=2
+    // 500 per-mille -> global = 500 * 15 / 1000 = 7
+    // chapter 0 covers [0,5), chapter 1 covers [5,10) -> c=1, local=2
     let offsets = [0, 5, 10, 15];
     let (c, lp) = resolve_progress_target(500, &offsets, 3);
     assert_eq!(c, 1);
@@ -39,7 +39,7 @@ fn progress_target_midpoint_splits_chapters_correctly() {
 #[test]
 fn progress_target_boundary_lands_in_correct_chapter() {
     // global = 5 should land at start of chapter 1 (offsets[1] = 5)
-    // pt such that pt * 15 / 1000 = 5 → pt = 334 (ceil(5000/15))
+    // pt such that pt * 15 / 1000 = 5 -> pt = 334 (ceil(5000/15))
     let offsets = [0, 5, 10, 15];
     let (c, lp) = resolve_progress_target(334, &offsets, 3);
     assert_eq!(c, 1);
@@ -81,11 +81,11 @@ fn nav_outcome_defaults_all_false() {
 fn friendly_error_a2dp_maps_to_speaker_message() {
     assert_eq!(
         friendly_error("A2DP connect failed"),
-        "Speaker not connected — check Bluetooth"
+        "Speaker not connected - check Bluetooth"
     );
     assert_eq!(
         friendly_error("no speaker endpoint"),
-        "Speaker not connected — check Bluetooth"
+        "Speaker not connected - check Bluetooth"
     );
 }
 
@@ -93,11 +93,11 @@ fn friendly_error_a2dp_maps_to_speaker_message() {
 fn friendly_error_is_case_insensitive() {
     assert_eq!(
         friendly_error("A2dp Stream Error"),
-        "Speaker not connected — check Bluetooth"
+        "Speaker not connected - check Bluetooth"
     );
     assert_eq!(
         friendly_error("TTS synthesis aborted"),
-        "WiFi unavailable — can't reach the voice service"
+        "WiFi unavailable - can't reach the voice service"
     );
 }
 
@@ -112,7 +112,7 @@ fn friendly_error_network_or_tts_maps_to_wifi_message() {
     ] {
         assert_eq!(
             friendly_error(msg),
-            "WiFi unavailable — can't reach the voice service",
+            "WiFi unavailable - can't reach the voice service",
             "message {msg:?} should map to the WiFi warning"
         );
     }
@@ -122,9 +122,9 @@ fn friendly_error_network_or_tts_maps_to_wifi_message() {
 fn friendly_error_unknown_falls_back_to_generic() {
     assert_eq!(
         friendly_error("disk write protected"),
-        "Playback error — see log"
+        "Playback error - see log"
     );
-    assert_eq!(friendly_error(""), "Playback error — see log");
+    assert_eq!(friendly_error(""), "Playback error - see log");
 }
 
 #[test]

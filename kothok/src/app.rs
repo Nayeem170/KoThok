@@ -26,7 +26,7 @@ pub struct AudioFlags {
 // cover isn't captured mid-refresh.
 const SLEEP_COVER_SETTLE_MS: u64 = 400;
 
-/// Updated reading cursor after a play/pause toggle (so "↩ Reading" can return
+/// Updated reading cursor after a play/pause toggle (so "Reading" can return
 /// to the line that resumed).
 pub struct PlayToggle {
     pub ch: usize,
@@ -104,16 +104,16 @@ pub fn toggle_playback(
 fn friendly_error(m: &str) -> String {
     let lower = m.to_ascii_lowercase();
     if lower.contains("a2dp") || lower.contains("speaker") {
-        "Speaker not connected — check Bluetooth".to_string()
+        "Speaker not connected - check Bluetooth".to_string()
     } else if lower.contains("ws connect")
         || lower.contains("lookup address")
         || lower.contains("try again")
         || lower.contains("synth")
         || lower.contains("tts")
     {
-        "WiFi unavailable — can't reach the voice service".to_string()
+        "WiFi unavailable - can't reach the voice service".to_string()
     } else {
-        "Playback error — see log".to_string()
+        "Playback error - see log".to_string()
     }
 }
 

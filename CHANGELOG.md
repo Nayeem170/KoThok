@@ -20,7 +20,7 @@ First public release.
 - Edge-TTS synthesis streamed to Bluetooth A2DP speaker
 - Inter-sentence and paragraph gaps baked into audio
 - Per-book-language voice selection (auto-detect script)
-- Mid-sentence page break: visual page turns while audio continues seamlessly
+- Mid-sentence page break: visual page turns while audio continues without interruption
 - Voice choice remembered per language
 - Draggable sliders for brightness, speed, font size, and volume
 

@@ -33,7 +33,7 @@ pub fn init_layout(fb_w: usize, fb_h: usize) {
         content_h: fb_h as i32 - PAD_TOP as i32 - FOOTER_H,
     });
     log::debug!(
-        "layout: fb={}x{} → text_w={}, content_h={}",
+        "layout: fb={}x{} -> text_w={}, content_h={}",
         fb_w,
         fb_h,
         LAYOUT.get().unwrap().text_w,

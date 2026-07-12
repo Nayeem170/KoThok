@@ -13,7 +13,7 @@ const BOOK_CACHE_DIR: &str = "/mnt/onboard/.adds/bookcache";
 /// serializes the extracted chapters so a re-open is a single file read.
 #[derive(serde::Serialize, serde::Deserialize)]
 struct CachedBook {
-    /// EPUB file mtime (seconds since epoch) — used to invalidate a stale cache.
+    /// EPUB file mtime (seconds since epoch) - used to invalidate a stale cache.
     mtime: u64,
     language: Option<String>,
     chapters: Vec<Chapter>,
@@ -205,7 +205,7 @@ fn epub_metadata(path: &str) -> (String, Option<String>) {
 }
 
 // Detect the book language from its CONTENT (script), taking priority over the
-// EPUB's dc:language tag — many books carry a wrong/English tag. Returns the
+// EPUB's dc:language tag - many books carry a wrong/English tag. Returns the
 // language code only when a non-Latin script dominates (>=10% of letters), so a
 // stray foreign quote in an English book doesn't mis-detect; Latin-only text
 // falls through to the caller's metadata/default.
@@ -284,7 +284,7 @@ pub fn open_book(path: &str) -> Option<(Vec<Chapter>, Option<String>)> {
 }
 
 /// Display title for a chapter: the EPUB-declared title if present, otherwise
-/// derived from the chapter's first heading element, then its first text line —
+/// derived from the chapter's first heading element, then its first text line -
 /// never a bare "Chapter N" position (issue L23).
 pub fn chapter_display_title(ch: &Chapter, idx: usize) -> String {
     if let Some(t) = ch.title.as_deref() {

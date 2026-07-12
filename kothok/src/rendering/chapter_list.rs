@@ -98,12 +98,12 @@ fn truncate_to_width(s: &str, px: f32, max_w: usize) -> String {
     let mut out: String = s.chars().take(3).collect();
     for ch in s.chars().skip(3) {
         out.push(ch);
-        if measure_text(&(out.clone() + "…"), px) > max_w {
+        if measure_text(&(out.clone() + "..."), px) > max_w {
             out.pop();
             break;
         }
     }
-    out.push('…');
+    out.push_str("...");
     out
 }
 
@@ -166,7 +166,7 @@ mod tests {
         let full = "The Complete Works of William Shakespeare";
         let out = truncate_to_width(full, 24.0, 80);
         assert!(
-            out.ends_with('…'),
+            out.ends_with("..."),
             "truncated text must end with ellipsis: {out:?}"
         );
         assert!(out.len() < full.len());
@@ -183,6 +183,6 @@ mod tests {
             out.starts_with("abc"),
             "truncation must preserve the first three characters: {out:?}"
         );
-        assert!(out.ends_with('…'));
+        assert!(out.ends_with("..."));
     }
 }

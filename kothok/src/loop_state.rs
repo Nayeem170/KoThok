@@ -87,7 +87,6 @@ pub struct LoopState {
 
     pub voice_rx: Option<Receiver<Vec<kothok_edge_tts::VoiceInfo>>>,
     pub voice_fetch_attempted: bool,
-    pub page_break_advanced: bool,
 }
 
 pub struct LoopContext<'a> {

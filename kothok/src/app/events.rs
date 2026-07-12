@@ -43,7 +43,7 @@ pub fn process_audio_events(
                 reader.set_paused(false);
                 reader.set_status("".into());
                 // NOTE: do NOT clear cur_start/cur_end here. The reading cursor is
-                // a persistent position, not playback state — wiping it on Stop
+                // a persistent position, not playback state - wiping it on Stop
                 // raced the book-open restore (Cmd::Stop -> Stopped arrives after
                 // the saved cursor was set), leaving the page with no cursor and
                 // making Play resume from the page top instead of the saved line.
@@ -51,7 +51,7 @@ pub fn process_audio_events(
             }
             Event::Ended => {
                 // Auto page-turn on TTS completion: keep text_dirty + ui_changed
-                // but NOT page_changed, so this is a PARTIAL refresh — matching
+                // but NOT page_changed, so this is a PARTIAL refresh - matching
                 // the flicker-free swipe page-turn (no full GC16 black flash).
                 let (td, uc) = handle_audio_ended(st, reader, cmd_tx);
                 text_dirty |= td;
@@ -84,7 +84,7 @@ pub fn process_audio_events(
                 }
             }
             Event::PageBreak => {
-                if !st.page_break_advanced && st.current_page + 1 < st.state.pages.len() {
+                if st.current_page + 1 < st.state.pages.len() {
                     st.current_page += 1;
                     apply_page(
                         reader,
@@ -94,7 +94,6 @@ pub fn process_audio_events(
                         st.current_chapter,
                     );
                     reader.set_saved_page((st.chapter_offsets[st.current_chapter] + st.current_page) as i32);
-                    st.page_break_advanced = true;
                     text_dirty = true;
                     let next_utts = crate::audio::glue::page_utterances(st.current_page, &st.state);
                     let _ = cmd_tx.send(Cmd::Append(next_utts));
@@ -117,10 +116,6 @@ pub fn process_audio_events(
 
 fn handle_audio_ended(st: &mut LoopState, reader: &Reader, cmd_tx: &Sender<Cmd>) -> (bool, bool) {
     let mut text_dirty = false;
-
-    if st.page_break_advanced {
-        st.page_break_advanced = false;
-    }
 
     if st.current_page + 1 < st.state.pages.len() {
         st.current_page += 1;
@@ -303,7 +298,7 @@ fn apply_progress_target(
     o
 }
 
-/// Pure: maps a progress-bar per-mille (0–1000) to a (chapter, local_page)
+/// Pure: maps a progress-bar per-mille (0-1000) to a (chapter, local_page)
 /// pair using the cumulative chapter-offset table.
 pub(super) fn resolve_progress_target(
     pt_val: i32,

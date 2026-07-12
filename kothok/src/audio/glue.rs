@@ -91,7 +91,7 @@ pub fn load_page_audio(page: usize, state: &ChapterState, cmd_tx: &mpsc::Sender<
 /// Send an audio command to the worker, ignoring a full/closed channel. The
 /// worker drives its own queue and re-derives state, so a dropped command
 /// (saturated channel, or the worker already torn down) is benign. Centralises
-/// the CODE_CONVENTIONS §5 best-effort reason so it isn't repeated at every
+/// the CODE_CONVENTIONS S5 best-effort reason so it isn't repeated at every
 /// bare `let _ = tx.send(..)` call site.
 pub fn best_effort_send(tx: &mpsc::Sender<Cmd>, cmd: Cmd) {
     let _ = tx.send(cmd);

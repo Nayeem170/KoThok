@@ -5,7 +5,7 @@
     No source code, no Rust, no Docker needed.
     Just run this script with your Kobo plugged in via USB.
 .PARAMETER Repo
-    GitHub repo with releases (default: Nayeem170/EReader).
+    GitHub repo with releases (default: Nayeem170/KoThok).
 #>
 [CmdletBinding()]
 param(

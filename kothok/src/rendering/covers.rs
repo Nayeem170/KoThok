@@ -5,9 +5,9 @@ use kobo_core::EpubBook;
 use crate::rendering::layout::word_wrap_bytes;
 use crate::rendering::text_render;
 
-use crate::rendering::common::{rgb565_as_bytes, KOTHOK_LOGO};
+use crate::rendering::common::rgb565_as_bytes;
 use crate::rendering::draw::{measure_text, paint_placeholder_box};
-use crate::rendering::splash::paint_kothok_splash;
+use crate::rendering::splash::{paint_kothok_splash, splash_png};
 
 pub type CoverCache =
     std::collections::HashMap<(String, usize, usize), Option<crate::rendering::text_render::DecodedImage>>;
@@ -19,7 +19,7 @@ fn resolve_cover(
 ) -> Option<crate::rendering::text_render::DecodedImage> {
     cover_bytes
         .and_then(|b| text_render::decode_image(b, max_w, max_h))
-        .or_else(|| text_render::decode_image(KOTHOK_LOGO, max_w, max_h))
+        .or_else(|| text_render::decode_image(splash_png(), max_w, max_h))
 }
 
 pub(crate) fn paint_cover_cached(

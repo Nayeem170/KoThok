@@ -13,7 +13,7 @@ use crate::data::library::{self, scan_epubs, EpubEntry, BOOK_DIR};
 use crate::data::persistence::{last_book_path, POSITIONS_FILE};
 use crate::device::{fonts, hw};
 use crate::platform::KoboPlatform;
-use crate::rendering::common::rgb565_as_bytes_ref;
+use crate::rendering::common::{rgb565_as_bytes, rgb565_as_bytes_ref};
 use crate::rendering::fb::{Fb, WAVE_DU, WAVE_GC16};
 use crate::rendering::layout::{self, init_layout, PAD_TOP};
 use crate::rendering::render;
@@ -101,7 +101,6 @@ fn scan_and_resolve(
 
     let mut splash = vec![Rgb565Pixel(0); w * h];
     render::paint_kothok_splash(&mut splash);
-    render::paint_splash_spinner(&mut splash, 0);
     fb.present(rgb565_as_bytes_ref(&splash), w, h, true, 0, 0, WAVE_GC16);
 
     fonts::log_available_fonts();
@@ -109,16 +108,23 @@ fn scan_and_resolve(
         fonts::load_cached_fonts();
     });
 
-    let (_, spy, _, sph) = render::splash_spinner_rect();
-    let y0 = (spy as usize).saturating_sub(4);
-    let y1 = ((spy + sph + 4) as usize).min(h);
+    let r = kobo_core::rendering::loader::spinner_rect(w as i32, h as i32);
+    let y0 = (r.y as usize).saturating_sub(4);
+    let y1 = ((r.y + r.h + 4) as usize).min(h);
     let mut angle = 0u32;
     while !scan_handle.is_finished() || !font_handle.is_finished() {
-        angle = (angle + 340) % 360;
-        render::paint_splash_spinner(&mut splash, angle);
+        angle = (angle + 30) % 360;
+        kobo_core::rendering::loader::paint_spinner(
+            rgb565_as_bytes(&mut splash),
+            w,
+            h,
+            angle,
+        );
         fb.present(rgb565_as_bytes_ref(&splash), w, h, false, y0, y1, WAVE_DU);
-        std::thread::sleep(std::time::Duration::from_millis(120));
+        std::thread::sleep(std::time::Duration::from_millis(80));
     }
+    render::paint_kothok_splash(&mut splash);
+    fb.present(rgb565_as_bytes_ref(&splash), w, h, true, 0, 0, WAVE_GC16);
 
     font_handle.join().unwrap_or(());
     let all_books = scan_handle.join().unwrap_or_default();
@@ -307,7 +313,6 @@ fn build_loop_state(
         text_cache,
         voice_rx: None,
         voice_fetch_attempted: false,
-        page_break_advanced: false,
     }
 }
 
@@ -325,7 +330,7 @@ fn init_logger() {
             .append(true)
             .open(config::CRASH_LOG)
         {
-            // best-effort: panic-hook write — nothing can be done if this fails
+            // best-effort: panic-hook write - nothing can be done if this fails
             let _ = writeln!(f, "PANIC: {}", info);
         }
     }));

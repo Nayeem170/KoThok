@@ -67,7 +67,7 @@ export component ControlPanel inherits Rectangle {
 
             ActionButton {
                 width: 170px; height: 56px;
-                label: "↩ Reading";
+                label: "Reading";
                 font-size: 22px;
                 clicked => { root.jump-to-reading(); }
             }
@@ -129,12 +129,58 @@ export component ControlPanel inherits Rectangle {
 
         Rectangle { height: 2px; background: #999999; }
 
-        ActionButton {
+        HorizontalLayout {
             height: 60px;
-            label: "Voice";
-            value: root.tts-voice-label;
-            font-size: 22px;
-            clicked => { root.panel-voice("cycle"); }
+            spacing: 8px;
+
+            Rectangle {
+                width: 70px;
+                height: 60px;
+                border-radius: 10px;
+                background: voice-prev.pressed ? #555555 : #006A4E;
+                Text {
+                    text: "<";
+                    color: #ffffff;
+                    font-size: 28px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+                voice-prev := TouchArea {
+                    clicked => { root.panel-voice("prev"); }
+                }
+            }
+
+            Rectangle {
+                height: 60px;
+                border-radius: 10px;
+                background: #006A4E;
+                horizontal-stretch: 1;
+                Text {
+                    text: root.tts-voice-label;
+                    color: #ffffff;
+                    font-size: 22px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+            }
+
+            Rectangle {
+                width: 70px;
+                height: 60px;
+                border-radius: 10px;
+                background: voice-next.pressed ? #555555 : #006A4E;
+                Text {
+                    text: ">";
+                    color: #ffffff;
+                    font-size: 28px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+                voice-next := TouchArea {
+                    clicked => { root.panel-voice("next"); }
+                }
+            }
         }
 
         Rectangle { height: 2px; background: #999999; }
@@ -193,7 +239,7 @@ export component ControlPanel inherits Rectangle {
                     }
                 }
                 Text {
-                    text: root.book-title != "" ? root.book-title : "—";
+                    text: root.book-title != "" ? root.book-title : "-";
                     color: #111111; font-size: 26px; font-weight: 700; wrap: word-wrap;
                     horizontal-alignment: left;
                     visible: root.book-title-img-h == 0;
@@ -227,7 +273,7 @@ export component ControlPanel inherits Rectangle {
                     }
                 }
                 Text {
-                    text: (root.chapter-name != "" ? root.chapter-name : "—");
+                    text: (root.chapter-name != "" ? root.chapter-name : "-");
                     color: #333333; font-size: 20px;
                     horizontal-alignment: left;
                     visible: root.chapter-name-img-h == 0;

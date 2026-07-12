@@ -1,5 +1,4 @@
 use kobo_core::audio::synthesize_prepared;
-use kobo_core::audio::{EdgeTts, Player, TtsEvent, TARGET_RATE};
 use log::debug;
 
 use crate::meta::{LANG_AUTO, LANG_BN_BD, LANG_EN_US};
@@ -14,7 +13,7 @@ pub(crate) fn voice_for_text(text: &str, voice: &str, bn_voice: &str) -> (String
         LANG_BN_BD => bn_voice.to_string(),
         other => crate::panel::voices_for_lang(other)
             .first()
-            .map(|v| v.id.to_string())
+            .map(|v| v.id().to_string())
             .unwrap_or_else(|| voice.to_string()),
     };
     (chosen, lang.to_string())
@@ -35,7 +34,7 @@ pub(crate) fn voice_for_text_explicit(
         other => {
             let v = crate::panel::voices_for_lang(other)
                 .first()
-                .map(|v| v.id.to_string())
+                .map(|v| v.id().to_string())
                 .unwrap_or_else(|| voice.to_string());
             (v, other.to_string())
         }
@@ -49,6 +48,7 @@ pub(crate) async fn synth_prepare(
     rate: String,
     lang: String,
 ) -> Result<kobo_core::audio::Prepared, String> {
+    let text = text.replace("\u{09DF}", "\u{09AF}");
     synthesize_prepared(utt_idx, &text, &voice, &rate, &lang).await
 }
 

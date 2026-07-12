@@ -10,7 +10,10 @@ use crate::{Reader, Row};
 
 use crate::rendering::common::{rgb565_as_bytes, rgb565_as_bytes_ref};
 use crate::rendering::covers::{paint_cover_cached, CoverCache};
-use crate::rendering::draw::{measure_text, paint_nav_bar, paint_progress_bar, paint_wrapped_text};
+use crate::rendering::draw::{
+    fill_rounded_rect, measure_text, paint_nav_bar, paint_progress_bar, paint_wrapped_text,
+    ACTION_BTN_RADIUS,
+};
 
 pub const GRID_GAP: i32 = 14;
 pub const PICKER_PAD: i32 = 10;
@@ -211,6 +214,38 @@ pub fn show_book_picker(
         &center,
         clock,
         battery,
+    );
+
+    let exit_w = 150usize;
+    let exit_h = 56usize.min(NAV_BAR_H as usize - 8);
+    let exit_x = 12usize;
+    let exit_y = nav_y + (NAV_BAR_H as usize - exit_h) / 2;
+    const EXIT_RED: u16 = 0xF148;
+    fill_rounded_rect(
+        buf_bytes,
+        crate::w(),
+        crate::h(),
+        exit_x,
+        exit_y,
+        exit_w,
+        exit_h,
+        EXIT_RED,
+        EXIT_RED,
+        ACTION_BTN_RADIUS,
+    );
+    let exit_px = BODY_PX * 0.8;
+    let exit_lw = measure_text("Exit", exit_px);
+    let exit_lh = text_render::line_height(exit_px);
+    text_render::blit_rgb565_color(
+        buf_bytes,
+        crate::w(),
+        "Exit",
+        exit_px,
+        exit_x + (exit_w - exit_lw) / 2,
+        exit_y + (exit_h - exit_lh) / 2,
+        0xFFFF,
+        crate::w(),
+        crate::h(),
     );
     buffer.copy_from_slice(text_cache);
     if cfg!(feature = "ppm-dump") {

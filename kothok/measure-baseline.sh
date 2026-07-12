@@ -1,5 +1,5 @@
 #!/bin/sh
-# Phase 0.1 / Step 1 — battery baseline measurement (Kobo Libra Colour, MT8110, FW 4.45).
+# Phase 0.1 / Step 1 - battery baseline measurement (Kobo Libra Colour, MT8110, FW 4.45).
 # Device-side sampler. Caller sets up the device STATE first, then samples it:
 #   sh measure-baseline.sh power <label> [duration_sec]   # current/voltage/capacity over a window
 #   sh measure-baseline.sh top   [snapshots]               # audio-worker CPU% audit (reader awake)
@@ -35,7 +35,7 @@ cmd_power() {
     status=$(rawread "$node/status")
     echo "# node=$node status=$status label=$label duration=${dur}s interval=${INTERVAL}s"
     case "$status" in
-        Charging) echo "# WARNING: CHARGING — idle baseline will be skewed; unplug and retry." ;;
+        Charging) echo "# WARNING: CHARGING - idle baseline will be skewed; unplug and retry." ;;
     esac
 
     n=0; si=0; sv=0; first=""

@@ -34,7 +34,7 @@ pub fn process_panel_callbacks(
     handle_brightness(reader, cfg, fl_path, &cb.panel_br, &frac_opt);
     handle_volume(reader, cmd_tx, cfg, &cb.panel_vol, &frac_opt);
     handle_tts_rate(reader, cmd_tx, cfg, &cb.panel_sp, &frac_opt);
-    let mut text_dirty = handle_font_slider(st, reader, cfg, cb);
+    let mut text_dirty = handle_font_slider(st, reader, cmd_tx, cfg, cb);
     handle_voice_cycle(reader, cmd_tx, cfg, &cb.panel_voice_cell);
     handle_toggles(reader, &cb.wifi_toggle_cell, &cb.bt_toggle_cell);
     text_dirty |= handle_chapter_overlay(st, reader, cmd_tx, cb);
@@ -132,6 +132,7 @@ fn handle_tts_rate(
 fn handle_font_slider(
     st: &mut LoopState,
     reader: &Reader,
+    cmd_tx: &Sender<Cmd>,
     cfg: &mut AppConfig,
     cb: &Callbacks,
 ) -> bool {
@@ -152,7 +153,7 @@ fn handle_font_slider(
         if t.elapsed() >= Duration::from_millis(FONT_DEBOUNCE_MS) {
             cb.font_pending_val.set(None);
             cb.font_last_change.set(None);
-            apply_font_reflow(val, st, reader);
+            apply_font_reflow(val, st, reader, cmd_tx);
             text_dirty = true;
         }
     }
@@ -174,33 +175,39 @@ fn handle_voice_cycle(
     reader: &Reader,
     cmd_tx: &Sender<Cmd>,
     cfg: &mut AppConfig,
-    panel_voice_cell: &Cell<bool>,
+    panel_voice_cell: &Cell<i32>,
 ) {
-    if panel_voice_cell.replace(false) {
-        let voices = voices_for_lang(&cfg.tts_lang);
-        let current = cfg.tts_voice.as_str();
-        let idx = voices.iter().position(|v| v.id == current).unwrap_or(0);
-        let new_voice = voices[(idx + 1) % voices.len()].id;
-        cfg.tts_voice = new_voice.to_string();
-        cfg.voices
-            .insert(cfg.tts_lang.clone(), new_voice.to_string());
-        debug!(
-            "voice-cycle: lang={} new={} saved_map_size={}",
-            cfg.tts_lang,
-            new_voice,
-            cfg.voices.len()
-        );
-        reader.set_tts_voice(SharedString::from(new_voice));
-        reader.set_tts_voice_label(SharedString::from(voice_label(new_voice)));
-        // best-effort: channel may be full
-        let _ = if cfg.tts_lang == crate::meta::LANG_BN_BD {
-            cmd_tx.send(Cmd::BnVoice(new_voice.to_string()))
-        } else {
-            cmd_tx.send(Cmd::Voice(new_voice.to_string()))
-        };
-        save_config(cfg);
-        debug!("panel: voice set to {}", new_voice);
+    let dir = panel_voice_cell.replace(0);
+    if dir == 0 {
+        return;
     }
+    let voices = voices_for_lang(&cfg.tts_lang);
+    let current = cfg.tts_voice.as_str();
+    let idx = voices.iter().position(|v| v.id() == current).unwrap_or(0);
+    let new_idx = if dir == 2 {
+        if idx == 0 { voices.len() - 1 } else { idx - 1 }
+    } else {
+        (idx + 1) % voices.len()
+    };
+    let new_voice = voices[new_idx].id();
+    cfg.tts_voice = new_voice.to_string();
+    cfg.voices
+        .insert(cfg.tts_lang.clone(), new_voice.to_string());
+    debug!(
+        "voice-cycle: lang={} dir={} new={} saved_map_size={}",
+        cfg.tts_lang,
+        if dir == 2 { "prev" } else { "next" },
+        new_voice,
+        cfg.voices.len()
+    );
+    reader.set_tts_voice(SharedString::from(new_voice));
+    reader.set_tts_voice_label(SharedString::from(voice_label(new_voice)));
+    let _ = if cfg.tts_lang == crate::meta::LANG_BN_BD {
+        cmd_tx.send(Cmd::BnVoice(new_voice.to_string()))
+    } else {
+        cmd_tx.send(Cmd::Voice(new_voice.to_string()))
+    };
+    save_config(cfg);
 }
 
 fn handle_toggles(reader: &Reader, wifi_toggle_cell: &Cell<bool>, bt_toggle_cell: &Cell<bool>) {
@@ -281,7 +288,7 @@ fn all_chapter_items(chapters: &[Chapter]) -> Vec<ChapterItem> {
         .collect()
 }
 
-fn apply_font_reflow(new_val: i32, st: &mut LoopState, reader: &Reader) {
+fn apply_font_reflow(new_val: i32, st: &mut LoopState, reader: &Reader, cmd_tx: &Sender<Cmd>) {
     let cur_start = reader.get_cur_start() as usize;
     let anchor = if cur_start > 0 {
         cur_start
@@ -341,6 +348,14 @@ fn apply_font_reflow(new_val: i32, st: &mut LoopState, reader: &Reader) {
         reader.set_cur_end(row.end);
     }
     reader.set_saved_page((st.chapter_offsets[cc] + st.current_page) as i32);
+    let utts = crate::audio::glue::page_utterances(st.current_page, &st.state);
+    crate::audio::glue::best_effort_send(cmd_tx, Cmd::Reload(utts.clone()));
+    if reader.get_playing() {
+        let utt_idx = crate::audio::glue::utterance_index_for_offset(&utts, anchor);
+        crate::audio::glue::best_effort_send(cmd_tx, Cmd::Seek(utt_idx));
+    } else {
+        crate::audio::glue::best_effort_send(cmd_tx, Cmd::Seek(0));
+    }
     let first_row = st
         .state
         .pages

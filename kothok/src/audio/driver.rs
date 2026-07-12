@@ -38,7 +38,7 @@ struct ReadyUtt {
 
 fn send_event(tx: &mpsc::Sender<Event>, evt: Event) {
     // best-effort: the main loop may have exited and dropped the receiver;
-    // a failed send is non-fatal — the worker continues its state machine.
+    // a failed send is non-fatal - the worker continues its state machine.
     let _ = tx.send(evt);
 }
 

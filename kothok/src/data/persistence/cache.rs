@@ -58,7 +58,7 @@ pub fn load_offset_cache(path: &str) -> Option<Vec<usize>> {
 /// Load the most-recently-written offset cache for a book, regardless of which
 /// font size it was paginated at. Offset caches are font-keyed
 /// (`{hash}_{font}.bin`), but the saved reading position (chapter/page) was
-/// recorded against the cache at the font the user actually read with — so the
+/// recorded against the cache at the font the user actually read with - so the
 /// matching cache is the newest one for that book. This avoids a fixed-font
 /// lookup that returned 0 % or a stale fraction whenever the reading font
 /// differed (e.g. the screen-scaled default).
@@ -118,7 +118,7 @@ mod tests {
         let book = "/mnt/onboard/Novel.epub";
         let h = book_hash(book);
         // Only a font-35 cache exists (e.g. the screen-scaled default). The old
-        // fixed-font-36 lookup returned None here → hero showed 0 %. The helper
+        // fixed-font-36 lookup returned None here -> hero showed 0 %. The helper
         // must find it.
         save_offset_cache(
             &format!("{}/{}_{:04}.bin", dir.display(), h, 35),

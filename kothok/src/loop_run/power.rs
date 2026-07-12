@@ -3,6 +3,7 @@ use crate::rendering::common::rgb565_as_bytes_ref;
 
 pub(super) fn check_font_repaginate(st: &mut LoopState, ctx: &mut LoopContext) {
     let reader = ctx.reader;
+    let cmd_tx = ctx.cmd_tx;
     let window = ctx.window;
     let fb = ctx.fb;
     let w = ctx.w;
@@ -10,7 +11,7 @@ pub(super) fn check_font_repaginate(st: &mut LoopState, ctx: &mut LoopContext) {
     if text_render::font_install_count() != st.last_font_count {
         st.last_font_count = text_render::font_install_count();
         if !st.picker_active && st.chapters.len() > st.current_chapter {
-            log::debug!("font: newly installed — rebuilding st.state");
+            log::debug!("font: newly installed - rebuilding st.state");
             st.state = build_state(
                 &mut st.chapters[st.current_chapter],
                 st.body_px,
@@ -26,6 +27,9 @@ pub(super) fn check_font_repaginate(st: &mut LoopState, ctx: &mut LoopContext) {
                 &st.chapter_offsets,
                 st.current_chapter,
             );
+            let utts = crate::audio::glue::page_utterances(st.current_page, &st.state);
+            crate::audio::glue::best_effort_send(cmd_tx, Cmd::Reload(utts));
+            crate::audio::glue::best_effort_send(cmd_tx, Cmd::Seek(0));
             window.request_redraw();
             let _ = window.draw_if_needed(|r| {
                 r.render(&mut st.buffer, w);
