@@ -13,7 +13,7 @@ const A2DP_OPEN_MAX_RETRIES: u32 = 5;
 const A2DP_OPEN_RETRY_BACKOFF_MS: u64 = 500;
 const SINK_IDLE_KEEPALIVE_SECS: u64 = 3;
 const BUSY_SPIN_SLEEP_MS: u64 = 10;
-const IDLE_SLEEP_SECS: u64 = 1;
+const IDLE_SLEEP_MS: u64 = 50;
 
 pub struct DriverConfig {
     pub voice: String,
@@ -126,7 +126,10 @@ pub(crate) async fn driver(
                 && st.ready_queue.is_empty()
                 && st.pending.is_some()
             {
-                tokio::time::sleep(Duration::from_millis(20)).await;
+                if let Some(p) = st.player.as_mut() {
+                    let _ = p.keepalive().await;
+                }
+                tokio::time::sleep(Duration::from_millis(50)).await;
             }
         } else {
             st.idle().await;

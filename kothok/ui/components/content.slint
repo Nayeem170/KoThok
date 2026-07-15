@@ -8,11 +8,19 @@ export component ContentArea inherits Rectangle {
     in property <bool> playing: false;
     in property <bool> play-enabled: false;
     in property <string> status: "";
+    in property <string> header-title: "";
+    in property <image> book-title-img;
+    in property <int> book-title-img-h: 0;
+    in property <bool> header-visible: true;
     in property <bool> nav-recent: false;
     in property <bool> picker-active: false;
     in property <color> brand-green: #006A4E;
-    in property <color> brand-red: #E00000;
+    in property <color> brand-red: #F42A41;
     in property <color> brand-gray: #8a8a8a;
+    in property <color> text-primary: #111111;
+    in property <color> text-secondary: #666666;
+    in property <color> text-hint: #999999;
+    in property <color> track-color: #d0d0d0;
 
     callback play-pause-toggle();
     callback progress-tap(float);
@@ -47,6 +55,67 @@ export component ContentArea inherits Rectangle {
     }
 
     Rectangle {
+        y: 0px;
+        height: 80px;
+        width: root.width;
+        background: #ffffff;
+        visible: root.header-visible && !root.picker-active && root.page-count > 0;
+
+        Rectangle {
+            x: 18px; y: 16px;
+            width: 48px; height: 48px;
+            border-radius: 24px;
+            background: root.brand-green;
+            Image {
+                source: @image-url("assets/library.svg");
+                image-fit: contain;
+                width: 28px; height: 28px;
+                x: (48px - 28px) / 2;
+                y: (48px - 28px) / 2;
+            }
+        }
+
+        Image {
+            source: root.book-title-img;
+            x: 96px;
+            width: root.width - 192px;
+            height: 56px;
+            y: (80px - 56px) / 2;
+            image-fit: contain;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            visible: root.book-title-img-h > 0;
+        }
+
+        Text {
+            text: root.header-title != "" ? root.header-title : "-";
+            color: root.text-secondary; font-size: 22px; font-weight: 700;
+            horizontal-alignment: center; vertical-alignment: center;
+            x: 96px; width: root.width - 192px; height: 80px;
+            overflow: elide;
+            visible: root.book-title-img-h == 0;
+        }
+
+        Rectangle {
+            x: root.width - 66px; y: 16px;
+            width: 48px; height: 48px;
+            border-radius: 24px;
+            background: root.brand-green;
+            Image {
+                source: @image-url("assets/gear.svg");
+                image-fit: contain;
+                width: 28px; height: 28px;
+                x: (48px - 28px) / 2;
+                y: (48px - 28px) / 2;
+            }
+        }
+
+        Rectangle {
+            y: 79px; height: 1px; width: root.width; background: root.track-color;
+        }
+    }
+
+    Rectangle {
         y: root.height - 92px;
         height: 70px;
         width: root.width;
@@ -57,14 +126,14 @@ export component ContentArea inherits Rectangle {
             y: 12px;
             x: 56px;
             width: root.width - 200px;
-            background: #d0d0d0;
+            background: root.track-color;
             border-radius: 5px;
 
             Rectangle {
                 x: 0px;
                 height: 10px;
                 width: root.page-count > 0 ? (root.page + 1) * (root.width - 200px) / root.page-count : 0px;
-                background: #111111;
+                background: root.text-primary;
                 border-radius: 5px;
             }
 
@@ -73,7 +142,7 @@ export component ContentArea inherits Rectangle {
                 y: -7px;
                 width: 24px;
                 height: 24px;
-                background: #111111;
+                background: root.text-primary;
                 border-radius: 12px;
                 border-width: 3px;
                 border-color: #ffffff;
@@ -107,7 +176,7 @@ export component ContentArea inherits Rectangle {
                      : (root.play-enabled
 ? "Swipe down: menu - double-tap: play - swipe: pages"
                          : "Connect WiFi & Bluetooth to play - swipe down: menu"));
-            color: #111111;
+            color: root.text-primary;
             font-size: 22px;
             horizontal-alignment: center;
             vertical-alignment: center;

@@ -21,6 +21,17 @@ pub(super) fn on_release(
             cb.play_toggle_cell.set(true);
             debug!("play-pause: footer tap");
         }
+    } else if st.lib_pressed {
+        st.lib_pressed = false;
+        cb.quit.set(true);
+        debug!("header: library tap");
+    } else if st.menu_pressed {
+        st.menu_pressed = false;
+        st.panel_open = true;
+        cb.panel_open_cell.set(true);
+        reader.set_panel_open(true);
+        st.text_dirty = true;
+        debug!("header: menu tap (open panel)");
     } else {
         let dt = now.duration_since(st.press_time);
         let (press_dx, press_dy) = touch::to_display(st.press_x, st.press_y, ctx.touch_cfg);
@@ -147,12 +158,12 @@ pub(super) fn on_release(
                 if crate::device::bt_toggle_age_ms() >= BT_TOGGLE_GRACE_MS {
                     reader.set_bt_on(bt);
                     if let Some(n) = caps.bt_name() {
-                        reader.set_bt_name(SharedString::from(n));
+                        reader.set_bt_connected_name(SharedString::from(n));
                     }
                 }
                 reader.set_play_enabled(wifi && bt);
                 if let Some(n) = caps.wifi_name() {
-                    reader.set_wifi_name(SharedString::from(n));
+                    reader.set_wifi_connected_name(SharedString::from(n));
                 }
                 if let Some(ref path) = ctx.fl_path {
                     if let Some(hw) = frontlight_get(path) {
@@ -205,6 +216,7 @@ pub(super) fn on_release(
                         let is_double_tap = touch::is_double_tap(dt_ms, since_prev);
                         st.last_double_tap = now;
                         if is_double_tap {
+                            st.pending_tap_at = None;
                             let playing = reader.get_playing();
                             if playing {
                                 reader.set_playing(false);
@@ -254,7 +266,11 @@ pub(super) fn on_release(
                                 reader.set_paused(false);
                             }
                             debug!("double-tap: toggle playback");
+                        } else {
+                            st.pending_tap_at = Some(now);
                         }
+                    } else {
+                        st.pending_tap_at = Some(now);
                     }
                 }
             }

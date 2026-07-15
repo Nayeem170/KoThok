@@ -1,5 +1,6 @@
 import { ActionButton } from "button.slint";
-import { SliderRow } from "slider.slint";
+import { CompactSlider } from "slider.slint";
+import { SelectorRow } from "selector.slint";
 
 export component ControlPanel inherits Rectangle {
     in property <bool> visible-flag: false;
@@ -12,6 +13,8 @@ export component ControlPanel inherits Rectangle {
     in property <bool> bt-on: true;
     in property <string> wifi-name: "";
     in property <string> bt-name: "";
+    in property <string> wifi-connected-name: "";
+    in property <string> bt-connected-name: "";
     in property <string> clock: "";
     in property <int> battery-pct: 0;
     in property <string> book-title: "";
@@ -27,240 +30,316 @@ export component ControlPanel inherits Rectangle {
     in property <int> page: 0;
     in property <int> page-count: 1;
     in property <color> brand-green: #006A4E;
+    in property <color> brand-red: #F42A41;
+    in property <color> text-primary: #111111;
+    in property <color> text-secondary: #666666;
+    in property <color> text-hint: #999999;
+    in property <color> bg-off: #1a1a1a;
+    in property <color> bg-pressed: #555555;
+    in property <color> separator: #999999;
+    in property <color> track-color: #d0d0d0;
 
     callback quit();
     callback jump-to-reading();
     callback panel-close();
-    callback panel-brightness-up();
-    callback panel-brightness-down();
-    callback panel-speed-up();
-    callback panel-speed-down();
-    callback panel-font-size-up();
-    callback panel-font-size-down();
-    callback panel-volume-up();
-    callback panel-volume-down();
     callback panel-frac(int, float);
     callback panel-voice(string);
     callback panel-wifi-toggle();
     callback panel-bt-toggle();
+    callback panel-wifi-cycle(string);
+    callback panel-bt-cycle(string);
     callback panel-chapters();
 
     visible: root.visible-flag;
     background: #ffffff;
 
-    Rectangle { y: 0px; height: 4px; width: root.width; background: #006A4E; }
+    Rectangle {
+        y: 0px; height: 80px; width: root.width;
+        background: #ffffff;
+
+        Rectangle { y: 0px; height: 4px; width: root.width; background: root.brand-green; }
+
+        ActionButton {
+            x: 18px; y: 16px;
+            width: 48px; height: 48px;
+            icon: @image-url("assets/reading.svg");
+            radius: 24px;
+            clicked => { root.jump-to-reading(); }
+        }
+
+        ActionButton {
+            x: 78px; y: 16px;
+            width: 48px; height: 48px;
+            icon: @image-url("assets/chapters.svg");
+            radius: 24px;
+            clicked => { root.panel-chapters(); }
+        }
+
+        Text {
+            text: "Settings";
+            color: root.text-secondary; font-size: 22px; font-weight: 700;
+            horizontal-alignment: center; vertical-alignment: center;
+            x: 96px; width: root.width - 192px; height: 80px;
+            overflow: elide;
+        }
+
+        ActionButton {
+            x: root.width - 66px; y: 16px;
+            width: 48px; height: 48px;
+            icon: @image-url("assets/close.svg");
+            bg: root.brand-red;
+            radius: 24px;
+            clicked => { root.panel-close(); }
+        }
+
+        Rectangle {
+            y: 79px; height: 1px; width: root.width;
+            background: root.track-color;
+        }
+    }
 
     VerticalLayout {
         padding-left: 24px; padding-right: 24px;
-        padding-top: 24px; padding-bottom: 24px;
-        spacing: 18px;
+        padding-top: 94px; padding-bottom: 24px;
+        spacing: 14px;
+
+        Rectangle { height: 2px; background: root.separator; }
 
         HorizontalLayout {
-            height: 56px;
-            spacing: 12px;
-
-            ActionButton {
-                width: 160px; height: 56px;
-                label: "Library";
-                clicked => { root.quit(); }
+            height: 24px;
+            spacing: 10px;
+            Text {
+                text: "DISPLAY";
+                color: root.text-hint; font-size: 20px; font-weight: 700;
+                vertical-alignment: center;
             }
-
-            ActionButton {
-                width: 170px; height: 56px;
-                label: "Reading";
-                font-size: 22px;
-                clicked => { root.jump-to-reading(); }
-            }
-
             Rectangle {
                 horizontal-stretch: 1;
-                Text {
-                    text: root.clock + "    " + root.battery-pct + "%";
-                    color: #111111; font-size: 22px;
-                    horizontal-alignment: center; vertical-alignment: center;
+                height: 24px;
+                Rectangle {
+                    y: (parent.height - 2px) / 2;
+                    height: 2px; width: 100%;
+                    background: root.separator;
                 }
-            }
-
-            ActionButton {
-                width: 56px; height: 56px;
-                label: "X";
-                font-size: 26px;
-                clicked => { root.panel-close(); }
             }
         }
 
-        Rectangle { height: 2px; background: #999999; }
-
-        SliderRow {
+        CompactSlider {
             name: "Brightness";
+            text-primary: root.text-primary;
+            text-hint: root.text-hint;
+            track-color: root.track-color;
             value-text: root.brightness-val + "%";
             fill-frac: root.brightness-val / 100.0;
-            dec => { root.panel-brightness-down(); }
-            inc => { root.panel-brightness-up(); }
             set-frac(f) => { root.panel-frac(0, f); }
         }
 
-        SliderRow {
-            name: "Speed";
-            value-text: (root.tts-speed == 50 ? "1.0x" : (root.tts-speed > 50 ? "+" : "") + (root.tts-speed - 50) * 2 + "%");
-            fill-frac: root.tts-speed / 100.0;
-            dec => { root.panel-speed-down(); }
-            inc => { root.panel-speed-up(); }
-            set-frac(f) => { root.panel-frac(1, f); }
-        }
-
-        SliderRow {
+        CompactSlider {
             name: "Font";
+            text-primary: root.text-primary;
+            text-hint: root.text-hint;
+            track-color: root.track-color;
             value-text: root.font-size-val + "px";
             fill-frac: (root.font-size-val - 20) / 40.0;
-            dec => { root.panel-font-size-down(); }
-            inc => { root.panel-font-size-up(); }
             set-frac(f) => { root.panel-frac(2, f); }
         }
 
-        SliderRow {
+        HorizontalLayout {
+            height: 24px;
+            spacing: 10px;
+            Text {
+                text: "AUDIO";
+                color: root.text-hint; font-size: 20px; font-weight: 700;
+                vertical-alignment: center;
+            }
+            Rectangle {
+                horizontal-stretch: 1;
+                height: 24px;
+                Rectangle {
+                    y: (parent.height - 2px) / 2;
+                    height: 2px; width: 100%;
+                    background: root.separator;
+                }
+            }
+        }
+
+        SelectorRow {
+            label: root.tts-voice-label;
+            on-state: true;
+            center-active: true;
+            center-toggle: false;
+            brand-green: root.brand-green;
+            bg-off: root.bg-off;
+            bg-pressed: root.bg-pressed;
+            prev => { root.panel-voice("prev"); }
+            next => { root.panel-voice("next"); }
+        }
+
+        CompactSlider {
+            name: "Speed";
+            text-primary: root.text-primary;
+            text-hint: root.text-hint;
+            track-color: root.track-color;
+            value-text: (root.tts-speed == 50 ? "1.0x" : (root.tts-speed > 50 ? "+" : "") + (root.tts-speed - 50) * 2 + "%");
+            fill-frac: root.tts-speed / 100.0;
+            set-frac(f) => { root.panel-frac(1, f); }
+        }
+
+        CompactSlider {
             name: "Volume";
+            text-primary: root.text-primary;
+            text-hint: root.text-hint;
+            track-color: root.track-color;
             value-text: root.volume-val + "%";
             fill-frac: root.volume-val / 100.0;
-            dec => { root.panel-volume-down(); }
-            inc => { root.panel-volume-up(); }
             set-frac(f) => { root.panel-frac(3, f); }
         }
 
-        Rectangle { height: 2px; background: #999999; }
-
         HorizontalLayout {
-            height: 60px;
-            spacing: 8px;
-
-            Rectangle {
-                width: 70px;
-                height: 60px;
-                border-radius: 10px;
-                background: voice-prev.pressed ? #555555 : #006A4E;
-                Text {
-                    text: "<";
-                    color: #ffffff;
-                    font-size: 28px;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                }
-                voice-prev := TouchArea {
-                    clicked => { root.panel-voice("prev"); }
-                }
+            height: 24px;
+            spacing: 10px;
+            Text {
+                text: "NETWORK";
+                color: root.text-hint; font-size: 20px; font-weight: 700;
+                vertical-alignment: center;
             }
-
             Rectangle {
-                height: 60px;
-                border-radius: 10px;
-                background: #006A4E;
                 horizontal-stretch: 1;
-                Text {
-                    text: root.tts-voice-label;
-                    color: #ffffff;
-                    font-size: 22px;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                    overflow: elide;
-                }
-            }
-
-            Rectangle {
-                width: 70px;
-                height: 60px;
-                border-radius: 10px;
-                background: voice-next.pressed ? #555555 : #006A4E;
-                Text {
-                    text: ">";
-                    color: #ffffff;
-                    font-size: 28px;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                }
-                voice-next := TouchArea {
-                    clicked => { root.panel-voice("next"); }
+                height: 24px;
+                Rectangle {
+                    y: (parent.height - 2px) / 2;
+                    height: 2px; width: 100%;
+                    background: root.separator;
                 }
             }
         }
 
-        Rectangle { height: 2px; background: #999999; }
+        SelectorRow {
+            label: root.wifi-name != "" ? root.wifi-name : (root.wifi-on ? "WiFi On" : "WiFi Off");
+            on-state: root.wifi-on;
+            center-active: root.wifi-on && root.wifi-name == root.wifi-connected-name;
+            center-toggle: true;
+            brand-green: root.brand-green;
+            bg-off: root.bg-off;
+            bg-pressed: root.bg-pressed;
+            prev => { root.panel-wifi-cycle("prev"); }
+            next => { root.panel-wifi-cycle("next"); }
+            toggle => { root.panel-wifi-toggle(); }
+        }
 
-        HorizontalLayout {
-            height: 60px;
-            spacing: 16px;
-            alignment: center;
-
-            ActionButton {
-                width: 220px; height: 60px;
-                label: root.wifi-on ? (root.wifi-name != "" ? root.wifi-name : "WiFi On") : "WiFi Off";
-                bg: root.wifi-on ? root.brand-green : #1a1a1a;
-                font-size: 20px;
-                clicked => { root.panel-wifi-toggle(); }
-            }
-
-            ActionButton {
-                width: 220px; height: 60px;
-                label: root.bt-on ? (root.bt-name != "" ? root.bt-name : "BT On") : "BT Off";
-                bg: root.bt-on ? root.brand-green : #1a1a1a;
-                font-size: 20px;
-                clicked => { root.panel-bt-toggle(); }
-            }
-
-            ActionButton {
-                width: 180px; height: 60px;
-                label: "Chapters";
-                font-size: 22px;
-                clicked => { root.panel-chapters(); }
-            }
+        SelectorRow {
+            label: root.bt-name != "" ? root.bt-name : (root.bt-on ? "BT On" : "BT Off");
+            on-state: root.bt-on;
+            center-active: root.bt-on && root.bt-name == root.bt-connected-name;
+            center-toggle: true;
+            brand-green: root.brand-green;
+            bg-off: root.bg-off;
+            bg-pressed: root.bg-pressed;
+            prev => { root.panel-bt-cycle("prev"); }
+            next => { root.panel-bt-cycle("next"); }
+            toggle => { root.panel-bt-toggle(); }
         }
 
         Rectangle { vertical-stretch: 1; }
 
         Rectangle {
-            height: 2px; background: #999999;
+            height: 2px; background: root.separator;
         }
 
         HorizontalLayout {
-            spacing: 20px;
+            spacing: 16px;
+
+            Image {
+                source: root.book-cover-img;
+                height: 168px;
+                width: root.book-cover-img.height > 0
+                    ? 168px * root.book-cover-img.width / root.book-cover-img.height
+                    : 112px;
+                image-fit: contain;
+                horizontal-alignment: center;
+                vertical-alignment: top;
+                visible: root.book-cover-img.width > 0;
+            }
 
             VerticalLayout {
                 horizontal-stretch: 1;
-                spacing: 4px;
+                spacing: 8px;
 
                 HorizontalLayout {
-                    alignment: start;
-                    Image {
-                        source: root.book-title-img;
-                        height: root.book-title-img-h * 1px;
-                        image-fit: contain;
-                        vertical-alignment: top;
-                        horizontal-stretch: 0;
-                        visible: root.book-title-img-h > 0;
+                    spacing: 12px;
+
+                    VerticalLayout {
+                        horizontal-stretch: 1;
+                        spacing: 2px;
+
+                        HorizontalLayout {
+                            alignment: start;
+                            Image {
+                                source: root.book-title-img;
+                                height: root.book-title-img-h * 1px;
+                                image-fit: contain;
+                                vertical-alignment: top;
+                                horizontal-stretch: 0;
+                                visible: root.book-title-img-h > 0;
+                            }
+                        }
+                        Text {
+                            text: root.book-title != "" ? root.book-title : "-";
+                            color: root.text-primary; font-size: 24px; font-weight: 700; wrap: word-wrap;
+                            horizontal-alignment: left;
+                            visible: root.book-title-img-h == 0;
+                        }
+                        HorizontalLayout {
+                            alignment: start;
+                            Image {
+                                source: root.book-author-img;
+                                height: root.book-author-img-h * 1px;
+                                image-fit: contain;
+                                vertical-alignment: top;
+                                horizontal-stretch: 0;
+                                visible: root.book-author-img-h > 0;
+                            }
+                        }
+                        Text {
+                            text: root.book-author != "" ? root.book-author : "";
+                            color: root.text-secondary; font-size: 19px; wrap: word-wrap;
+                            horizontal-alignment: left;
+                            visible: root.book-author != "" && root.book-author-img-h == 0;
+                        }
+                    }
+
+                    Rectangle {
+                        width: 160px; height: 40px;
+                        border-radius: 8px;
+                        border-width: 1px;
+                        border-color: root.separator;
+                        background: #f2f2f2;
+                        Text {
+                            text: "Page " + (root.page + 1) + " / " + root.page-count;
+                            color: root.text-primary; font-size: 18px;
+                            horizontal-alignment: center; vertical-alignment: center;
+                            overflow: elide;
+                        }
                     }
                 }
-                Text {
-                    text: root.book-title != "" ? root.book-title : "-";
-                    color: #111111; font-size: 26px; font-weight: 700; wrap: word-wrap;
-                    horizontal-alignment: left;
-                    visible: root.book-title-img-h == 0;
-                }
-                HorizontalLayout {
-                    alignment: start;
-                    Image {
-                        source: root.book-author-img;
-                        height: root.book-author-img-h * 1px;
-                        image-fit: contain;
-                        vertical-alignment: top;
-                        horizontal-stretch: 0;
-                        visible: root.book-author-img-h > 0;
+
+                Rectangle {
+                    height: 14px;
+                    background: root.track-color;
+                    border-radius: 7px;
+                    border-width: 2px;
+                    border-color: root.text-hint;
+                    Rectangle {
+                        x: 0px;
+                        width: parent.width * (root.page-count > 0
+                            ? clamp((root.page + 1) * 1.0 / root.page-count, 0.0, 1.0)
+                            : 0.0);
+                        height: 100%;
+                        background: root.text-primary;
+                        border-radius: 7px;
                     }
                 }
-                Text {
-                    text: root.book-author != "" ? root.book-author : "";
-                    color: #777777; font-size: 20px; wrap: word-wrap;
-                    horizontal-alignment: left;
-                    visible: root.book-author != "" && root.book-author-img-h == 0;
-                }
+
                 HorizontalLayout {
                     alignment: start;
                     Image {
@@ -274,30 +353,17 @@ export component ControlPanel inherits Rectangle {
                 }
                 Text {
                     text: (root.chapter-name != "" ? root.chapter-name : "-");
-                    color: #333333; font-size: 20px;
+                    color: root.text-secondary; font-size: 19px;
                     horizontal-alignment: left;
                     visible: root.chapter-name-img-h == 0;
                 }
-                Text {
-                    text: "Page " + (root.page + 1) + " / " + root.page-count;
-                    color: #777777; font-size: 20px;
-                    horizontal-alignment: left;
-                }
-                Text {
-                    text: "swipe: pages - swipe down: menu - double-tap: play";
-                    color: #666666; font-size: 18px; wrap: word-wrap;
-                    horizontal-alignment: left;
-                }
             }
+        }
 
-            Image {
-                source: root.book-cover-img;
-                width: 200px;
-                image-fit: contain;
-                horizontal-alignment: center;
-                vertical-alignment: top;
-                visible: root.book-cover-img.width > 0;
-            }
+        Text {
+            text: "swipe: pages - swipe down: menu - double-tap: play";
+            color: root.text-secondary; font-size: 18px; wrap: word-wrap;
+            horizontal-alignment: left;
         }
     }
 }

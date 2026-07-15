@@ -5,32 +5,62 @@ export component ChapterOverlay inherits Rectangle {
     in-out property <int> chapter-preview-idx: -1;
     in-out property <int> chapter-pending: -1;
     in property <int> current-chapter-idx: 0;
+    in property <color> text-primary: #111111;
+    in property <color> text-secondary: #666666;
+    in property <color> brand-red: #F42A41;
+    in property <color> track-color: #d0d0d0;
 
     callback chapter-selected(int);
+    callback close-to-book();
 
     visible: root.visible-flag;
     background: #ffffff;
 
-    VerticalLayout {
-        padding-left: 40px; padding-right: 40px;
-        padding-top: 48px; padding-bottom: 36px;
-        spacing: 16px;
+    Rectangle {
+        y: 0px; height: 80px; width: root.width;
+        background: #ffffff;
 
-        HorizontalLayout {
-            height: 64px;
-            spacing: 16px;
+        ActionButton {
+            x: 18px; y: 16px;
+            width: 48px; height: 48px;
+            icon: @image-url("assets/back.svg");
+            bg: root.brand-red;
+            radius: 24px;
+            clicked => { root.chapter-preview-idx = -1; root.chapter-pending = -1; root.visible-flag = false; }
+        }
 
-            Rectangle {
-                horizontal-stretch: 1; height: 64px;
-                Text { text: "Chapters"; color: #000000; font-size: 34px; vertical-alignment: center; }
-            }
+        Text {
+            text: "Chapters";
+            color: root.text-secondary; font-size: 22px; font-weight: 700;
+            horizontal-alignment: center; vertical-alignment: center;
+            x: 96px; width: root.width - 192px; height: 80px;
+            overflow: elide;
+        }
 
-            ActionButton {
-                width: 140px; height: 64px;
-                label: "Close";
-                clicked => { root.chapter-preview-idx = -1; root.chapter-pending = -1; root.visible-flag = false; }
+        ActionButton {
+            x: root.width - 66px; y: 16px;
+            width: 48px; height: 48px;
+            icon: @image-url("assets/close.svg");
+            bg: root.brand-red;
+            radius: 24px;
+            clicked => {
+                root.chapter-preview-idx = -1;
+                root.chapter-pending = -1;
+                root.visible-flag = false;
+                root.close-to-book();
             }
         }
+
+        Rectangle {
+            y: 79px; height: 1px; width: root.width;
+            background: root.track-color;
+        }
+    }
+
+    VerticalLayout {
+        padding-left: 40px; padding-right: 40px;
+        padding-top: 96px; padding-bottom: 36px;
+        spacing: 16px;
 
         Rectangle {
             vertical-stretch: 1;

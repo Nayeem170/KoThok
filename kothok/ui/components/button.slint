@@ -1,20 +1,38 @@
 export component ActionButton inherits Rectangle {
     in property <string> label;
     in property <string> value: "";
+    in property <image> icon;
     in property <length> font-size: 24px;
     in property <color> bg: #006A4E;
     in property <color> bg-pressed: #555555;
     in property <color> fg: #ffffff;
+    in property <length> radius: 10px;
     callback clicked;
 
     background: touch.pressed ? root.bg-pressed : root.bg;
-    border-radius: 10px;
+    border-radius: root.radius;
 
-    HorizontalLayout {
+    if root.icon.width > 0 && root.label == "" : Image {
+        source: root.icon;
+        width: 28px; height: 28px;
+        image-fit: contain;
+        x: (root.width - 28px) / 2;
+        y: (root.height - 28px) / 2;
+    }
+
+    if root.label != "" : HorizontalLayout {
         padding-left: 16px;
         padding-right: 16px;
         spacing: 10px;
         alignment: center;
+
+        if root.icon.width > 0 : Image {
+            source: root.icon;
+            width: 28px; height: 28px;
+            image-fit: contain;
+            vertical-alignment: center;
+        }
+
         Text {
             text: root.label;
             color: root.fg;

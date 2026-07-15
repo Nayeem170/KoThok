@@ -9,10 +9,16 @@ export component Reader inherits Window {
     preferred-height: 1448px;
     background: #ffffff;
 
-    property <color> accent: #006A4E;
     property <color> brand-green: #006A4E;
-    property <color> brand-red: #E00000;
+    property <color> brand-red: #F42A41;
     property <color> brand-gray: #8a8a8a;
+    property <color> text-primary: #111111;
+    property <color> text-secondary: #666666;
+    property <color> text-hint: #999999;
+    property <color> bg-off: #1a1a1a;
+    property <color> bg-pressed: #555555;
+    property <color> separator: #999999;
+    property <color> track-color: #d0d0d0;
     in-out property <[Row]> rows;
     in-out property <int> cur-start;
     in-out property <int> cur-end;
@@ -32,6 +38,7 @@ export component Reader inherits Window {
     in-out property <bool> picker-active: false;
 
     in-out property <bool> panel-open: false;
+    in-out property <bool> header-visible: true;
     in-out property <string> current-sentence: "";
     in-out property <int> battery-pct: 0;
     in-out property <string> clock: "";
@@ -46,6 +53,8 @@ export component Reader inherits Window {
     in-out property <bool> bt-on: true;
     in-out property <string> wifi-name: "";
     in-out property <string> bt-name: "";
+    in-out property <string> wifi-connected-name: "";
+    in-out property <string> bt-connected-name: "";
     in-out property <bool> chapter-overlay-open: false;
     in-out property <[ChapterItem]> chapter-items;
     in-out property <int> current-chapter-idx: 0;
@@ -68,16 +77,10 @@ export component Reader inherits Window {
     callback panel-voice(string);
     callback panel-wifi-toggle();
     callback panel-bt-toggle();
+    callback panel-wifi-cycle(string);
+    callback panel-bt-cycle(string);
     callback panel-chapters();
     callback progress-tap(float);
-    callback panel-brightness-up();
-    callback panel-brightness-down();
-    callback panel-speed-up();
-    callback panel-speed-down();
-    callback panel-font-size-up();
-    callback panel-font-size-down();
-    callback panel-volume-up();
-    callback panel-volume-down();
     callback panel-frac(int, float);
     callback panel-close();
     callback chapter-selected(int);
@@ -95,11 +98,19 @@ export component Reader inherits Window {
         playing: root.playing;
         play-enabled: root.play-enabled;
         status: root.status;
+        header-title: root.book-title;
+        book-title-img: root.book-title-img;
+        book-title-img-h: root.book-title-img-h;
+        header-visible: root.header-visible;
         nav-recent: root.nav-recent;
         picker-active: root.picker-active;
         brand-green: root.brand-green;
         brand-red: root.brand-red;
         brand-gray: root.brand-gray;
+        text-primary: root.text-primary;
+        text-secondary: root.text-secondary;
+        text-hint: root.text-hint;
+        track-color: root.track-color;
         play-pause-toggle => { root.play-pause-toggle(); }
         progress-tap(f) => { root.progress-tap(f); }
     }
@@ -119,6 +130,8 @@ export component Reader inherits Window {
         bt-on: root.bt-on;
         wifi-name: root.wifi-name;
         bt-name: root.bt-name;
+        wifi-connected-name: root.wifi-connected-name;
+        bt-connected-name: root.bt-connected-name;
         clock: root.clock;
         battery-pct: root.battery-pct;
         book-title: root.book-title;
@@ -134,21 +147,22 @@ export component Reader inherits Window {
         page: root.page;
         page-count: root.page-count;
         brand-green: root.brand-green;
+        text-primary: root.text-primary;
+        text-secondary: root.text-secondary;
+        text-hint: root.text-hint;
+        bg-off: root.bg-off;
+        bg-pressed: root.bg-pressed;
+        separator: root.separator;
+        track-color: root.track-color;
         quit => { root.quit(); }
         jump-to-reading => { root.jump-to-reading(); }
         panel-close => { root.panel-close(); }
-        panel-brightness-up => { root.panel-brightness-up(); }
-        panel-brightness-down => { root.panel-brightness-down(); }
-        panel-speed-up => { root.panel-speed-up(); }
-        panel-speed-down => { root.panel-speed-down(); }
-        panel-font-size-up => { root.panel-font-size-up(); }
-        panel-font-size-down => { root.panel-font-size-down(); }
-        panel-volume-up => { root.panel-volume-up(); }
-        panel-volume-down => { root.panel-volume-down(); }
         panel-frac(i, f) => { root.panel-frac(i, f); }
         panel-voice(s) => { root.panel-voice(s); }
         panel-wifi-toggle => { root.panel-wifi-toggle(); }
         panel-bt-toggle => { root.panel-bt-toggle(); }
+        panel-wifi-cycle(s) => { root.panel-wifi-cycle(s); }
+        panel-bt-cycle(s) => { root.panel-bt-cycle(s); }
         panel-chapters => { root.panel-chapters(); }
     }
 
@@ -161,7 +175,15 @@ export component Reader inherits Window {
         chapter-preview-idx <=> root.chapter-preview-idx;
         chapter-pending <=> root.chapter-pending;
         current-chapter-idx: root.current-chapter-idx;
+        text-primary: root.text-primary;
+        text-secondary: root.text-secondary;
+        brand-red: root.brand-red;
+        track-color: root.track-color;
         chapter-selected(i) => { root.chapter-selected(i); }
+        close-to-book => {
+            root.chapter-overlay-open = false;
+            root.panel-close();
+        }
     }
 
     loading-overlay := LoadingOverlay {
@@ -170,5 +192,7 @@ export component Reader inherits Window {
         width: root.width;
         visible-flag: root.loading-visible;
         loading-pct: root.loading-pct;
+        text-primary: root.text-primary;
+        track-color: root.track-color;
     }
 }

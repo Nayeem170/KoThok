@@ -12,74 +12,19 @@ pub struct Callbacks {
     pub exit_app: Rc<Cell<bool>>,
     pub panel_open_cell: Rc<Cell<bool>>,
     pub progress_target: Rc<Cell<i32>>,
-    pub panel_br: Rc<Cell<i32>>,
-    pub panel_sp: Rc<Cell<i32>>,
-    pub panel_fs: Rc<Cell<i32>>,
-    pub panel_vol: Rc<Cell<i32>>,
     pub panel_voice_cell: Rc<Cell<i32>>,
     pub panel_frac: Rc<Cell<Option<(i32, f32)>>>,
     pub font_frac_in: Rc<Cell<Option<f32>>>,
     pub wifi_toggle_cell: Rc<Cell<bool>>,
     pub bt_toggle_cell: Rc<Cell<bool>>,
+    pub wifi_cycle_cell: Rc<Cell<i32>>,
+    pub bt_cycle_cell: Rc<Cell<i32>>,
     pub play_toggle_cell: Rc<Cell<bool>>,
     pub chapter_panel_cell: Rc<Cell<bool>>,
     pub chapter_select_cell: Rc<Cell<Option<usize>>>,
     pub jump_to_reading_cell: Rc<Cell<bool>>,
     pub font_pending_val: Rc<Cell<Option<i32>>>,
     pub font_last_change: Rc<Cell<Option<std::time::Instant>>>,
-}
-
-struct SliderCells {
-    br: Rc<Cell<i32>>,
-    sp: Rc<Cell<i32>>,
-    fs: Rc<Cell<i32>>,
-    vol: Rc<Cell<i32>>,
-}
-
-fn register_sliders(reader: &Reader) -> SliderCells {
-    let br = Rc::new(Cell::new(0i32));
-    let pb = br.clone();
-    reader.on_panel_brightness_up(move || {
-        log::debug!("panel-cb: brightness UP fired");
-        pb.set(pb.get() + 5);
-    });
-    let pb2 = br.clone();
-    reader.on_panel_brightness_down(move || {
-        log::debug!("panel-cb: brightness DOWN fired");
-        pb2.set(pb2.get() - 5);
-    });
-
-    let sp = Rc::new(Cell::new(0i32));
-    let ps = sp.clone();
-    reader.on_panel_speed_up(move || {
-        ps.set(ps.get() + 5);
-    });
-    let ps2 = sp.clone();
-    reader.on_panel_speed_down(move || {
-        ps2.set(ps2.get() - 5);
-    });
-
-    let fs = Rc::new(Cell::new(0i32));
-    let pfs = fs.clone();
-    reader.on_panel_font_size_up(move || {
-        pfs.set(pfs.get() + 2);
-    });
-    let pfs2 = fs.clone();
-    reader.on_panel_font_size_down(move || {
-        pfs2.set(pfs2.get() - 2);
-    });
-
-    let vol = Rc::new(Cell::new(0i32));
-    let pvol = vol.clone();
-    reader.on_panel_volume_up(move || {
-        pvol.set(pvol.get() + 5);
-    });
-    let pvol2 = vol.clone();
-    reader.on_panel_volume_down(move || {
-        pvol2.set(pvol2.get() - 5);
-    });
-
-    SliderCells { br, sp, fs, vol }
 }
 
 struct ChapterCells {
@@ -154,8 +99,6 @@ pub fn register(reader: &Reader) -> Callbacks {
         pt.set(pm);
     });
 
-    let sliders = register_sliders(reader);
-
     let panel_voice_cell = Rc::new(Cell::new(0i32));
     let pv = panel_voice_cell.clone();
     reader.on_panel_voice(move |dir: SharedString| {
@@ -187,6 +130,18 @@ pub fn register(reader: &Reader) -> Callbacks {
         bt.set(true);
     });
 
+    let wifi_cycle_cell = Rc::new(Cell::new(0i32));
+    let wc = wifi_cycle_cell.clone();
+    reader.on_panel_wifi_cycle(move |dir: SharedString| {
+        wc.set(if dir == "prev" { 2 } else { 1 });
+    });
+
+    let bt_cycle_cell = Rc::new(Cell::new(0i32));
+    let bc = bt_cycle_cell.clone();
+    reader.on_panel_bt_cycle(move |dir: SharedString| {
+        bc.set(if dir == "prev" { 2 } else { 1 });
+    });
+
     let play_toggle_cell = Rc::new(Cell::new(false));
     let ppc = play_toggle_cell.clone();
     reader.on_play_pause_toggle(move || {
@@ -204,15 +159,13 @@ pub fn register(reader: &Reader) -> Callbacks {
         exit_app,
         panel_open_cell,
         progress_target,
-        panel_br: sliders.br,
-        panel_sp: sliders.sp,
-        panel_fs: sliders.fs,
-        panel_vol: sliders.vol,
         panel_voice_cell,
         panel_frac,
         font_frac_in,
         wifi_toggle_cell,
         bt_toggle_cell,
+        wifi_cycle_cell,
+        bt_cycle_cell,
         play_toggle_cell,
         chapter_panel_cell: chapter.panel_cell,
         chapter_select_cell: chapter.select_cell,

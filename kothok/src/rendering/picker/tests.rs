@@ -20,7 +20,7 @@ fn hero_is_first_cell_full_width_at_top() {
     let hero = &cells[0];
     assert_eq!(hero.idx, 0, "first cell is the hero (book 0)");
     assert_eq!(hero.w, picker_avail_w(), "hero spans full width");
-    assert_eq!(hero.y, PICKER_PAD, "hero pinned to the top");
+    assert_eq!(hero.y, PICKER_PAD + PICKER_HEADER_H, "hero pinned below header");
 }
 
 #[test]
@@ -112,11 +112,8 @@ fn snap_scroll_rounds_to_nearest_row() {
 }
 
 #[test]
-fn picker_grid_constants_within_screen_bounds() {
-    let w = crate::w() as i32;
-    assert!(NAV_EXIT_X >= 0);
-    assert!(
-        NAV_EXIT_X + NAV_EXIT_W <= w,
-        "Exit button right edge off-screen"
-    );
+fn picker_header_exit_within_screen_bounds() {
+    let w = crate::w();
+    let exit_x = header_exit_x(w);
+    assert!(exit_x + HEADER_BTN_PX <= w, "Exit button right edge off-screen");
 }

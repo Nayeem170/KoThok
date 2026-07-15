@@ -69,7 +69,7 @@ impl DriverState {
 
     pub(super) fn try_prefetch(&mut self) {
         if self.pending.is_some()
-            || self.ready_queue.len() + (self.current.is_some() as usize) >= 2
+            || self.ready_queue.len() + (self.current.is_some() as usize) >= 4
             || self.idx >= self.utterances.len()
         {
             return;
@@ -167,7 +167,6 @@ impl DriverState {
                 }
             }
             self.want_play = false;
-            self.idx = 0;
             send_event(&self.evt_tx, Event::Ended);
         }
     }
@@ -258,7 +257,7 @@ impl DriverState {
                 u.pos = 0;
             }
         }
-        tokio::time::sleep(Duration::from_secs(IDLE_SLEEP_SECS)).await;
+        tokio::time::sleep(Duration::from_millis(IDLE_SLEEP_MS)).await;
     }
 }
 

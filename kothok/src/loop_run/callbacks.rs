@@ -6,6 +6,14 @@ pub(super) fn process_loop_callbacks(st: &mut LoopState, ctx: &mut LoopContext) 
     let cmd_tx = ctx.cmd_tx;
     let mut ui_changed = false;
     let mut page_changed = false;
+    if let Some(t) = st.pending_tap_at {
+        if st.panel_open
+            || st.picker_active
+            || t.elapsed().as_millis() >= touch::DOUBLE_TAP_WINDOW_MS as u128
+        {
+            st.pending_tap_at = None;
+        }
+    }
     let af = process_audio_events(st, ctx.evt_rx, reader, cmd_tx);
     ui_changed |= af.ui_changed;
     page_changed |= af.page_changed;

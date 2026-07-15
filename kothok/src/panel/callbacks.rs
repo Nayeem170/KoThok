@@ -14,6 +14,7 @@ use crate::callbacks::Callbacks;
 use crate::data::config::{save_config, AppConfig};
 use crate::device::power::frontlight_set;
 use crate::device::{bt_toggle, wifi_toggle};
+use crate::device::{wifi_select_network, bt_connect_device};
 use crate::loop_state::LoopState;
 use crate::reader::apply_page;
 use crate::rendering::layout::{build_state, estimate_chapter_offsets, spawn_offset_computation};
@@ -31,12 +32,14 @@ pub fn process_panel_callbacks(
 ) -> bool {
     let frac_opt = cb.panel_frac.take();
 
-    handle_brightness(reader, cfg, fl_path, &cb.panel_br, &frac_opt);
-    handle_volume(reader, cmd_tx, cfg, &cb.panel_vol, &frac_opt);
-    handle_tts_rate(reader, cmd_tx, cfg, &cb.panel_sp, &frac_opt);
+    handle_brightness(reader, cfg, fl_path, &frac_opt);
+    handle_volume(reader, cmd_tx, cfg, &frac_opt);
+    handle_tts_rate(reader, cmd_tx, cfg, &frac_opt);
     let mut text_dirty = handle_font_slider(st, reader, cmd_tx, cfg, cb);
     handle_voice_cycle(reader, cmd_tx, cfg, &cb.panel_voice_cell);
-    handle_toggles(reader, &cb.wifi_toggle_cell, &cb.bt_toggle_cell);
+    ensure_wifi_bt_lists(st, reader);
+    handle_wifi(reader, st, &cb.wifi_toggle_cell, &cb.wifi_cycle_cell);
+    handle_bt(reader, st, &cb.bt_toggle_cell, &cb.bt_cycle_cell);
     text_dirty |= handle_chapter_overlay(st, reader, cmd_tx, cb);
 
     text_dirty
@@ -46,21 +49,8 @@ fn handle_brightness(
     reader: &Reader,
     cfg: &mut AppConfig,
     fl_path: &Option<std::path::PathBuf>,
-    panel_br: &Cell<i32>,
     frac_opt: &Option<(i32, f32)>,
 ) {
-    let br_delta = panel_br.replace(0);
-    if br_delta != 0 {
-        let new_val = (reader.get_brightness_val() + br_delta).clamp(0, 100);
-        reader.set_brightness_val(new_val);
-        cfg.brightness = new_val;
-        if let Some(ref path) = fl_path {
-            frontlight_set(path, new_val as u32);
-            debug!("panel: brightness set to {new_val}");
-        }
-        save_config(cfg);
-    }
-
     if let Some((0, frac)) = frac_opt {
         let new_val = (frac * 100.0).round() as i32;
         reader.set_brightness_val(new_val);
@@ -76,20 +66,8 @@ fn handle_volume(
     reader: &Reader,
     cmd_tx: &Sender<Cmd>,
     cfg: &mut AppConfig,
-    panel_vol: &Cell<i32>,
     frac_opt: &Option<(i32, f32)>,
 ) {
-    let vol_delta = panel_vol.replace(0);
-    if vol_delta != 0 {
-        let new_val = (cfg.volume + vol_delta).clamp(0, 100);
-        cfg.volume = new_val;
-        reader.set_volume_val(new_val);
-        // best-effort: channel may be full
-        let _ = cmd_tx.send(Cmd::Volume(new_val as u32));
-        save_config(cfg);
-        debug!("panel: volume set to {new_val}%");
-    }
-
     if let Some((3, frac)) = frac_opt {
         let new_val = (frac * 100.0).round() as i32;
         cfg.volume = new_val;
@@ -104,7 +82,6 @@ fn handle_tts_rate(
     reader: &Reader,
     cmd_tx: &Sender<Cmd>,
     cfg: &mut AppConfig,
-    panel_sp: &Cell<i32>,
     frac_opt: &Option<(i32, f32)>,
 ) {
     if let Some((1, frac)) = frac_opt {
@@ -113,18 +90,6 @@ fn handle_tts_rate(
         reader.set_tts_speed(new_val);
         // best-effort: channel may be full
         let _ = cmd_tx.send(Cmd::Rate(crate::data::config::rate_string(new_val)));
-        save_config(cfg);
-    }
-
-    let sp_delta = panel_sp.replace(0);
-    if sp_delta != 0 {
-        let new_val = (cfg.tts_rate + sp_delta).clamp(0, 100);
-        cfg.tts_rate = new_val;
-        reader.set_tts_speed(new_val);
-        let rate_str = crate::data::config::rate_string(new_val);
-        debug!("panel: rate set to {}", rate_str);
-        // best-effort: channel may be full
-        let _ = cmd_tx.send(Cmd::Rate(rate_str));
         save_config(cfg);
     }
 }
@@ -155,17 +120,6 @@ fn handle_font_slider(
             cb.font_last_change.set(None);
             apply_font_reflow(val, st, reader, cmd_tx);
             text_dirty = true;
-        }
-    }
-    let fs_delta = cb.panel_fs.replace(0);
-    if fs_delta != 0 {
-        let new_val = (cfg.font_size + fs_delta).clamp(20, 60);
-        if new_val != cfg.font_size {
-            cfg.font_size = new_val;
-            reader.set_font_size_val(new_val);
-            save_config(cfg);
-            cb.font_pending_val.set(Some(new_val));
-            cb.font_last_change.set(Some(Instant::now()));
         }
     }
     text_dirty
@@ -210,18 +164,192 @@ fn handle_voice_cycle(
     save_config(cfg);
 }
 
-fn handle_toggles(reader: &Reader, wifi_toggle_cell: &Cell<bool>, bt_toggle_cell: &Cell<bool>) {
-    if wifi_toggle_cell.replace(false) {
-        let on = !reader.get_wifi_on();
-        reader.set_wifi_on(on);
-        wifi_toggle(on);
+fn ensure_wifi_bt_lists(st: &mut LoopState, reader: &Reader) {
+    if let Some(rx) = st.wifi_bt_list_rx.take() {
+        match rx.try_recv() {
+            Ok(result) => {
+                if !result.wifi.is_empty() {
+                    let connected_idx = result.wifi.iter().position(|e| e.connected);
+                    st.wifi_list = result
+                        .wifi
+                        .iter()
+                        .map(|e| (e.ssid.clone(), e.id))
+                        .collect();
+                    st.wifi_list_idx = connected_idx.unwrap_or(0);
+                    st.wifi_list_ids_valid = result.wifi_ids_valid;
+                    let name = &st.wifi_list[st.wifi_list_idx].0;
+                    reader.set_wifi_name(SharedString::from(name.as_str()));
+                    debug!(
+                        "wifi-list: {} networks, selected [{}] {} (ids_valid={})",
+                        st.wifi_list.len(),
+                        st.wifi_list_idx,
+                        name,
+                        st.wifi_list_ids_valid
+                    );
+                } else {
+                    debug!("wifi-list: empty, single-line mode");
+                }
+                st.wifi_list_fetched = true;
+
+                if !result.bt.is_empty() {
+                    let connected_idx = result.bt.iter().position(|e| e.connected);
+                    st.bt_list = result
+                        .bt
+                        .iter()
+                        .map(|e| (e.name.clone(), e.path.clone()))
+                        .collect();
+                    st.bt_list_idx = connected_idx.unwrap_or(0);
+                    st.bt_list_ids_valid = true;
+                    let name = &st.bt_list[st.bt_list_idx].0;
+                    reader.set_bt_name(SharedString::from(name.as_str()));
+                    debug!(
+                        "bt-list: {} devices, selected [{}] {}",
+                        st.bt_list.len(),
+                        st.bt_list_idx,
+                        name
+                    );
+                } else {
+                    debug!("bt-list: empty, single-line mode");
+                }
+                st.bt_list_fetched = true;
+                return;
+            }
+            Err(_) => {
+                st.wifi_bt_list_rx = Some(rx);
+                return;
+            }
+        }
     }
 
-    if bt_toggle_cell.replace(false) {
-        let on = !reader.get_bt_on();
-        reader.set_bt_on(on);
-        bt_toggle(on);
+    if !st.wifi_list_fetched || !st.bt_list_fetched {
+        st.wifi_bt_list_rx = Some(crate::panel::spawn_wifi_bt_list_fetch());
     }
+}
+
+fn toggle_selector(
+    reader: &Reader,
+    toggle_cell: &Cell<bool>,
+    kind: &str,
+    is_on: impl Fn(&Reader) -> bool,
+    set_on: impl Fn(&Reader, bool),
+    cur_name: impl Fn(&Reader) -> SharedString,
+    connected_name: impl Fn(&Reader) -> SharedString,
+    toggle_dev: impl Fn(bool),
+) -> bool {
+    if !toggle_cell.replace(false) {
+        return false;
+    }
+    let connected = is_on(reader) && cur_name(reader) == connected_name(reader);
+    if connected {
+        toggle_dev(false);
+        set_on(reader, false);
+        debug!("{}-toggle: turning off (was connected to selected)", kind);
+        false
+    } else {
+        toggle_dev(true);
+        set_on(reader, true);
+        true
+    }
+}
+
+fn cycle_selector(
+    names: &[String],
+    idx: &mut usize,
+    cycle_cell: &Cell<i32>,
+    set_name: impl Fn(&str),
+    kind: &str,
+) {
+    let dir = cycle_cell.replace(0);
+    if dir == 0 || names.len() < 2 {
+        return;
+    }
+    *idx = if dir == 2 {
+        if *idx == 0 { names.len() - 1 } else { *idx - 1 }
+    } else {
+        (*idx + 1) % names.len()
+    };
+    let name = &names[*idx];
+    debug!(
+        "{}-cycle: {}/{} -> {} ({})",
+        kind,
+        *idx + 1,
+        names.len(),
+        name,
+        if dir == 2 { "prev" } else { "next" }
+    );
+    set_name(name);
+}
+
+fn handle_wifi(
+    reader: &Reader,
+    st: &mut LoopState,
+    wifi_toggle_cell: &Cell<bool>,
+    wifi_cycle_cell: &Cell<i32>,
+) {
+    if toggle_selector(
+        reader,
+        wifi_toggle_cell,
+        "wifi",
+        |r| r.get_wifi_on(),
+        |r, v| r.set_wifi_on(v),
+        |r| r.get_wifi_name(),
+        |r| r.get_wifi_connected_name(),
+        wifi_toggle,
+    ) {
+        if st.wifi_list_ids_valid && !st.wifi_list.is_empty() {
+            let (_, id) = &st.wifi_list[st.wifi_list_idx];
+            wifi_select_network(*id);
+        }
+        if !st.wifi_list_ids_valid {
+            st.wifi_list_fetched = false;
+        }
+        debug!(
+            "wifi-toggle: connecting to selected [{}] {}",
+            st.wifi_list_idx,
+            reader.get_wifi_name()
+        );
+    }
+
+    let names: Vec<String> = st.wifi_list.iter().map(|(s, _)| s.clone()).collect();
+    cycle_selector(&names, &mut st.wifi_list_idx, wifi_cycle_cell, |n| {
+        reader.set_wifi_name(SharedString::from(n));
+    }, "wifi");
+}
+
+fn handle_bt(
+    reader: &Reader,
+    st: &mut LoopState,
+    bt_toggle_cell: &Cell<bool>,
+    bt_cycle_cell: &Cell<i32>,
+) {
+    if toggle_selector(
+        reader,
+        bt_toggle_cell,
+        "bt",
+        |r| r.get_bt_on(),
+        |r, v| r.set_bt_on(v),
+        |r| r.get_bt_name(),
+        |r| r.get_bt_connected_name(),
+        bt_toggle,
+    ) {
+        if !st.bt_list.is_empty() {
+            let (_, path) = &st.bt_list[st.bt_list_idx];
+            bt_connect_device(path);
+        }
+        if !st.bt_list_ids_valid {
+            st.bt_list_fetched = false;
+        }
+        debug!(
+            "bt-toggle: connecting to selected [{}] {}",
+            st.bt_list_idx,
+            reader.get_bt_name()
+        );
+    }
+
+    let names: Vec<String> = st.bt_list.iter().map(|(n, _)| n.clone()).collect();
+    cycle_selector(&names, &mut st.bt_list_idx, bt_cycle_cell, |n| {
+        reader.set_bt_name(SharedString::from(n));
+    }, "bt");
 }
 
 fn handle_chapter_overlay(
@@ -250,7 +378,11 @@ fn handle_chapter_overlay(
             nc, st.current_chapter
         );
         if nc != st.current_chapter && nc < st.chapter_count {
-            crate::reader::switch_chapter(st, reader, cmd_tx, nc, false, false);
+            crate::reader::switch_chapter(st, reader, cmd_tx, nc, crate::reader::ChapterSwitchOpts {
+                to_last_page: false,
+                update_cursor: false,
+                load_audio: true,
+            });
             text_dirty = true;
             let cn = crate::data::library::chapter_display_title(&st.chapters[nc], nc);
             crate::set_chapter_name(reader, &cn);

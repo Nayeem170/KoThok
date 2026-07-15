@@ -13,7 +13,7 @@ use crate::device::{bt_toggle, wifi_status, wifi_toggle};
 use crate::loop_state::{LoopContext, LoopState};
 use crate::reader::apply_page;
 use crate::rendering::common::rgb565_as_bytes_ref;
-use crate::rendering::fb::{Fb, WAVE_GC16};
+use crate::rendering::fb::{Fb, WAVE_DU, WAVE_GC16};
 use crate::rendering::layout::PAD_TOP;
 use crate::rendering::render::{composite_text, refresh_text_cache, render_book_cover_scaled};
 
@@ -212,14 +212,29 @@ pub fn teardown(fb: &Fb, exit_flag: &Arc<AtomicBool>, power_dev: &str, w: usize,
         let r = kobo_core::rendering::loader::spinner_rect(w as i32, h as i32);
         let y0 = (r.y as usize).saturating_sub(4);
         let y1 = ((r.y + r.h + 4) as usize).min(h);
+        let bx = r.x.max(0) as usize;
+        let by = r.y.max(0) as usize;
+        let bw = (r.w as usize).min(w.saturating_sub(bx));
+        let bh = (r.h as usize).min(h.saturating_sub(by));
+        let saved_badge: Vec<Rgb565Pixel> = (0..bh)
+            .flat_map(|row| {
+                let py = by + row;
+                splash[py * w + bx..py * w + bx + bw].iter().copied()
+            })
+            .collect();
         let mut angle = 0u32;
         for _ in 0..6 {
             angle = (angle + 60) % 360;
+            for row in 0..bh {
+                let py = by + row;
+                let src = &saved_badge[row * bw..(row + 1) * bw];
+                splash[py * w + bx..py * w + bx + bw].copy_from_slice(src);
+            }
             kobo_core::rendering::loader::paint_spinner(
                 crate::rendering::common::rgb565_as_bytes(&mut splash),
                 w, h, angle,
             );
-            fb.present(rgb565_as_bytes_ref(&splash), w, h, false, y0, y1, WAVE_GC16);
+            fb.present(rgb565_as_bytes_ref(&splash), w, h, false, y0, y1, WAVE_DU);
             std::thread::sleep(std::time::Duration::from_millis(110));
         }
     }

@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use crate::audio::Utterance;
 
 pub const PAD_LEFT: usize = 24;
-pub const PAD_TOP: usize = 48;
+pub const PAD_TOP: usize = 80;
 pub const GUTTER_W: usize = 6;
 pub const GUTTER_PAD: usize = 18;
 pub use kobo_core::rendering::common::BODY_PX;

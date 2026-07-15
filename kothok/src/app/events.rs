@@ -8,7 +8,7 @@ use slint::{ModelRc, SharedString, VecModel};
 use crate::audio::glue::load_page_audio;
 use crate::audio::{Cmd, Event};
 use crate::loop_state::LoopState;
-use crate::reader::{apply_page, switch_chapter};
+use crate::reader::{apply_page, switch_chapter, ChapterSwitchOpts};
 use crate::Reader;
 
 use super::*;
@@ -58,30 +58,34 @@ pub fn process_audio_events(
                 ui_changed |= uc;
             }
             Event::Sentence { start, end } => {
-                if reader.get_cur_start() != start as i32 || reader.get_cur_end() != end as i32 {
-                    reader.set_cur_start(start as i32);
-                    reader.set_cur_end(end as i32);
-                    if let Some((pg_start, pg_end)) = st.state.pages.get(st.current_page) {
-                        for row in &st.state.all_rows[*pg_start..*pg_end] {
-                            if row.start < row.end
-                                && start >= row.start as usize
-                                && start < row.end as usize
-                            {
-                                let txt = st
-                                    .state
-                                    .utterances
-                                    .iter()
-                                    .find(|u| u.start <= start && start < u.end)
-                                    .map(|u| u.text.as_str());
-                                if let Some(txt) = txt {
-                                    reader.set_current_sentence(SharedString::from(txt));
-                                }
-                                break;
+                debug!("cursor: Event::Sentence start={start} end={end} page={} prev_cs={} prev_ce={}",
+                    st.current_page, reader.get_cur_start(), reader.get_cur_end());
+                reader.set_cur_start(start as i32);
+                reader.set_cur_end(end as i32);
+                if let Some((pg_start, pg_end)) = st.state.pages.get(st.current_page) {
+                    let mut found_row = -1i32;
+                    for (ri, row) in st.state.all_rows[*pg_start..*pg_end].iter().enumerate() {
+                        if row.start < row.end
+                            && start >= row.start as usize
+                            && start < row.end as usize
+                        {
+                            found_row = (*pg_start + ri) as i32;
+                            let txt = st
+                                .state
+                                .utterances
+                                .iter()
+                                .find(|u| u.start <= start && start < u.end)
+                                .map(|u| u.text.as_str());
+                            if let Some(txt) = txt {
+                                reader.set_current_sentence(SharedString::from(txt));
                             }
+                            break;
                         }
                     }
-                    ui_changed = true;
+                    debug!("cursor: matched row_idx={found_row} for start={start} on page {} (rows {}-{})",
+                        st.current_page, pg_start, pg_end);
                 }
+                ui_changed = true;
             }
             Event::PageBreak => {
                 if st.current_page + 1 < st.state.pages.len() {
@@ -126,12 +130,10 @@ fn handle_audio_ended(st: &mut LoopState, reader: &Reader, cmd_tx: &Sender<Cmd>)
             &st.chapter_offsets,
             st.current_chapter,
         );
-        // Track reading progress on the progress bar (scenario 2):
-        // while playing, the saved-page tick follows the new page.
         reader.set_saved_page((st.chapter_offsets[st.current_chapter] + st.current_page) as i32);
         text_dirty = true;
-        load_page_audio(st.current_page, &st.state, cmd_tx);
-        // best-effort: channel may be full
+        let next_utts = crate::audio::glue::page_utterances(st.current_page, &st.state);
+        let _ = cmd_tx.send(Cmd::Append(next_utts));
         let _ = cmd_tx.send(Cmd::Play);
         debug!(
             "auto-page: {}/{} -> {}/{} (page audio ended)",
@@ -142,10 +144,15 @@ fn handle_audio_ended(st: &mut LoopState, reader: &Reader, cmd_tx: &Sender<Cmd>)
         );
     } else if st.current_chapter + 1 < st.chapter_count {
         let nc = st.current_chapter + 1;
-        switch_chapter(st, reader, cmd_tx, nc, false, true);
+        switch_chapter(st, reader, cmd_tx, nc, ChapterSwitchOpts {
+            to_last_page: false,
+            update_cursor: true,
+            load_audio: false,
+        });
         text_dirty = true;
-        load_page_audio(st.current_page, &st.state, cmd_tx);
-        // best-effort: channel may be full
+        let page_utts = crate::audio::glue::page_utterances(st.current_page, &st.state);
+        let _ = cmd_tx.send(Cmd::Reload(page_utts));
+        let _ = cmd_tx.send(Cmd::Seek(0));
         let _ = cmd_tx.send(Cmd::Play);
         reader.set_playing(true);
         reader.set_paused(false);
@@ -209,7 +216,11 @@ pub(super) struct NavOutcome {
 }
 
 fn switch_to(st: &mut LoopState, reader: &Reader, cmd_tx: &Sender<Cmd>, nc: usize, to_last: bool) {
-    switch_chapter(st, reader, cmd_tx, nc, to_last, false);
+    switch_chapter(st, reader, cmd_tx, nc, ChapterSwitchOpts {
+        to_last_page: to_last,
+        update_cursor: false,
+        load_audio: true,
+    });
 }
 
 fn apply_page_display(st: &LoopState, reader: &Reader, cmd_tx: &Sender<Cmd>) {

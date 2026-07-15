@@ -97,10 +97,12 @@ mod tests {
     fn voice_for_arabic_picks_lang_voice() {
         let (v, lang) = voice_for_text("مرحبا بالعالم", "en-US-EmmaNeural", "bn-BD-NabanitaNeural");
         assert_eq!(lang, "ar-SA");
-        let expected = crate::panel::voices_for_lang("ar-SA")
+        let voices = crate::panel::voices_for_lang("ar-SA");
+        let expected = voices
             .first()
             .expect("ar voice")
-            .id;
+            .id()
+            .to_string();
         assert_eq!(v, expected);
     }
 }

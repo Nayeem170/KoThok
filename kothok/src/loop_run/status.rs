@@ -123,11 +123,17 @@ pub(super) fn refresh_status(st: &mut LoopState, ctx: &LoopContext) {
         if crate::device::bt_toggle_age_ms() >= BT_TOGGLE_GRACE_MS {
             ctx.reader.set_bt_on(bt);
         }
+        if wifi && st.wifi_list.is_empty() {
+            st.wifi_list_fetched = false;
+        }
+        if bt && st.bt_list.is_empty() {
+            st.bt_list_fetched = false;
+        }
         if let Some(n) = ctx.caps.wifi_name() {
-            ctx.reader.set_wifi_name(SharedString::from(n));
+            ctx.reader.set_wifi_connected_name(SharedString::from(n));
         }
         if let Some(n) = ctx.caps.bt_name() {
-            ctx.reader.set_bt_name(SharedString::from(n));
+            ctx.reader.set_bt_connected_name(SharedString::from(n));
         }
         ctx.reader.set_play_enabled(ctx.reader.get_wifi_on() && ctx.reader.get_bt_on());
     }

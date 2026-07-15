@@ -1,72 +1,62 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1448 1072" width="100%" height="100%">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1072 1448" width="1072" height="1448">
   <defs>
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@700&amp;display=swap');
-      
+
       .text-red {
         fill: #F42A41;
         stroke: #F42A41;
-        stroke-width: 3px;
+        stroke-width: 2px;
         font-family: 'Fredoka', sans-serif;
-        font-weight: 600;
-        font-size: 195px;
-        letter-spacing: -1.5px;
+        font-weight: 700;
+        font-size: 145px;
+        letter-spacing: -1px;
       }
-      
+
       .text-green {
         fill: #006A4E;
         stroke: #006A4E;
-        stroke-width: 3px;
+        stroke-width: 2px;
         font-family: 'Fredoka', sans-serif;
-        font-weight: 600;
-        font-size: 195px;
-        letter-spacing: -1.5px;
+        font-weight: 700;
+        font-size: 145px;
+        letter-spacing: -1px;
       }
-      
+
       .text-black {
         fill: #0F0F0F;
         stroke: #0F0F0F;
-        stroke-width: 3px;
+        stroke-width: 2px;
         font-family: 'Fredoka', sans-serif;
-        font-weight: 600;
-        font-size: 195px;
-        letter-spacing: -1.5px;
-      }
-      
-      .text-black-small {
-        fill: #0F0F0F;
-        font-family: 'Fredoka', sans-serif;
-        font-weight: 600;
-        font-size: 120px;
+        font-weight: 700;
+        font-size: 145px;
         letter-spacing: -1px;
       }
-      
-      .dot {
+
+      .text-small {
         fill: #0F0F0F;
+        font-family: 'Fredoka', sans-serif;
+        font-weight: 700;
+        font-size: 85px;
+        letter-spacing: -0.5px;
       }
     </style>
   </defs>
 
-  <!-- Background -->
-  <rect width="100%" height="100%" fill="#FCFCFC" />
+  <rect width="1072" height="1448" fill="#FCFCFC" />
 
-  <!-- Line 1: Read -->
-  <text x="320" y="310" class="text-red">Read</text>
-  <!-- Line 2: Listen -->
-  <text x="320" y="490" class="text-green">Listen</text>
-  <!-- Line 3: Anywhere -->
-  <text x="320" y="670" class="text-black">Anywhere</text>
+  <text x="120" y="320" class="text-red">Read</text>
+  <text x="120" y="490" class="text-green">Listen</text>
+  <text x="120" y="660" class="text-black">Anywhere</text>
 
-  <!-- Line 4: with [logo] kothok -->
-  <text x="320" y="940" class="text-black-small">with</text>
-  
-  <!-- Embedded Updated Logo SVG (Scaled and Positioned) -->
-  <svg x="590" y="828" width="128" height="128" viewBox="362 445 540 540">
+  <text x="220" y="1060" class="text-small">with</text>
+
+  <svg x="390" y="960" width="100" height="100" viewBox="362 445 540 540">
     <g transform="translate(362, 380)">
       <rect x="0" y="75" width="150" height="520" rx="75" ry="75" fill="#F42A41" />
       <path d="M 500,85 C 530,65 540,85 540,120 L 540,550 C 540,585 530,605 500,585 L 210,365 C 180,345 180,325 210,305 Z" fill="#006A4E" />
     </g>
   </svg>
-  
-  <text x="740" y="940" class="text-black-small">KoThok</text>
+
+  <text x="510" y="1060" class="text-small">KoThok</text>
 </svg>
