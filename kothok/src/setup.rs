@@ -102,6 +102,9 @@ fn scan_and_resolve(
     let mut splash = vec![Rgb565Pixel(0); w * h];
     render::paint_kothok_splash(&mut splash);
     fb.present(rgb565_as_bytes_ref(&splash), w, h, true, 0, 0, WAVE_GC16);
+    fb.wait_for_update_complete();
+
+    crate::device::init_wpa_detection();
 
     fonts::log_available_fonts();
     let font_handle = std::thread::spawn(|| {
@@ -111,9 +114,26 @@ fn scan_and_resolve(
     let r = kobo_core::rendering::loader::spinner_rect(w as i32, h as i32);
     let y0 = (r.y as usize).saturating_sub(4);
     let y1 = ((r.y + r.h + 4) as usize).min(h);
+    let bx = r.x.max(0) as usize;
+    let by = r.y.max(0) as usize;
+    let bw = (r.w as usize).min(w.saturating_sub(bx));
+    let bh = (r.h as usize).min(h.saturating_sub(by));
+
+    let saved_badge: Vec<Rgb565Pixel> = (0..bh)
+        .flat_map(|row| {
+            let py = by + row;
+            splash[py * w + bx..py * w + bx + bw].iter().copied()
+        })
+        .collect();
+
     let mut angle = 0u32;
     while !scan_handle.is_finished() || !font_handle.is_finished() {
-        angle = (angle + 30) % 360;
+        angle = (angle + 15) % 360;
+        for row in 0..bh {
+            let py = by + row;
+            let src = &saved_badge[row * bw..(row + 1) * bw];
+            splash[py * w + bx..py * w + bx + bw].copy_from_slice(src);
+        }
         kobo_core::rendering::loader::paint_spinner(
             rgb565_as_bytes(&mut splash),
             w,
@@ -121,10 +141,8 @@ fn scan_and_resolve(
             angle,
         );
         fb.present(rgb565_as_bytes_ref(&splash), w, h, false, y0, y1, WAVE_DU);
-        std::thread::sleep(std::time::Duration::from_millis(80));
+        std::thread::sleep(std::time::Duration::from_millis(50));
     }
-    splash.fill(Rgb565Pixel(0xFFFF));
-    fb.present(rgb565_as_bytes_ref(&splash), w, h, true, 0, 0, WAVE_GC16);
 
     font_handle.join().unwrap_or(());
     let all_books = scan_handle.join().unwrap_or_default();
@@ -168,10 +186,10 @@ fn init_reader_and_config(w: usize, hw_cfg: &hw::DeviceConfig) -> ReaderSetup {
     reader.set_bt_on(caps.audio_sink_available());
     reader.set_play_enabled(caps.read_aloud_available());
     if let Some(n) = caps.wifi_name() {
-        reader.set_wifi_name(SharedString::from(n));
+        reader.set_wifi_connected_name(SharedString::from(n));
     }
     if let Some(n) = caps.bt_name() {
-        reader.set_bt_name(SharedString::from(n));
+        reader.set_bt_connected_name(SharedString::from(n));
     }
     reader.set_clock(SharedString::from(caps.current_clock()));
     let dummy_ch = Chapter::from_xhtml(0, None, "");
@@ -292,6 +310,10 @@ fn build_loop_state(
         tap_xy: None,
         scrubbing: false,
         pp_pressed: false,
+        lib_pressed: false,
+        menu_pressed: false,
+        header_visible: true,
+        pending_tap_at: None,
         press_dispatched: false,
         press_x: 0,
         press_y: 0,
@@ -313,6 +335,15 @@ fn build_loop_state(
         text_cache,
         voice_rx: None,
         voice_fetch_attempted: false,
+        wifi_bt_list_rx: None,
+        wifi_list: Vec::new(),
+        wifi_list_idx: 0,
+        wifi_list_fetched: false,
+        wifi_list_ids_valid: true,
+        bt_list: Vec::new(),
+        bt_list_idx: 0,
+        bt_list_fetched: false,
+        bt_list_ids_valid: true,
     }
 }
 

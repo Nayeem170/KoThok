@@ -33,7 +33,8 @@ pub fn first_text_row(state: &ChapterState, s: usize, e: usize) -> Option<(i32, 
 /// Pure: the on-page reading cursor `(cur_start, cur_end)` for the page whose
 /// row range is `[s, e)`. If the first row is a heading/gap (start == end),
 /// falls back to the first real text row on the page; if none exists, (0, 0).
-pub fn page_cursor(state: &ChapterState, s: usize, e: usize) -> (i32, i32) {
+#[cfg(test)]
+fn page_cursor(state: &ChapterState, s: usize, e: usize) -> (i32, i32) {
     match state.all_rows.get(s) {
         Some(first) if first.start < first.end => (first.start, first.end),
         Some(_) => first_text_row(state, s, e).unwrap_or((0, 0)),
@@ -62,20 +63,15 @@ pub fn compute_page_view(
     page: usize,
     chapter_offsets: &[usize],
     current_chapter: usize,
-    playing: bool,
+    _playing: bool,
 ) -> PageView {
     let idx = clamp_page(page, state.pages.len());
     let (s, e) = state.pages.get(idx).copied().unwrap_or((0, 0));
-    let cursor = if playing {
-        Some(page_cursor(state, s, e))
-    } else {
-        None
-    };
     PageView {
         rows: state.all_rows[s..e].to_vec(),
         absolute_page: (chapter_offsets.get(current_chapter).copied().unwrap_or(0) + idx) as i32,
         page_count: *chapter_offsets.last().unwrap_or(&1) as i32,
-        cursor,
+        cursor: None,
     }
 }
 
@@ -103,20 +99,25 @@ pub fn apply_page(
     }
 }
 
+pub struct ChapterSwitchOpts {
+    pub to_last_page: bool,
+    pub update_cursor: bool,
+    pub load_audio: bool,
+}
+
 pub fn switch_chapter(
     st: &mut crate::loop_state::LoopState,
     reader: &Reader,
     cmd_tx: &std::sync::mpsc::Sender<Cmd>,
     nc: usize,
-    to_last_page: bool,
-    update_cursor: bool,
+    opts: ChapterSwitchOpts,
 ) {
     let body_px = st.body_px;
     let head_px = st.head_px;
     let line_h = st.line_h;
     st.current_chapter = nc;
     st.state = build_state(&mut st.chapters[nc], body_px, head_px, line_h);
-    st.current_page = if to_last_page {
+    st.current_page = if opts.to_last_page {
         st.state.pages.len().saturating_sub(1)
     } else {
         0
@@ -126,20 +127,18 @@ pub fn switch_chapter(
     apply_page(reader, &st.state, cp, &st.chapter_offsets, cc);
     let cn = crate::data::library::chapter_display_title(&st.chapters[nc], nc);
     crate::set_chapter_name(reader, &cn);
-    // best-effort: channel may be full
-    let _ = cmd_tx.send(Cmd::Reload(st.state.utterances.clone()));
-    // Only move the reading cursor for an actual playback progression
-    // (auto-advance). When browsing/opening a chapter from the list, leave the
-    // cursor on the last reading line - like the saved-page tick, it must NOT
-    // jump to the opened chapter's first line.
-    if update_cursor {
+    if opts.load_audio {
+        let _ = cmd_tx.send(Cmd::Reload(st.state.utterances.clone()));
+    }
+    if opts.update_cursor {
         if let Some(&(s, e)) = st.state.pages.get(cp) {
             if let Some((row_start, row_end)) = first_text_row(&st.state, s, e) {
                 reader.set_cur_start(row_start);
                 reader.set_cur_end(row_end);
-                let utt_idx = utterance_index_for_offset(&st.state.utterances, row_start as usize);
-                // best-effort: channel may be full
-                let _ = cmd_tx.send(Cmd::Seek(utt_idx));
+                if opts.load_audio {
+                    let utt_idx = utterance_index_for_offset(&st.state.utterances, row_start as usize);
+                    let _ = cmd_tx.send(Cmd::Seek(utt_idx));
+                }
             }
         }
     }
@@ -148,7 +147,7 @@ pub fn switch_chapter(
         nc + 1,
         st.chapter_count,
         cp,
-        to_last_page,
+        opts.to_last_page,
         st.state.pages.len()
     );
 }
@@ -230,39 +229,36 @@ mod tests {
     fn compute_page_view_cursor_none_when_not_playing() {
         let st = state_with(vec![row(0, 10)], vec![(0, 1)]);
         let v = compute_page_view(&st, 0, &[0, 1], 0, false);
-        assert!(v.cursor.is_none(), "no cursor placed when not playing");
+        assert!(v.cursor.is_none(), "no cursor placed by apply_page");
     }
 
     #[test]
-    fn compute_page_view_cursor_on_first_text_row_when_playing() {
+    fn compute_page_view_cursor_none_when_playing() {
         let st = state_with(vec![row(0, 10), row(10, 20)], vec![(0, 2)]);
         let v = compute_page_view(&st, 0, &[0, 2], 0, true);
-        assert_eq!(v.cursor, Some((0, 10)), "cursor marks the first row");
+        assert!(v.cursor.is_none(), "cursor is set only by Event::Sentence, not apply_page");
     }
 
     #[test]
-    fn compute_page_view_cursor_falls_back_past_heading() {
-        // First row is a heading/gap (start==end); cursor must skip to the next
-        // real text row on the page.
+    fn compute_page_view_cursor_none_with_heading() {
         let st = state_with(vec![gap(), row(20, 35)], vec![(0, 2)]);
         let v = compute_page_view(&st, 0, &[0, 2], 0, true);
-        assert_eq!(v.cursor, Some((20, 35)), "cursor skips the heading gap row");
+        assert!(v.cursor.is_none());
     }
 
     #[test]
-    fn compute_page_view_cursor_zero_when_page_has_no_text() {
+    fn compute_page_view_cursor_none_no_text() {
         let st = state_with(vec![gap(), gap()], vec![(0, 2)]);
         let v = compute_page_view(&st, 0, &[0, 2], 0, true);
-        assert_eq!(v.cursor, Some((0, 0)), "no text row -> (0,0) cursor");
+        assert!(v.cursor.is_none());
     }
 
     #[test]
     fn compute_page_view_empty_chapter_safe() {
-        // Zero pages: idx clamps to 0 without indexing into an empty pages vec.
         let st = state_with(vec![], vec![]);
         let v = compute_page_view(&st, 0, &[0, 0], 0, true);
         assert!(v.rows.is_empty());
-        assert_eq!(v.cursor, Some((0, 0)));
+        assert!(v.cursor.is_none());
     }
 
     #[test]

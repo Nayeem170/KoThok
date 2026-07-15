@@ -71,11 +71,28 @@ pub(super) fn poll_and_dispatch_touch(st: &mut LoopState, ctx: &mut LoopContext)
                                 }
                                 gesture::FooterZone::None => {}
                             }
+                            let header_zone = if !st.picker_active
+                                && !st.panel_open
+                                && !reader.get_chapter_overlay_open()
+                                && !st.cover_page_visible
+                                && st.header_visible
+                            {
+                                gesture::classify_header_zone(dx, dy, ctx.w as f32)
+                            } else {
+                                gesture::HeaderZone::None
+                            };
+                            match header_zone {
+                                gesture::HeaderZone::Library => st.lib_pressed = true,
+                                gesture::HeaderZone::Menu => st.menu_pressed = true,
+                                gesture::HeaderZone::None => {}
+                            }
                             let near = st.last_tap_y >= 0
                                 && (st.frame_y - st.last_tap_y).abs() < SWIPE_DELTA_TOLERANCE_PX;
                             if (now.duration_since(st.last_tap_time) >= tap_cooldown || !near)
                                 && !st.scrubbing
                                 && !st.pp_pressed
+                                && !st.lib_pressed
+                                && !st.menu_pressed
                             {
                                 st.tap_xy = Some((dx, dy));
                                 st.last_tap_time = now;

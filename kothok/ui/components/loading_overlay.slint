@@ -1,6 +1,8 @@
 export component LoadingOverlay inherits Rectangle {
     in property <bool> visible-flag: false;
     in property <int> loading-pct: 0;
+    in property <color> text-primary: #111111;
+    in property <color> track-color: #d0d0d0;
 
     y: root.height - 92px;
     height: 70px;
@@ -14,7 +16,7 @@ export component LoadingOverlay inherits Rectangle {
 
         Text {
             text: "Loading...";
-            color: #000000;
+            color: root.text-primary;
             font-size: 24px;
             vertical-alignment: center;
         }
@@ -22,20 +24,20 @@ export component LoadingOverlay inherits Rectangle {
         Rectangle {
             width: 400px;
             height: 14px;
-            background: #d0d0d0;
+            background: root.track-color;
             border-radius: 7px;
             y: 28px;
             Rectangle {
                 width: root.loading-pct * 400px / 100;
                 height: 100%;
-                background: #111111;
+                background: root.text-primary;
                 border-radius: 7px;
             }
         }
 
         Text {
             text: root.loading-pct + "%";
-            color: #000000;
+            color: root.text-primary;
             font-size: 24px;
             vertical-alignment: center;
         }

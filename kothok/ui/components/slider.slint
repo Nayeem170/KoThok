@@ -1,63 +1,47 @@
-import { ActionButton } from "button.slint";
-
-export component SliderRow inherits VerticalLayout {
+export component CompactSlider inherits VerticalLayout {
     in property <string> name;
     in property <string> value-text;
     in property <float> fill-frac;
-    callback dec();
-    callback inc();
+    in property <color> text-primary: #111111;
+    in property <color> text-hint: #999999;
+    in property <color> track-color: #d0d0d0;
     callback set-frac(float);
 
-    spacing: 6px;
+    spacing: 4px;
 
     HorizontalLayout {
-        height: 30px;
+        height: 28px;
         spacing: 10px;
-        Text { text: root.name; color: #111111; font-size: 24px; vertical-alignment: center; }
         Text {
-            text: root.value-text; color: #111111; font-size: 24px;
+            text: root.name; color: root.text-primary; font-size: 22px;
+            vertical-alignment: center;
+        }
+        Text {
+            text: root.value-text; color: root.text-primary; font-size: 22px;
             horizontal-stretch: 1; horizontal-alignment: right; vertical-alignment: center;
         }
     }
 
-    HorizontalLayout {
-        height: 56px;
-        spacing: 14px;
-
-        ActionButton {
-            width: 96px;
-            label: "-";
-            font-size: 38px;
-            clicked => { root.dec(); }
-        }
-
+    cs-track := Rectangle {
+        height: 44px;
+        background: root.track-color;
+        border-radius: 12px;
+        border-width: 2px;
+        border-color: root.text-hint;
         Rectangle {
-            horizontal-stretch: 1;
-            background: track-ta.pressed ? #c4c4c4 : #dcdcdc;
-            border-radius: 14px;
-            border-width: 2px; border-color: #888888;
-            Rectangle {
-                x: 0px;
-                width: parent.width * root.fill-frac;
-                height: 100%;
-                background: #333333;
-                border-radius: 14px;
-            }
-            track-ta := TouchArea {
-                mouse-cursor: none;
-                pointer-event(e) => {
-                    if (e.kind == PointerEventKind.down || e.kind == PointerEventKind.move) {
-                        root.set-frac(clamp(track-ta.mouse-x / track-ta.width, 0, 1));
-                    }
+            x: 0px;
+            width: parent.width * root.fill-frac;
+            height: 100%;
+            background: root.text-primary;
+            border-radius: 12px;
+        }
+        TouchArea {
+            mouse-cursor: none;
+            pointer-event(e) => {
+                if (e.kind == PointerEventKind.down || e.kind == PointerEventKind.move) {
+                    root.set-frac(clamp(self.mouse-x / self.width, 0, 1));
                 }
             }
-        }
-
-        ActionButton {
-            width: 96px;
-            label: "+";
-            font-size: 34px;
-            clicked => { root.inc(); }
         }
     }
 }

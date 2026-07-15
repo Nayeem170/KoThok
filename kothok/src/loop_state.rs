@@ -63,6 +63,10 @@ pub struct LoopState {
     pub tap_xy: Option<(f32, f32)>,
     pub scrubbing: bool,
     pub pp_pressed: bool,
+    pub lib_pressed: bool,
+    pub menu_pressed: bool,
+    pub header_visible: bool,
+    pub pending_tap_at: Option<Instant>,
     pub press_dispatched: bool,
     pub press_x: i32,
     pub press_y: i32,
@@ -87,6 +91,17 @@ pub struct LoopState {
 
     pub voice_rx: Option<Receiver<Vec<kothok_edge_tts::VoiceInfo>>>,
     pub voice_fetch_attempted: bool,
+
+    pub wifi_bt_list_rx: Option<Receiver<crate::panel::WifiBtListResult>>,
+
+    pub wifi_list: Vec<(String, u32)>,
+    pub wifi_list_idx: usize,
+    pub wifi_list_fetched: bool,
+    pub wifi_list_ids_valid: bool,
+    pub bt_list: Vec<(String, String)>,
+    pub bt_list_idx: usize,
+    pub bt_list_fetched: bool,
+    pub bt_list_ids_valid: bool,
 }
 
 pub struct LoopContext<'a> {

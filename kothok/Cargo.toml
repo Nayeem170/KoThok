@@ -41,3 +41,6 @@ panic = "unwind"
 lto = true
 codegen-units = 1
 strip = true
+
+[patch.crates-io]
+kobo-core = { path = "kobo-core" }

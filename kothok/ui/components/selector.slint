@@ -1,0 +1,59 @@
+export component SelectorRow inherits HorizontalLayout {
+    in property <string> label;
+    in property <bool> on-state: true;
+    in property <bool> center-active: false;
+    in property <bool> center-toggle: false;
+    in property <color> brand-green: #006A4E;
+    in property <color> bg-off: #1a1a1a;
+    in property <color> bg-pressed: #555555;
+    callback prev();
+    callback next();
+    callback toggle();
+
+    height: 52px;
+    spacing: 10px;
+
+    Rectangle {
+        width: 64px; height: 52px;
+        border-radius: 10px;
+        background: prev-ta.pressed ? root.bg-pressed : (root.on-state ? root.brand-green : root.bg-off);
+        Text {
+            text: "<";
+            color: #ffffff; font-size: 26px;
+            horizontal-alignment: center; vertical-alignment: center;
+        }
+        prev-ta := TouchArea {
+            clicked => { root.prev(); }
+        }
+    }
+
+    Rectangle {
+        height: 52px;
+        border-radius: 10px;
+        background: root.center-active ? root.brand-green : root.bg-off;
+        horizontal-stretch: 1;
+        if root.center-toggle : TouchArea {
+            clicked => { root.toggle(); }
+        }
+        Text {
+            text: root.label;
+            color: #ffffff; font-size: 22px;
+            horizontal-alignment: center; vertical-alignment: center;
+            overflow: elide;
+        }
+    }
+
+    Rectangle {
+        width: 64px; height: 52px;
+        border-radius: 10px;
+        background: next-ta.pressed ? root.bg-pressed : (root.on-state ? root.brand-green : root.bg-off);
+        Text {
+            text: ">";
+            color: #ffffff; font-size: 26px;
+            horizontal-alignment: center; vertical-alignment: center;
+        }
+        next-ta := TouchArea {
+            clicked => { root.next(); }
+        }
+    }
+}

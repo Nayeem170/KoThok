@@ -1,10 +1,17 @@
-use crate::rendering::render::{chapter_list_hit_test, GridCell, NAV_EXIT_W, NAV_EXIT_X};
+use crate::rendering::render::{chapter_list_hit_test, GridCell, PICKER_HEADER_H};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FooterZone {
     None,
     ProgressBar,
     PlayPause,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HeaderZone {
+    None,
+    Library,
+    Menu,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -43,6 +50,21 @@ pub fn classify_footer_zone(
     }
 }
 
+pub fn classify_header_zone(dx: f32, dy: f32, w: f32) -> HeaderZone {
+    const HEADER_H: f32 = 80.0;
+    const BTN_W: f32 = 96.0;
+    if dy >= HEADER_H {
+        return HeaderZone::None;
+    }
+    if dx < BTN_W {
+        HeaderZone::Library
+    } else if dx >= w - BTN_W {
+        HeaderZone::Menu
+    } else {
+        HeaderZone::None
+    }
+}
+
 pub fn classify_swipe(swipe_dx: f32, swipe_dy: f32, threshold: f32, dt_ms: u128) -> SwipeDirection {
     let horizontal = swipe_dx.abs() > threshold
         && dt_ms < crate::device::touch::SWIPE_MAX_MS
@@ -60,14 +82,22 @@ pub fn picker_hit_test(
     dx: f32,
     dy: f32,
     cells: &[GridCell],
+    screen_w: f32,
     nav_touch_top: f32,
     bezel_top: f32,
 ) -> PickerTarget {
-    if dy >= nav_touch_top && dy < bezel_top {
-        let dxi = dx as i32;
-        if (NAV_EXIT_X..NAV_EXIT_X + NAV_EXIT_W).contains(&dxi) {
+    if dy < PICKER_HEADER_H as f32 {
+        const EXIT_BTN_PX: f32 = 48.0;
+        const EXIT_PAD: f32 = 18.0;
+        const EXIT_TOP: f32 = 16.0;
+        let exit_left = screen_w - EXIT_BTN_PX - EXIT_PAD;
+        let exit_right = screen_w - EXIT_PAD;
+        if dx >= exit_left && dx < exit_right && dy >= EXIT_TOP && dy < EXIT_TOP + EXIT_BTN_PX {
             return PickerTarget::Exit;
         }
+        return PickerTarget::None;
+    }
+    if dy >= nav_touch_top && dy < bezel_top {
         return PickerTarget::None;
     }
     for cell in cells {
@@ -153,6 +183,26 @@ mod tests {
     }
 
     #[test]
+    fn header_zone_library_top_left() {
+        assert_eq!(classify_header_zone(20.0, 20.0, 1264.0), HeaderZone::Library);
+    }
+
+    #[test]
+    fn header_zone_menu_top_right() {
+        assert_eq!(classify_header_zone(1240.0, 20.0, 1264.0), HeaderZone::Menu);
+    }
+
+    #[test]
+    fn header_zone_center_is_none() {
+        assert_eq!(classify_header_zone(600.0, 20.0, 1264.0), HeaderZone::None);
+    }
+
+    #[test]
+    fn header_zone_below_band_is_none() {
+        assert_eq!(classify_header_zone(20.0, 90.0, 1264.0), HeaderZone::None);
+    }
+
+    #[test]
     fn classify_swipe_left() {
         assert_eq!(classify_swipe(-200.0, 5.0, 60.0, 120), SwipeDirection::Left);
     }
@@ -174,7 +224,9 @@ mod tests {
 
     #[test]
     fn picker_hit_test_exit_zone() {
-        let target = picker_hit_test(50.0, 1400.0, &[], 1350.0, 1446.0);
+        let sw = 1072.0f32;
+        let exit_x = sw - 48.0 - 18.0;
+        let target = picker_hit_test(exit_x + 24.0, 30.0, &[], sw, 1350.0, 1446.0);
         assert_eq!(target, PickerTarget::Exit);
     }
 
@@ -187,7 +239,7 @@ mod tests {
             h: 400,
             idx: 3,
         }];
-        let target = picker_hit_test(200.0, 300.0, &cells, 1350.0, 1446.0);
+        let target = picker_hit_test(200.0, 300.0, &cells, 1072.0, 1350.0, 1446.0);
         assert_eq!(target, PickerTarget::Book(3));
     }
 
@@ -200,7 +252,7 @@ mod tests {
             h: 400,
             idx: 0,
         }];
-        let target = picker_hit_test(900.0, 300.0, &cells, 1350.0, 1446.0);
+        let target = picker_hit_test(500.0, 300.0, &cells, 1072.0, 1350.0, 1446.0);
         assert_eq!(target, PickerTarget::None);
     }
 

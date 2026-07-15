@@ -57,7 +57,7 @@ pub(super) fn handle_picker(st: &mut LoopState, ctx: &mut LoopContext) -> LoopFl
                 );
                 let nav_touch_top = h as f32 - NAV_BAR_H as f32 - PICKER_NAV_TOUCH_MARGIN as f32;
                 let bezel_top = h as f32 - BEZEL_DEAD_ZONE as f32;
-                match gesture::picker_hit_test(dx, dy, &st.picker_cells, nav_touch_top, bezel_top) {
+                match gesture::picker_hit_test(dx, dy, &st.picker_cells, w as f32, nav_touch_top, bezel_top) {
                     gesture::PickerTarget::Exit => {
                         let now = std::time::Instant::now();
                         let within = st.exit_armed
