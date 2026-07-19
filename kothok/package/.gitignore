@@ -1,3 +1,6 @@
 dist/
 .stage/
 assets/libnm.so
+# Noto faces fetched by scripts/fetch-fonts.ps1 (~20MB). Redistributable under
+# the SIL OFL, but not worth carrying in git - refetch instead.
+fonts/

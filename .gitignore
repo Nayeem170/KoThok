@@ -42,6 +42,7 @@ AGENTS.md
 
 # Local-only docs (kept for dev, not committed)
 docs/
+mockups/
 
 # Release binaries (built locally, downloaded from GitHub releases by users)
 release/

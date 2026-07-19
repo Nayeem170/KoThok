@@ -19,6 +19,7 @@ $TempDir = Join-Path $env:TEMP 'kothok-install'
 function Step($msg)  { Write-Host "`n  $msg" -ForegroundColor White }
 function Ok($msg)    { Write-Host "  [OK] $msg" -ForegroundColor Green }
 function Info($msg)  { Write-Host "  $msg" -ForegroundColor DarkGray }
+function Warn($msg)  { Write-Host "  [!] $msg" -ForegroundColor Yellow }
 function Fail($msg)  {
     Write-Host ""
     Write-Host "  $msg" -ForegroundColor Red
@@ -100,6 +101,43 @@ Ok "Found Kobo at $koboRoot"
 $addsDir = Join-Path $koboRoot '.adds'
 $binaryOnDevice = Join-Path $addsDir 'kothok'
 
+# --- 2b. Fonts ---------------------------------------------------------------
+# Every script's face is installed up front so that reading never needs a
+# network connection - only read-aloud does. Without these, any non-Latin book
+# renders as blank boxes.
+#
+# Run on both paths: a first install gets them from KoboRoot.tgz, but an update
+# only replaces the binary, so an older device would keep a stale font set.
+function Install-Fonts($release, $addsDir, $tempDir) {
+    $asset = $release.assets | Where-Object { $_.name -eq 'kothok-fonts.zip' } | Select-Object -First 1
+    if (-not $asset) {
+        Warn "No kothok-fonts.zip in this release - skipping font install."
+        Info "Non-Latin books may render as blank boxes."
+        return
+    }
+
+    $fontDir = Join-Path $addsDir 'fonts'
+    New-Item -ItemType Directory -Force -Path $fontDir | Out-Null
+
+    $zip = Join-Path $tempDir 'kothok-fonts.zip'
+    Step "Installing fonts..."
+    Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $zip -UseBasicParsing -TimeoutSec 300
+
+    $extract = Join-Path $tempDir 'fonts'
+    Expand-Archive -LiteralPath $zip -DestinationPath $extract -Force
+
+    $copied = 0
+    foreach ($f in Get-ChildItem $extract -Filter '*.ttf') {
+        $dest = Join-Path $fontDir $f.Name
+        # Compare by length: these are versioned releases, not edited files.
+        if ((Test-Path $dest) -and ((Get-Item $dest).Length -eq $f.Length)) { continue }
+        Copy-Item -LiteralPath $f.FullName -Destination $dest -Force
+        $copied++
+    }
+    $total = (Get-ChildItem $fontDir -Filter '*.ttf').Count
+    Ok "Fonts: $total installed ($copied updated)"
+}
+
 # --- 3. First install or update ----------------------------------------------
 $isFirstInstall = -not (Test-Path -LiteralPath $binaryOnDevice)
 
@@ -142,6 +180,8 @@ else {
     if ($hash.ToLower() -ne $devHash) {
         Fail "MD5 mismatch! download=$hash device=$devHash"
     }
+
+    Install-Fonts $release $addsDir $TempDir
 
     Write-Host ""
     Write-Host "  ============================" -ForegroundColor Green
