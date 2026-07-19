@@ -1,4 +1,6 @@
-use crate::audio::glue::page_utterances;
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Nayeem Bin Ahsan
+use crate::audio::glue::{best_effort_send, page_utterances};
 use crate::audio::Cmd;
 use crate::rendering::layout::ChapterState;
 use crate::Reader;
@@ -50,8 +52,18 @@ pub fn toggle_playback(
     if reader.get_playing() {
         reader.set_playing(false);
         reader.set_paused(true);
-        // best-effort: channel may be full
-        let _ = cmd_tx.send(Cmd::Pause);
+        best_effort_send(cmd_tx, Cmd::Pause);
+        return PlayToggle {
+            ch: current_chapter,
+            pg: current_page,
+            off: reader.get_cur_start().max(0) as usize,
+            end: reader.get_cur_end().max(0) as usize,
+        };
+    }
+    if reader.get_paused() {
+        best_effort_send(cmd_tx, Cmd::Play);
+        reader.set_playing(true);
+        reader.set_paused(false);
         return PlayToggle {
             ch: current_chapter,
             pg: current_page,
@@ -61,12 +73,11 @@ pub fn toggle_playback(
     }
     let cur = reader.get_cur_start().max(0) as usize;
     let page_utts = page_utterances(current_page, state);
-    let target = if page_utts.iter().any(|u| cur >= u.start && cur < u.end) {
-        page_utts
-            .iter()
-            .position(|u| cur >= u.start && cur < u.end)
-            .unwrap_or(0)
-    } else {
+    let target = resolve_start_target(cur, &page_utts);
+    if target == 0
+        && !page_utts.is_empty()
+        && !page_utts.iter().any(|u| cur >= u.start && cur < u.end)
+    {
         let (rs, re) = state.pages.get(current_page).copied().unwrap_or((0, 0));
         if let Some(rows) = state.all_rows.get(rs..re) {
             for row in rows {
@@ -77,8 +88,7 @@ pub fn toggle_playback(
                 }
             }
         }
-        0
-    };
+    }
     reader.set_saved_page((chapter_offsets[current_chapter] + current_page) as i32);
     let cs = reader.get_cur_start();
     let (off, end) = if cs > 0 {
@@ -86,9 +96,9 @@ pub fn toggle_playback(
     } else {
         (0, 0)
     };
-    let _ = cmd_tx.send(Cmd::Reload(page_utts));
-    let _ = cmd_tx.send(Cmd::Seek(target));
-    let _ = cmd_tx.send(Cmd::Play);
+    best_effort_send(cmd_tx, Cmd::Reload(page_utts));
+    best_effort_send(cmd_tx, Cmd::Seek(target));
+    best_effort_send(cmd_tx, Cmd::Play);
     reader.set_playing(true);
     reader.set_paused(false);
     PlayToggle {
@@ -144,4 +154,14 @@ pub fn sleep_plan(
         wifi_off: wifi_on,
         bt_off: bt_on,
     }
+}
+
+/// Pure: which utterance index to seek to when starting playback from `cursor`.
+/// Returns the utterance whose `[start, end)` range contains the cursor, or 0
+/// if the cursor is outside every utterance (caller falls back to the page's
+/// first text row).
+pub fn resolve_start_target(cursor: usize, utts: &[crate::audio::Utterance]) -> usize {
+    utts.iter()
+        .position(|u| cursor >= u.start && cursor < u.end)
+        .unwrap_or(0)
 }

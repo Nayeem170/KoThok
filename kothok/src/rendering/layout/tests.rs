@@ -1,8 +1,13 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Nayeem Bin Ahsan
+mod sentences;
+mod styles;
+
 use super::paginate::paginate_with_heights_ext;
 use super::*;
 use kobo_core::Chapter;
 
-const HEAD_PX: f32 = 60.0;
+pub(super) const HEAD_PX: f32 = 60.0;
 
 #[test]
 fn paginate_fits_in_single_page() {
@@ -57,113 +62,6 @@ fn word_wrap_ranges_cover_full_text() {
 fn word_wrap_empty_text() {
     let lines = word_wrap_bytes("", 936, BODY_PX);
     assert!(lines.is_empty());
-}
-
-#[test]
-fn sentences_split_on_period() {
-    let s = sentences_with_ranges("First one. Second one. Third.");
-    assert_eq!(s.len(), 3);
-    assert_eq!(s[0].0, "First one.");
-    assert_eq!(s[1].0, "Second one.");
-    assert_eq!(s[2].0, "Third.");
-}
-
-#[test]
-fn sentences_handle_exclamation_and_question() {
-    let s = sentences_with_ranges("What? Yes! Done.");
-    assert_eq!(s.len(), 3);
-}
-
-#[test]
-fn sentences_empty_text() {
-    let s = sentences_with_ranges("");
-    assert!(s.is_empty());
-}
-
-#[test]
-fn sentences_keep_abbreviation_intact() {
-    let s = sentences_with_ranges("Mr. Smith went home.");
-    assert_eq!(s.len(), 1, "Mr. must not start its own sentence");
-    assert_eq!(s[0].0, "Mr. Smith went home.");
-}
-
-#[test]
-fn sentences_keep_decimal_intact() {
-    let s = sentences_with_ranges("The price is 3.14 dollars today. It is cheap.");
-    assert_eq!(s.len(), 2, "decimal 3.14 must not split");
-    assert!(s[0].0.contains("3.14"));
-}
-
-#[test]
-fn sentences_keep_initials_intact() {
-    let s = sentences_with_ranges("J. K. Rowling wrote many books.");
-    assert_eq!(s.len(), 1, "single-letter initials must not split");
-}
-
-#[test]
-fn sentences_keep_eg_ie_intact() {
-    let s = sentences_with_ranges("Fruits, e.g. apples, are healthy. Vegetables too.");
-    assert_eq!(s.len(), 2, "e.g. must not split");
-    assert!(s[0].0.contains("e.g."));
-}
-
-#[test]
-fn sentences_keep_ellipsis_intact() {
-    let s = sentences_with_ranges("He paused... then continued. The end.");
-    assert_eq!(s.len(), 2, "ellipsis must not split into fragments");
-    assert!(s[0].0.contains("..."));
-}
-
-#[test]
-fn sentences_preserve_byte_ranges() {
-    let text = "First one. Second one.";
-    let s = sentences_with_ranges(text);
-    assert_eq!(s.len(), 2);
-    assert_eq!(&text[s[0].1..s[0].2], "First one.");
-    assert_eq!(&text[s[1].1..s[1].2], "Second one.");
-}
-
-#[test]
-fn sentences_split_on_danda() {
-    let s = sentences_with_ranges("আমি যাচ্ছি। সে আসছে।");
-    assert_eq!(s.len(), 2, "Bengali danda must split sentences");
-}
-
-#[test]
-fn sentences_split_on_cjk_ideographic_stop() {
-    let s = sentences_with_ranges("これは日本語です。あれも日本語です。");
-    assert_eq!(s.len(), 2, "CJK ideographic stop (。) must split");
-}
-
-#[test]
-fn sentences_split_on_fullwidth_punctuation() {
-    let s = sentences_with_ranges("大丈夫ですか？はい、元気です！");
-    assert_eq!(s.len(), 2, "fullwidth ? and ! must split CJK sentences");
-}
-
-#[test]
-fn sentences_no_split_before_lowercase() {
-    let s = sentences_with_ranges("config. json files are common. End.");
-    assert_eq!(s.len(), 2, "period before lowercase is mid-sentence");
-}
-
-#[test]
-fn sentences_split_after_common_word_no() {
-    let s = sentences_with_ranges("I said no. She left.");
-    assert_eq!(s.len(), 2, "'no.' at a real sentence end must split");
-}
-
-#[test]
-fn sentences_split_after_name_max() {
-    let s = sentences_with_ranges("His name is Max. He is tall.");
-    assert_eq!(s.len(), 2, "'Max.' as a name must split");
-}
-
-#[test]
-fn sentences_number_abbreviation_still_intact() {
-    let s = sentences_with_ranges("See No. 5 for details. It is clear.");
-    assert_eq!(s.len(), 2, "'No. 5' must not split");
-    assert!(s[0].0.contains("No. 5"));
 }
 
 #[test]
@@ -274,7 +172,8 @@ fn estimate_chapter_offsets_monotonic_and_uses_known_current() {
     let ch0 = chapter_with("<p>short</p>");
     let ch1 = chapter_with("<p>the current chapter we are reading right now</p>");
     let chapters = vec![ch0, ch1];
-    let off = estimate_chapter_offsets(&chapters, 1, 7, 48);
+    let layout = screen_layout();
+    let off = estimate_chapter_offsets(&chapters, (1, 7), 48, &layout);
     assert_eq!(off.len(), chapters.len() + 1, "offsets array is chapters+1");
     assert_eq!(off[0], 0, "first offset starts at 0");
     assert!(
@@ -291,7 +190,8 @@ fn estimate_chapter_offsets_monotonic_and_uses_known_current() {
 #[test]
 fn estimate_chapter_offsets_single_chapter() {
     let chapters = vec![chapter_with("<p>solo</p>")];
-    let off = estimate_chapter_offsets(&chapters, 0, 3, 48);
+    let layout = screen_layout();
+    let off = estimate_chapter_offsets(&chapters, (0, 3), 48, &layout);
     assert_eq!(off, vec![0, 3]);
 }
 
@@ -301,7 +201,8 @@ fn count_chapter_pages_matches_build_state_pagination() {
     let mut a = chapter_with(xhtml);
     let mut b = chapter_with(xhtml);
     let st = build_state(&mut a, BODY_PX, HEAD_PX, 48);
-    let counted = count_chapter_pages(&mut b, BODY_PX, 48);
+    let layout = screen_layout();
+    let counted = count_chapter_pages(&mut b, BODY_PX, 48, &layout);
     assert_eq!(
         counted,
         st.pages.len(),
@@ -312,7 +213,8 @@ fn count_chapter_pages_matches_build_state_pagination() {
 #[test]
 fn count_chapter_pages_empty_is_one() {
     let mut ch = chapter_with("");
-    let n = count_chapter_pages(&mut ch, BODY_PX, 48);
+    let layout = screen_layout();
+    let n = count_chapter_pages(&mut ch, BODY_PX, 48, &layout);
     assert!(n >= 1, "an empty chapter still occupies one page");
 }
 
@@ -364,4 +266,91 @@ fn cjk_lines_have_width_field() {
     for line in &lines {
         assert!(line.width > 0.0, "every non-empty line should have width");
     }
+}
+
+/// End to end: a stylesheet `margin-left` has to survive extraction, layout,
+/// and the `Row::tag` packing, or a code listing renders flush left.
+#[test]
+fn indented_block_reaches_the_row_and_suppresses_prose_devices() {
+    let indents = kobo_core::html_text::parse_indents(".lvl { margin-left: 2em }");
+    let xhtml = r#"<p>An ordinary paragraph of prose that is long enough to wrap onto a second line somewhere.</p><p class="lvl">    if x: return x</p>"#;
+    let mut ch = Chapter::from_xhtml_with_indents(0, None, xhtml, &indents);
+    let st = build_state(&mut ch, BODY_PX, HEAD_PX, 42);
+
+    let body: Vec<&crate::Row> = st.all_rows.iter().filter(|r| r.kind == 0).collect();
+    let flush: Vec<&&crate::Row> = body.iter().filter(|r| block_indent_px(r) == 0).collect();
+    let indented: Vec<&&crate::Row> = body.iter().filter(|r| block_indent_px(r) > 0).collect();
+
+    assert!(!flush.is_empty(), "prose rows should stay flush");
+    assert_eq!(indented.len(), 1, "the one code line should be indented");
+    assert_eq!(
+        block_indent_px(indented[0]),
+        block_indent_for(4.0, BODY_PX, text_w()),
+        "indent should combine the stylesheet's 2em with the leading spaces"
+    );
+    assert_eq!(indented[0].tag & ROW_FLAG_JUSTIFY, 0);
+    assert_eq!(indented[0].tag & ROW_FLAG_INDENT, 0);
+}
+
+#[test]
+fn block_indent_never_eats_more_than_a_third_of_the_column() {
+    assert!(block_indent_for(99.0, BODY_PX, text_w()) <= text_w() / 3);
+    assert_eq!(block_indent_for(0.0, BODY_PX, text_w()), 0);
+}
+
+/// The packing shares `Row::tag` with the flag bits, so round-tripping must not
+/// let an indent corrupt a flag or vice versa.
+#[test]
+fn packed_indent_and_flags_do_not_collide() {
+    for px in [0usize, 1, 37, MAX_BLOCK_INDENT_PX] {
+        let tag = pack_block_indent(px) | ROW_FLAG_JUSTIFY | ROW_FLAG_INDENT;
+        let row = crate::Row {
+            text: Default::default(),
+            start: 0,
+            end: 0,
+            kind: 0,
+            tag,
+        };
+        assert_eq!(block_indent_px(&row), px);
+        assert_ne!(tag & ROW_FLAG_JUSTIFY, 0);
+        assert_ne!(tag & ROW_FLAG_INDENT, 0);
+    }
+}
+
+/// Word wrapping collapses runs of spaces, which is invisible in prose and
+/// ruinous in a listing: alignment within a line is exactly what the indent work
+/// set out to preserve. Code blocks must wrap by character instead.
+#[test]
+fn code_blocks_keep_their_internal_spacing() {
+    let indents = kobo_core::html_text::parse_indents(".lvl { margin-left: 2em }");
+    let xhtml = r#"<p class="lvl">x = 1      # aligned comment</p>"#;
+    let mut ch = Chapter::from_xhtml_with_indents(0, None, xhtml, &indents);
+    let st = build_state(&mut ch, BODY_PX, HEAD_PX, 42);
+    let joined: String = st
+        .all_rows
+        .iter()
+        .filter(|r| r.kind == 0)
+        .map(|r| r.text.to_string())
+        .collect();
+    assert!(
+        joined.contains("1      #"),
+        "run of spaces was collapsed: {joined:?}"
+    );
+}
+
+#[test]
+fn prose_still_wraps_by_word() {
+    let xhtml = "<p>Ordinary prose with     irregular spacing that should normalise.</p>";
+    let mut ch = Chapter::from_xhtml(0, None, xhtml);
+    let st = build_state(&mut ch, BODY_PX, HEAD_PX, 42);
+    let joined: String = st
+        .all_rows
+        .iter()
+        .filter(|r| r.kind == 0)
+        .map(|r| r.text.to_string())
+        .collect();
+    assert!(
+        !joined.contains("with     irregular"),
+        "prose should not keep raw spacing runs: {joined:?}"
+    );
 }

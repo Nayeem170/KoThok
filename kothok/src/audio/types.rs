@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Nayeem Bin Ahsan
 use std::time::Duration;
 
 pub use kobo_core::audio::{PARA_GAP_FRAMES, SENTENCE_GAP_FRAMES};
@@ -50,7 +52,7 @@ pub(crate) struct Utt {
 mod tests {
     use kobo_core::audio::TARGET_RATE;
 
-use super::*;
+    use super::*;
 
     fn ms_of(frames: usize) -> f32 {
         frames as f32 / TARGET_RATE as f32 * 1000.0

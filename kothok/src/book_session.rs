@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Nayeem Bin Ahsan
 use kobo_core::Chapter;
 
 use crate::data::config::AppConfig;
@@ -78,7 +80,7 @@ fn resolve_offsets(
     state: &ChapterState,
     cfg: &AppConfig,
     body_px: f32,
-    head_px: f32,
+    _head_px: f32,
     line_h: i32,
     book_path: &str,
 ) -> (Vec<usize>, Option<OffsetComputation>) {
@@ -88,14 +90,20 @@ fn resolve_offsets(
             return (offsets, None);
         }
     }
-    let estimated = estimate_chapter_offsets(chapters, current_chapter, state.pages.len(), line_h);
+    let layout = crate::rendering::layout::screen_layout();
+    let estimated = estimate_chapter_offsets(
+        chapters,
+        (current_chapter, state.pages.len()),
+        line_h,
+        &layout,
+    );
     let rx = Some(spawn_offset_computation(
         chapters.to_vec(),
         body_px,
-        head_px,
         line_h,
         cfg.font_size,
         book_path.to_string(),
+        layout,
     ));
     (estimated, rx)
 }

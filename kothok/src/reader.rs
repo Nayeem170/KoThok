@@ -1,6 +1,8 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Nayeem Bin Ahsan
 use slint::{ModelRc, VecModel};
 
-use crate::audio::glue::utterance_index_for_offset;
+use crate::audio::glue::{best_effort_send, utterance_index_for_offset};
 use crate::audio::Cmd;
 use crate::rendering::layout::{build_state, ChapterState};
 
@@ -8,15 +10,7 @@ use crate::Reader;
 use crate::Row;
 use log::debug;
 
-/// Pure: clamp a requested page index into the valid range for a chapter with
-/// `page_count` pages. An empty chapter (0 pages) maps any request to 0.
-pub fn clamp_page(page: usize, page_count: usize) -> usize {
-    if page_count == 0 {
-        0
-    } else {
-        page.min(page_count - 1)
-    }
-}
+pub use kobo_core::rendering::layout::clamp_page;
 
 /// The first text-bearing row (start < end) within `[s, e)`, as a
 /// `(start, end)` byte-offset pair. Shared by `compute_page_view` (cursor
@@ -67,8 +61,9 @@ pub fn compute_page_view(
 ) -> PageView {
     let idx = clamp_page(page, state.pages.len());
     let (s, e) = state.pages.get(idx).copied().unwrap_or((0, 0));
+    let rows = state.all_rows.get(s..e).unwrap_or(&[]).to_vec();
     PageView {
-        rows: state.all_rows[s..e].to_vec(),
+        rows,
         absolute_page: (chapter_offsets.get(current_chapter).copied().unwrap_or(0) + idx) as i32,
         page_count: *chapter_offsets.last().unwrap_or(&1) as i32,
         cursor: None,
@@ -92,6 +87,11 @@ pub fn apply_page(
     reader.set_rows(ModelRc::new(VecModel::from(v.rows)));
     reader.set_page(v.absolute_page);
     reader.set_page_count(v.page_count);
+    // Chapter-local position, shown under the audio disk. The bottom bar keeps
+    // book-global page/page-count; showing the same numbers in both spots was
+    // redundant, so the disk caption is scoped to the current chapter.
+    reader.set_chapter_page((page + 1) as i32);
+    reader.set_chapter_page_count(state.pages.len().max(1) as i32);
     reader.set_current_chapter_idx(current_chapter as i32);
     if let Some((cs, ce)) = v.cursor {
         reader.set_cur_start(cs);
@@ -128,7 +128,7 @@ pub fn switch_chapter(
     let cn = crate::data::library::chapter_display_title(&st.chapters[nc], nc);
     crate::set_chapter_name(reader, &cn);
     if opts.load_audio {
-        let _ = cmd_tx.send(Cmd::Reload(st.state.utterances.clone()));
+        best_effort_send(cmd_tx, Cmd::Reload(st.state.utterances.clone()));
     }
     if opts.update_cursor {
         if let Some(&(s, e)) = st.state.pages.get(cp) {
@@ -136,8 +136,9 @@ pub fn switch_chapter(
                 reader.set_cur_start(row_start);
                 reader.set_cur_end(row_end);
                 if opts.load_audio {
-                    let utt_idx = utterance_index_for_offset(&st.state.utterances, row_start as usize);
-                    let _ = cmd_tx.send(Cmd::Seek(utt_idx));
+                    let utt_idx =
+                        utterance_index_for_offset(&st.state.utterances, row_start as usize);
+                    best_effort_send(cmd_tx, Cmd::Seek(utt_idx));
                 }
             }
         }
@@ -187,6 +188,7 @@ mod tests {
             pages,
             utterances: vec![],
             decoded_images: HashMap::new(),
+            style_runs: Vec::new(),
         }
     }
 
@@ -236,7 +238,10 @@ mod tests {
     fn compute_page_view_cursor_none_when_playing() {
         let st = state_with(vec![row(0, 10), row(10, 20)], vec![(0, 2)]);
         let v = compute_page_view(&st, 0, &[0, 2], 0, true);
-        assert!(v.cursor.is_none(), "cursor is set only by Event::Sentence, not apply_page");
+        assert!(
+            v.cursor.is_none(),
+            "cursor is set only by Event::Sentence, not apply_page"
+        );
     }
 
     #[test]

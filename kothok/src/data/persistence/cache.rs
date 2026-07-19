@@ -1,9 +1,15 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Nayeem Bin Ahsan
 use std::fs;
 use std::path::Path;
 
-pub const CACHE_DIR: &str = "/mnt/onboard/.adds/cache";
+pub use crate::data::config::CACHE_DIR;
 pub const CACHE_MAGIC: &[u8; 4] = b"KOCO";
-pub const CACHE_LAYOUT_VERSION: u16 = 1;
+/// Bump whenever a layout change repaginates a chapter -- the cached per-chapter
+/// page offsets are only valid for the pagination that produced them, and a
+/// stale cache shows wrong page numbers rather than failing loudly.
+/// 2: block indents from the stylesheet narrow an indented block's wrap width.
+pub const CACHE_LAYOUT_VERSION: u16 = 2;
 
 pub fn book_hash(path: &str) -> u64 {
     let mut h: u64 = 0xcbf29ce484222325;

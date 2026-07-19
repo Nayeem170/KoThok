@@ -1,10 +1,17 @@
 [workspace]
 resolver = "2"
+# kobo-core is developed in-tree (see [patch.crates-io] below) and published
+# separately. Listing it here is what makes `cargo test -p kobo-core` work --
+# without it the patch applies but its dev-dependencies never resolve.
+members = ["kobo-core"]
 
 [package]
 name = "kothok-app"
 version = "0.1.0"
 edition = "2021"
+authors = ["Nayeem Bin Ahsan"]
+license = "PolyForm-Noncommercial-1.0.0"
+repository = "https://github.com/Nayeem170/kothok"
 
 [[bin]]
 name = "kothok"
@@ -13,10 +20,13 @@ path = "src/main.rs"
 [features]
 default = []
 ppm-dump = []
+# Capture-only build: adds the header-hold screenshot gesture used to produce
+# real UI stills for the marketing site. Never ship this to users.
+screenshot = []
 
 [dependencies]
 slint = { version = "=1.8.0", default-features = false, features = ["std", "compat-1-2", "renderer-software", "libm"] }
-kobo-core = "0.2"
+kobo-core = "0.3"
 kothok-edge-tts = "0.2"
 tokio = { version = "1", features = ["rt", "time", "net", "io-util"] }
 libc = "0.2"
@@ -44,3 +54,4 @@ strip = true
 
 [patch.crates-io]
 kobo-core = { path = "kobo-core" }
+kothok-edge-tts = { path = "../../kothok-edge-tts" }

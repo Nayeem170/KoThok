@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <!-- Snooze: two Zs, the classic "about to nap" mark.
+       A crescent moon was here before, but a moon means night, which is not
+       what the button does. It puts the device to sleep, at any hour. Zs say
+       that directly.
+       Drawn as strokes rather than a filled glyph so the weight matches the
+       other icons in this folder, and with three segments each so it stays
+       legible at button size on a 1-bit panel. The larger Z sits lower-left and
+       the smaller upper-right, the direction the convention reads in. -->
+  <path d="M3.5 13 H12 L3.5 20.5 H12"
+        fill="none" stroke="#fff" stroke-width="2.2"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M14 4 H20.5 L14 10 H20.5"
+        fill="none" stroke="#fff" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

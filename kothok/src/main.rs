@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Nayeem Bin Ahsan
 //! KoThok reader - on-device EPUB render + Read Aloud (Layer 3a).
 //! Renders the page to the framebuffer, drives Slint via raw touch evdev, and
 //! runs the Edge-TTS -> A2DP `Player` on a worker thread (Play/Pause/Stop).
@@ -21,6 +23,8 @@ mod rendering;
 mod setup;
 
 pub use logger::{FileLogger, KLOG};
+
+pub(crate) use data::persistence::Bookmark;
 pub(crate) use meta::{
     apply_book_voice, clean_ws, has_bangla, is_rtl, set_book_meta, set_chapter_name, BN_VOICE,
     SAMPLE_CHAPTER,
@@ -55,15 +59,23 @@ pub fn h() -> usize {
     H.load(Ordering::Relaxed)
 }
 pub fn content_h() -> i32 {
-    (h() - layout::PAD_TOP - 92) as i32
+    (h() - layout::PAD_TOP - layout::FOOTER_H as usize) as i32
 }
 
-pub const BUILD_TAG: &str = "L118-dynamic-voices";
+pub const VERSION: &str = "1.0.0";
+pub const BUILD_TAG: &str = "L161-lazy-cjk-fonts";
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ViewMode {
+    Reading,
+    Audio,
+}
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum SystemState {
     Awake,
     Asleep { from_picker: bool },
+    Locked,
 }
 
 fn main() {
@@ -75,7 +87,12 @@ fn main() {
     let (mut touch_dev, touch_fd, touch_cfg) =
         init_touch(&init.input_devs, &init.hw_cfg, init.w, init.h);
     let (power_pressed, exit_flag) = init_power(&init.input_devs);
-    let (cmd_tx, evt_rx) = init_audio(&init.cfg, init.st.current_page, &init.st.state);
+    let (cmd_tx, evt_rx) = init_audio(
+        &init.cfg,
+        init.st.current_page,
+        &init.st.state,
+        init.st.view_mode,
+    );
 
     init.st.last_font_count = text_render::font_install_count();
     let _ = power_pressed.swap(false, Ordering::SeqCst);
@@ -116,7 +133,24 @@ fn main() {
         &init.input_devs.power_dev,
         init.w,
         init.h,
+        &session_summary(&init.reader),
     );
+}
+
+/// One line for the closing splash: what you were reading and how far in.
+///
+/// Falls back to the app name when there is no book open (exiting straight from
+/// the library), so the line is never blank or half-formed.
+fn session_summary(reader: &Reader) -> String {
+    let title = reader.get_book_title();
+    let title = title.trim();
+    if title.is_empty() {
+        return "Read | Listen | Anywhere".into();
+    }
+    let pct = (reader.get_book_progress() * 100.0)
+        .clamp(0.0, 100.0)
+        .round() as i32;
+    format!("{title} | {pct}%")
 }
 
 fn init_touch(
@@ -182,11 +216,15 @@ fn init_audio(
     cfg: &config::AppConfig,
     current_page: usize,
     state: &layout::ChapterState,
+    view_mode: ViewMode,
 ) -> (
     std::sync::mpsc::Sender<Cmd>,
     std::sync::mpsc::Receiver<audio::Event>,
 ) {
-    let initial_utts = page_utterances(current_page, state);
+    let initial_utts = match view_mode {
+        ViewMode::Audio => audio::glue::chapter_utterances(state),
+        ViewMode::Reading => page_utterances(current_page, state),
+    };
     let init_rate = config::rate_string(cfg.tts_rate);
     audio::spawn(
         initial_utts,

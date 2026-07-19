@@ -1,29 +1,6 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Nayeem Bin Ahsan
 use super::*;
-
-#[test]
-fn progress_from_offsets_mid_book() {
-    assert_eq!(progress_from_offsets(&[0, 10, 20, 30], 1, 5), 0.5);
-}
-
-#[test]
-fn progress_from_offsets_start_is_zero() {
-    assert_eq!(progress_from_offsets(&[0, 10, 20, 30], 0, 0), 0.0);
-}
-
-#[test]
-fn progress_from_offsets_end_clamps_to_one() {
-    assert_eq!(progress_from_offsets(&[0, 10, 20, 30], 2, 10), 1.0);
-}
-
-#[test]
-fn progress_from_offsets_empty_offsets_is_zero() {
-    assert_eq!(progress_from_offsets(&[], 0, 0), 0.0);
-}
-
-#[test]
-fn progress_from_offsets_overflow_chapter_uses_page_only() {
-    assert_eq!(progress_from_offsets(&[0, 10], 9, 3), 0.3);
-}
 
 #[test]
 fn fnv1a_deterministic() {
@@ -50,43 +27,18 @@ fn book_cache_path_uses_hash_and_ext() {
 }
 
 #[test]
-fn detect_language_bengali() {
-    let ch = Chapter::from_xhtml(0, None, "<p>বাংলা ভাষা একটি ইন্দো-আর্য ভাষা</p>");
-    assert_eq!(detect_language(&[ch]).as_deref(), Some("bn-BD"));
-}
-
-#[test]
-fn detect_language_arabic() {
-    let ch = Chapter::from_xhtml(0, None, "<p>اللغة العربية لغة سامية</p>");
-    assert_eq!(detect_language(&[ch]).as_deref(), Some("ar-SA"));
-}
-
-#[test]
-fn detect_language_latin_returns_none() {
+fn pre_block_preserves_code_lines() {
+    // Regression: <pre>/<code> used to reflow as prose, merging code lines.
     let ch = Chapter::from_xhtml(
         0,
         None,
-        "<p>The quick brown fox jumps over the lazy dog.</p>",
+        "<pre><code>fn main() {\n    println!(\"hi\");\n}</code></pre>",
     );
-    assert_eq!(detect_language(&[ch]), None);
-}
-
-#[test]
-fn chapter_display_title_from_title() {
-    let ch = Chapter::from_xhtml(0, Some("  Prologue  ".into()), "<p>text</p>");
-    assert_eq!(chapter_display_title(&ch, 0), "Prologue");
-}
-
-#[test]
-fn chapter_display_title_fallback_to_chapter_n() {
-    let ch = Chapter::from_xhtml(2, None, "");
-    assert_eq!(chapter_display_title(&ch, 2), "Chapter 3");
-}
-
-#[test]
-fn chapter_display_title_ignores_empty_title() {
-    let ch = Chapter::from_xhtml(0, Some("   ".into()), "");
-    assert_eq!(chapter_display_title(&ch, 0), "Chapter 1");
+    assert!(
+        ch.text.contains("fn main() {\n    println!(\"hi\");\n}"),
+        "pre lines/indent not preserved: {:?}",
+        ch.text
+    );
 }
 
 fn write_fixture_epub(path: &std::path::Path, chapters: &[&str]) {

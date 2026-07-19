@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Nayeem Bin Ahsan
 use super::*;
 use crate::rendering::common::rgb565_as_bytes_ref;
 
@@ -12,6 +14,16 @@ pub(super) fn on_release(
     let cb = ctx.cb;
     let cmd_tx = ctx.cmd_tx;
     let caps = ctx.caps;
+
+    // The capture itself already happened mid-hold; this only has to make sure
+    // the release does not also register as a tap on the captured screen.
+    #[cfg(feature = "screenshot")]
+    if st.shot_armed {
+        st.shot_armed = false;
+        st.shot_done = false;
+        return;
+    }
+
     if st.scrubbing {
         st.scrubbing = false;
         debug!("pbar: scrub end");
@@ -32,6 +44,27 @@ pub(super) fn on_release(
         reader.set_panel_open(true);
         st.text_dirty = true;
         debug!("header: menu tap (open panel)");
+    } else if st.mode_toggle_pressed {
+        st.mode_toggle_pressed = false;
+        cb.mode_toggle_cell.set(true);
+        debug!("header: mode toggle tap");
+    } else if st.bookmark_set_pressed {
+        st.bookmark_set_pressed = false;
+        cb.bookmark_set_cell.set(true);
+        debug!("header: bookmark set tap");
+    } else if st.bookmark_jump_pressed {
+        st.bookmark_jump_pressed = false;
+        cb.bookmark_jump_cell.set(true);
+        debug!("header: bookmark jump tap");
+    } else if st.sleep_pressed {
+        st.sleep_pressed = false;
+        ctx.power_pressed
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        debug!("header: sleep tap");
+    } else if st.chapter_pressed {
+        st.chapter_pressed = false;
+        cb.chapter_panel_cell.set(true);
+        debug!("header: chapters tap");
     } else {
         let dt = now.duration_since(st.press_time);
         let (press_dx, press_dy) = touch::to_display(st.press_x, st.press_y, ctx.touch_cfg);
@@ -51,6 +84,46 @@ pub(super) fn on_release(
                 reader.set_panel_open(false);
                 st.text_dirty = true;
                 debug!("panel: CLOSED (swipe-up while open)");
+            }
+            // Audio mode forwards every press to Slint, so this is the only
+            // release path it takes -- the double-tap handler further down sits
+            // behind `!press_dispatched` and is unreachable here. Re-raise the
+            // gesture for the disk area, between the header and the transport.
+            if matches!(st.view_mode, ViewMode::Audio)
+                && !st.panel_open
+                && !reader.get_chapter_overlay_open()
+                && swipe_dx.abs() < touch::SWIPE_MIN_DX
+                && swipe_dy.abs() < SWIPE_THRESHOLD_PX
+                && dy > AUDIO_HEADER_H
+                && dy < ctx.h as f32 - AUDIO_FOOTER_H
+            {
+                let dt_ms = dt.as_millis();
+                let since_prev = now.duration_since(st.last_double_tap).as_millis();
+                st.last_double_tap = now;
+                if touch::is_double_tap(dt_ms, since_prev) {
+                    // Reuse the play button's cell so both go through the same
+                    // (audio-scope-aware) handler.
+                    cb.play_toggle_cell.set(true);
+                    debug!("audio: double-tap toggle playback");
+                }
+            }
+
+            if matches!(st.view_mode, ViewMode::Audio)
+                && !st.panel_open
+                && swipe_dy > SWIPE_THRESHOLD_PX
+                && swipe_dy.abs() > swipe_dx.abs()
+            {
+                st.panel_open = true;
+                cb.panel_open_cell.set(true);
+                reader.set_panel_open(true);
+                reader.set_battery_pct(caps.battery_pct());
+                reader.set_clock(SharedString::from(caps.current_clock()));
+                if reader.get_playing() {
+                    reader.set_playing(false);
+                    reader.set_paused(true);
+                    best_effort_send(cmd_tx, Cmd::Pause);
+                }
+                debug!("audio: panel OPEN (swipe-down)");
             }
             if reader.get_chapter_overlay_open() {
                 match gesture::chapter_overlay_target(
@@ -94,34 +167,28 @@ pub(super) fn on_release(
                 st.cover_page_visible = false;
                 st.text_dirty = true;
                 ctx.window.request_redraw();
-                let _ = ctx.window.draw_if_needed(|r| {
+                ctx.window.draw_if_needed(|r| {
                     r.render(&mut st.buffer, ctx.w);
                 });
-                refresh_text_cache(
-                    &mut st.text_cache,
-                    ctx.w,
-                    ctx.h,
-                    &st.state.all_rows,
-                    st.current_page,
-                    &st.state.pages,
-                    PAD_TOP,
-                    &st.state.row_heights,
-                    &st.state.decoded_images,
-                    st.body_px,
-                    st.head_px,
-                    st.line_h,
-                );
+                let pv = crate::rendering::text_overlay::PageView {
+                    w: ctx.w,
+                    h: ctx.h,
+                    rows: &st.state.all_rows,
+                    page: st.current_page,
+                    pages: &st.state.pages,
+                    content_top: PAD_TOP,
+                    row_heights: &st.state.row_heights,
+                    decoded_images: &st.state.decoded_images,
+                    body_px: st.body_px,
+                    head_px: st.head_px,
+                    line_h: st.line_h,
+                    style_runs: &st.state.style_runs,
+                };
+                refresh_text_cache(&mut st.text_cache, &pv);
                 composite_text(
                     &mut st.buffer,
                     &st.text_cache,
-                    ctx.w,
-                    ctx.h,
-                    &st.state.all_rows,
-                    st.current_page,
-                    &st.state.pages,
-                    PAD_TOP,
-                    &st.state.row_heights,
-                    st.line_h,
+                    &pv,
                     reader.get_cur_start(),
                     reader.get_cur_end(),
                 );
@@ -173,7 +240,7 @@ pub(super) fn on_release(
                 if reader.get_playing() {
                     reader.set_playing(false);
                     reader.set_paused(true);
-                    let _ = cmd_tx.send(Cmd::Pause);
+                    best_effort_send(cmd_tx, Cmd::Pause);
                 }
                 debug!("panel: OPEN (swipe-down)");
                 debug!("gesture: branch=st.panel_open");
@@ -221,7 +288,7 @@ pub(super) fn on_release(
                             if playing {
                                 reader.set_playing(false);
                                 reader.set_paused(true);
-                                let _ = cmd_tx.send(Cmd::Pause);
+                                best_effort_send(cmd_tx, Cmd::Pause);
                             } else if reader.get_play_enabled() {
                                 let cur = reader.get_cur_start().max(0) as usize;
                                 let page_utts = page_utterances(st.current_page, &st.state);
@@ -260,8 +327,8 @@ pub(super) fn on_release(
                                     st.reading_off = cs as usize;
                                     st.reading_end = reader.get_cur_end() as usize;
                                 }
-                                let _ = cmd_tx.send(Cmd::Seek(target));
-                                let _ = cmd_tx.send(Cmd::Play);
+                                best_effort_send(cmd_tx, Cmd::Seek(target));
+                                best_effort_send(cmd_tx, Cmd::Play);
                                 reader.set_playing(true);
                                 reader.set_paused(false);
                             }
@@ -275,14 +342,17 @@ pub(super) fn on_release(
                 }
             }
         } else if st.picker_active
-            && swipe_dy.abs() > SWIPE_THRESHOLD_PX
-            && swipe_dy.abs() > swipe_dx.abs()
+            && swipe_dx.abs() > SWIPE_THRESHOLD_PX
+            && swipe_dx.abs() > swipe_dy.abs()
         {
-            let pitch = crate::rendering::render::row_pitch();
-            let delta = if swipe_dy < 0.0 { pitch } else { -pitch };
+            // The library pins the hero and pages the card grid sideways: swipe
+            // left (dx<0) advances a page. One page per swipe, so the six cells
+            // swap as a unit and stay row-major.
+            let step = crate::rendering::render::page_pitch();
+            let delta = if swipe_dx < 0.0 { step } else { -step };
             cb.picker_scroll_delta
                 .set(cb.picker_scroll_delta.get() + delta);
-            debug!("picker: scroll swipe dy={:.0} delta={}", swipe_dy, delta);
+            debug!("picker: shelf swipe dx={:.0} delta={}", swipe_dx, delta);
         }
     }
 }

@@ -1,5 +1,6 @@
 import { Row, ChapterItem } from "types.slint";
 import { ContentArea } from "components/content.slint";
+import { AudioPlayer } from "components/audio_player.slint";
 import { ControlPanel } from "components/control_panel.slint";
 import { ChapterOverlay } from "components/chapter_overlay.slint";
 import { LoadingOverlay } from "components/loading_overlay.slint";
@@ -27,10 +28,16 @@ export component Reader inherits Window {
     in-out property <bool> play-enabled: false;
     callback play-pause-toggle();
     in-out property <bool> nav-recent: false;
+    // Sticky once the reader has turned a page. The footer hint is there to
+    // teach the swipe gesture, so it stops earning its place the moment you
+    // have used it -- after that the page number is the useful thing.
+    in-out property <bool> has-navigated: false;
     in-out property <int> taps: 0;
     in-out property <string> status: "";
     in-out property <int> page;
     in-out property <int> page-count;
+    in-out property <int> chapter-page: 1;
+    in-out property <int> chapter-page-count: 1;
     in-out property <int> saved-page: 0;
 
     callback quit;
@@ -68,7 +75,11 @@ export component Reader inherits Window {
     in-out property <int> book-author-img-h: 0;
     in-out property <image> chapter-name-img;
     in-out property <int> chapter-name-img-h: 0;
+    // Same name, rendered for the audio screen's much larger caption.
+    in-out property <image> chapter-name-hero-img;
+    in-out property <int> chapter-name-hero-img-h: 0;
     in-out property <image> book-cover-img;
+    in-out property <image> audio-disk-img;
     in-out property <int> chapter-preview-idx: -1;
     in-out property <int> chapter-pending: -1;
     in-out property <bool> loading-visible: false;
@@ -86,11 +97,28 @@ export component Reader inherits Window {
     callback chapter-selected(int);
     callback jump-to-reading();
 
+    in-out property <bool> audio-mode: false;
+    in-out property <float> chapter-progress: 0.0;
+    in-out property <float> book-progress: 0.0;
+    in-out property <bool> has-bookmark: false;
+    in-out property <float> bookmark-frac: -1.0;
+    in-out property <bool> audio-locked: false;
+    in-out property <bool> title-overflow: false;
+
+    callback mode-toggle();
+    callback bookmark-set();
+    callback bookmark-jump();
+    callback lock-tap();
+    callback skip-forward();
+    callback skip-rewind();
+    callback settings-tap();
+
     content-area := ContentArea {
         x: 0px;
         y: 0px;
         width: root.width;
         height: root.height;
+        visible: !root.audio-mode;
         rows: root.rows;
         page: root.page;
         page-count: root.page-count;
@@ -103,7 +131,9 @@ export component Reader inherits Window {
         book-title-img-h: root.book-title-img-h;
         header-visible: root.header-visible;
         nav-recent: root.nav-recent;
+        has-navigated: root.has-navigated;
         picker-active: root.picker-active;
+        bookmark-frac: root.bookmark-frac;
         brand-green: root.brand-green;
         brand-red: root.brand-red;
         brand-gray: root.brand-gray;
@@ -111,8 +141,54 @@ export component Reader inherits Window {
         text-secondary: root.text-secondary;
         text-hint: root.text-hint;
         track-color: root.track-color;
+        title-overflow: root.title_overflow;
         play-pause-toggle => { root.play-pause-toggle(); }
         progress-tap(f) => { root.progress-tap(f); }
+        chapters-tap => { root.panel-chapters(); }
+    }
+
+    audio-player := AudioPlayer {
+        x: 0px;
+        y: 0px;
+        width: root.width;
+        height: root.height;
+        // The library is drawn by Rust over the whole screen; keep the player out
+        // of the compositor entirely while it is up.
+        visible: root.audio-mode && !root.picker-active;
+        header-title: root.book-title;
+        book-title-img: root.book-title-img;
+        book-title-img-h: root.book-title-img-h;
+        disk-img: root.audio-disk-img;
+        chapter-name: root.chapter-name;
+        chapter-name-img: root.chapter-name-hero-img;
+        chapter-name-img-h: root.chapter-name-hero-img-h;
+        page: root.page;
+        page-count: root.page-count;
+        chapter-page: root.chapter-page;
+        chapter-page-count: root.chapter-page-count;
+        chapter-index: root.current-chapter-idx;
+        chapter-count: root.chapter-count;
+        playing: root.playing;
+        play-enabled: root.play-enabled;
+        has-bookmark: root.has-bookmark;
+        bookmark-frac: root.bookmark-frac;
+        bar-progress: root.book-progress;
+        header-visible: root.header-visible;
+        locked: root.audio-locked;
+        title-overflow: root.title_overflow;
+        brand-green: root.brand-green;
+        brand-red: root.brand-red;
+        mode-toggle => { root.mode-toggle(); }
+        bookmark-set => { root.bookmark-set(); }
+        bookmark-jump => { root.bookmark-jump(); }
+        lock => { root.lock-tap(); }
+        play-pause-toggle => { root.play-pause-toggle(); }
+        progress-tap(f) => { root.progress-tap(f); }
+        skip-forward => { root.skip-forward(); }
+        skip-rewind => { root.skip-rewind(); }
+        library => { root.quit(); }
+        settings => { root.settings-tap(); }
+        chapters => { root.panel-chapters(); }
     }
 
     control-panel := ControlPanel {
@@ -146,6 +222,8 @@ export component Reader inherits Window {
         book-cover-img: root.book-cover-img;
         page: root.page;
         page-count: root.page-count;
+        audio-mode: root.audio-mode;
+        has-bookmark: root.has-bookmark;
         brand-green: root.brand-green;
         text-primary: root.text-primary;
         text-secondary: root.text-secondary;
@@ -163,7 +241,6 @@ export component Reader inherits Window {
         panel-bt-toggle => { root.panel-bt-toggle(); }
         panel-wifi-cycle(s) => { root.panel-wifi-cycle(s); }
         panel-bt-cycle(s) => { root.panel-bt-cycle(s); }
-        panel-chapters => { root.panel-chapters(); }
     }
 
     chapter-overlay := ChapterOverlay {

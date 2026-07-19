@@ -1,6 +1,10 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Nayeem Bin Ahsan
 mod book_init;
+mod loop_init;
 
 use book_init::{init_book, init_picker, BookInit, PickerInit, ReaderSetup, ScreenCtx};
+use loop_init::build_loop_state;
 use std::sync::atomic::Ordering;
 
 use kobo_core::{Capabilities, Chapter};
@@ -13,9 +17,9 @@ use crate::data::library::{self, scan_epubs, EpubEntry, BOOK_DIR};
 use crate::data::persistence::{last_book_path, POSITIONS_FILE};
 use crate::device::{fonts, hw};
 use crate::platform::KoboPlatform;
-use crate::rendering::common::{rgb565_as_bytes, rgb565_as_bytes_ref};
-use crate::rendering::fb::{Fb, WAVE_DU, WAVE_GC16};
-use crate::rendering::layout::{self, init_layout, PAD_TOP};
+use crate::rendering::common::rgb565_as_bytes_ref;
+use crate::rendering::fb::{Fb, WAVE_GC16, WAVE_GL16};
+use crate::rendering::layout::{self, init_layout, FOOTER_H, PAD_TOP};
 use crate::rendering::render;
 use crate::{FileLogger, BUILD_TAG, H, KLOG, W};
 
@@ -46,7 +50,7 @@ pub fn run() -> Option<InitResult> {
     let w = fb.xres;
     let h = fb.yres;
     let window = init_platform(w, h);
-    let content_h: i32 = (h - PAD_TOP - 92) as i32;
+    let content_h: i32 = (h - PAD_TOP - FOOTER_H as usize) as i32;
 
     let cli_path = std::env::args().nth(1);
     let (initial_path, all_books) = scan_and_resolve(&fb, w, h, &cli_path);
@@ -72,7 +76,13 @@ pub fn run() -> Option<InitResult> {
         setup.line_h,
         w,
         h,
+        hw_cfg.model,
     );
+
+    setup
+        .reader
+        .set_audio_mode(matches!(st.view_mode, crate::ViewMode::Audio));
+    setup.reader.set_has_bookmark(st.bookmark.is_some());
 
     Some(InitResult {
         fb,
@@ -91,6 +101,52 @@ pub fn run() -> Option<InitResult> {
     })
 }
 
+/// Ink the next splash word and update the status line.
+///
+/// Both regions present on `WAVE_GL16`. The words are a **monotone** addition --
+/// those pixels go from paper to ink once and never back -- which would suit the
+/// faster `WAVE_DU`, except DU is a two-level waveform: it would flatten the
+/// brand red and green of "Read" and "Listen" to solid black. Sixteen levels are
+/// the price of keeping the colour.
+///
+/// That is affordable here for the same reason the old spinner was not. Flicker
+/// is area times frequency, and this is four small rects over an entire boot,
+/// against a 112x112 badge re-driven continuously for as long as loading took.
+///
+/// The status line needs a clearing waveform regardless, since its text is
+/// replaced rather than added to.
+fn advance_splash(fb: &Fb, splash: &mut [Rgb565Pixel], w: usize, h: usize, stage: usize) {
+    let layout = render::splash_layout(w, h);
+    let status = render::OPENING_STATUS
+        .get(stage - 1)
+        .copied()
+        .unwrap_or_default();
+    render::paint_splash(splash, stage, status);
+
+    let present = |r: kobo_core::rendering::loader::Rect, wave: u32| {
+        let x = r.x.max(0) as usize;
+        let y = r.y.max(0) as usize;
+        let rw = (r.w.max(0) as usize).min(w.saturating_sub(x));
+        let rh = (r.h.max(0) as usize).min(h.saturating_sub(y));
+        if rw == 0 || rh == 0 {
+            return;
+        }
+        fb.present_rect(
+            rgb565_as_bytes_ref(splash),
+            w,
+            h,
+            &kobo_core::device::fb::UpdateRegion { x, y, w: rw, h: rh },
+            wave,
+        );
+        fb.wait_for_update_complete();
+    };
+
+    if let Some(r) = layout.stage_rect(stage) {
+        present(r, WAVE_GL16);
+    }
+    present(layout.status_rect(w), WAVE_GL16);
+}
+
 fn scan_and_resolve(
     fb: &Fb,
     w: usize,
@@ -99,10 +155,12 @@ fn scan_and_resolve(
 ) -> (Option<String>, Vec<EpubEntry>) {
     let scan_handle = std::thread::spawn(move || scan_epubs(BOOK_DIR).unwrap_or_default());
 
+    // Ink Bloom: one word per startup milestone. The reveal is driven by real
+    // work finishing rather than by a timer, so it can neither stall while the
+    // device is still busy nor finish while it is not.
     let mut splash = vec![Rgb565Pixel(0); w * h];
-    render::paint_kothok_splash(&mut splash);
+    render::paint_splash(&mut splash, 1, render::OPENING_STATUS[0]);
     fb.present(rgb565_as_bytes_ref(&splash), w, h, true, 0, 0, WAVE_GC16);
-    fb.wait_for_update_complete();
 
     crate::device::init_wpa_detection();
 
@@ -111,42 +169,16 @@ fn scan_and_resolve(
         fonts::load_cached_fonts();
     });
 
-    let r = kobo_core::rendering::loader::spinner_rect(w as i32, h as i32);
-    let y0 = (r.y as usize).saturating_sub(4);
-    let y1 = ((r.y + r.h + 4) as usize).min(h);
-    let bx = r.x.max(0) as usize;
-    let by = r.y.max(0) as usize;
-    let bw = (r.w as usize).min(w.saturating_sub(bx));
-    let bh = (r.h as usize).min(h.saturating_sub(by));
-
-    let saved_badge: Vec<Rgb565Pixel> = (0..bh)
-        .flat_map(|row| {
-            let py = by + row;
-            splash[py * w + bx..py * w + bx + bw].iter().copied()
-        })
-        .collect();
-
-    let mut angle = 0u32;
-    while !scan_handle.is_finished() || !font_handle.is_finished() {
-        angle = (angle + 15) % 360;
-        for row in 0..bh {
-            let py = by + row;
-            let src = &saved_badge[row * bw..(row + 1) * bw];
-            splash[py * w + bx..py * w + bx + bw].copy_from_slice(src);
-        }
-        kobo_core::rendering::loader::paint_spinner(
-            rgb565_as_bytes(&mut splash),
-            w,
-            h,
-            angle,
-        );
-        fb.present(rgb565_as_bytes_ref(&splash), w, h, false, y0, y1, WAVE_DU);
-        std::thread::sleep(std::time::Duration::from_millis(50));
-    }
+    fb.wait_for_update_complete();
 
     font_handle.join().unwrap_or(());
+    advance_splash(fb, &mut splash, w, h, 2);
+
     let all_books = scan_handle.join().unwrap_or_default();
+    advance_splash(fb, &mut splash, w, h, 3);
+
     let initial_path = resolve_initial_book(cli_path, &all_books);
+    advance_splash(fb, &mut splash, w, h, 4);
     info!(
         "books: {} scanned, initial={:?}, cli={:?}",
         all_books.len(),
@@ -165,6 +197,7 @@ fn init_platform(w: usize, h: usize) -> std::rc::Rc<MinimalSoftwareWindow> {
     .expect("set_platform");
     W.store(w, Ordering::Relaxed);
     H.store(h, Ordering::Relaxed);
+    crate::rendering::density::init_ppi(w, h);
     init_layout(w, h);
     window.set_size(slint::PhysicalSize::new(w as u32, h as u32));
     window
@@ -175,8 +208,8 @@ fn init_reader_and_config(w: usize, hw_cfg: &hw::DeviceConfig) -> ReaderSetup {
     let device_default_font = (w as i32 / 30).clamp(20, 60);
     let cfg = config::load_config_from_base(config::CONFIG_FILE, device_default_font);
     let body_px: f32 = cfg.font_size as f32;
-    let head_px: f32 = cfg.font_size as f32 * 0.78;
-    let line_h: i32 = (cfg.font_size as f32 * 1.4) as i32;
+    let head_px: f32 = cfg.font_size as f32 * layout::HEADING_SCALE;
+    let line_h: i32 = (cfg.font_size as f32 * layout::LINE_HEIGHT_SCALE) as i32;
     reader.set_tts_lang(SharedString::from(cfg.tts_lang.clone()));
     reader.set_tts_voice(SharedString::from(cfg.tts_voice.clone()));
     reader.set_tts_speed(cfg.tts_rate);
@@ -249,102 +282,14 @@ fn init_book_or_picker(
             String::new(),
             false,
             true,
+            crate::ViewMode::Reading,
+            None,
+            None,
         )
     });
     let picker = picker_state
         .unwrap_or_else(|| (false, 0, Vec::new(), std::collections::HashMap::new(), None));
     (book, picker)
-}
-
-fn build_loop_state(
-    book: BookInit,
-    picker: PickerInit,
-    body_px: f32,
-    head_px: f32,
-    line_h: i32,
-    w: usize,
-    h: usize,
-) -> crate::loop_state::LoopState {
-    let cached = crate::panel::load_voice_cache();
-    if !cached.is_empty() {
-        let count = cached.len();
-        crate::panel::set_dynamic_voices(cached);
-        info!("loaded {count} cached voices");
-    }
-    let buffer = vec![Rgb565Pixel(0); w * h];
-    let prev_buffer = buffer.clone();
-    let text_cache = vec![Rgb565Pixel(0); w * h];
-    let now = std::time::Instant::now();
-    crate::loop_state::LoopState {
-        current_chapter: book.4,
-        current_page: book.6,
-        chapter_count: book.1,
-        chapters: book.0,
-        chapter_offsets: book.2,
-        state: book.5,
-        body_px,
-        head_px,
-        line_h,
-        current_book_path: book.11,
-        reading_ch: book.7,
-        reading_pg: book.8,
-        reading_off: book.9,
-        reading_end: book.10,
-        picker_active: picker.0,
-        picker_scroll: picker.1,
-        picker_cells: picker.2,
-        picker_cover_cache: picker.3,
-        picker_entered: picker.4,
-        panel_open: false,
-        prev_panel_open: false,
-        prev_chapter_overlay: false,
-        cover_page_visible: book.12,
-        chapter_scroll: 0,
-        text_dirty: book.13,
-        system_state: crate::SystemState::Awake,
-        saved_brightness: 0,
-        prev_down: false,
-        frame_down: false,
-        frame_x: 0,
-        frame_y: 0,
-        tap_xy: None,
-        scrubbing: false,
-        pp_pressed: false,
-        lib_pressed: false,
-        menu_pressed: false,
-        header_visible: true,
-        pending_tap_at: None,
-        press_dispatched: false,
-        press_x: 0,
-        press_y: 0,
-        press_time: now,
-        last_double_tap: now,
-        last_tap_time: now,
-        last_tap_y: -1,
-        picker_last_tap_idx: None,
-        picker_last_tap_time: now,
-        exit_armed: false,
-        exit_armed_time: now,
-        offset_rx: book.3,
-        last_activity: now,
-        last_status_refresh: now,
-        last_nav: now,
-        last_font_count: 0,
-        buffer,
-        prev_buffer,
-        text_cache,
-        voice_rx: None,
-        voice_fetch_attempted: false,
-        wifi_bt_list_rx: None,
-        wifi_list: Vec::new(),
-        wifi_list_idx: 0,
-        wifi_list_fetched: false,
-        wifi_list_ids_valid: true,
-        bt_list: Vec::new(),
-        bt_list_idx: 0,
-        bt_list_fetched: false,
-        bt_list_ids_valid: true,
-    }
 }
 
 fn init_logger() {
@@ -356,13 +301,35 @@ fn init_logger() {
     info!("KoThok reader starting (BUILD_TAG={})", BUILD_TAG);
     std::panic::set_hook(Box::new(|info| {
         use std::io::Write;
+        let loc = info
+            .location()
+            .map(|l| format!("{}:{}", l.file(), l.line()))
+            .unwrap_or_else(|| "?".into());
+        let msg = if let Some(s) = info.payload().downcast_ref::<&str>() {
+            (*s).to_string()
+        } else if let Some(s) = info.payload().downcast_ref::<String>() {
+            s.clone()
+        } else {
+            "<non-string panic>".into()
+        };
+        let line = format!("PANIC at {loc}: {msg}");
+        // best-effort: we are mid-crash (panic=abort); every write/sync below
+        // may itself fail and there is nothing to recover - leave what we can.
         if let Ok(mut f) = std::fs::OpenOptions::new()
             .create(true)
             .append(true)
             .open(config::CRASH_LOG)
         {
-            // best-effort: panic-hook write - nothing can be done if this fails
-            let _ = writeln!(f, "PANIC: {}", info);
+            let _ = writeln!(f, "{line}");
+            let _ = f.sync_data();
+        }
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(KLOG)
+        {
+            let _ = writeln!(f, "{line}");
+            let _ = f.sync_data();
         }
     }));
 }

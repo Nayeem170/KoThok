@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Nayeem Bin Ahsan
 use crate::audio::{Cmd, Utterance};
 use crate::rendering::layout::ChapterState;
 use log::debug;
@@ -9,21 +11,26 @@ fn page_first_offset(page: usize, state: &ChapterState) -> usize {
         Some(range) => range,
         None => return 0,
     };
-    state.all_rows[row_start..row_end]
+    state
+        .all_rows
+        .get(row_start..row_end)
+        .unwrap_or(&[])
         .iter()
         .find(|r| r.start < r.end)
         .map(|r| r.start as usize)
         .unwrap_or(0)
 }
 
-/// Byte offset just past the last content row on `page` (the bottom of the text).
 fn page_last_offset(page: usize, state: &ChapterState) -> usize {
     let &(row_start, row_end) = match state.pages.get(page) {
         Some(range) => range,
         None => return 0,
     };
     let first = page_first_offset(page, state);
-    state.all_rows[row_start..row_end]
+    state
+        .all_rows
+        .get(row_start..row_end)
+        .unwrap_or(&[])
         .iter()
         .rev()
         .find(|r| r.start < r.end)
@@ -86,6 +93,78 @@ pub fn load_page_audio(page: usize, state: &ChapterState, cmd_tx: &mpsc::Sender<
         state.pages.len(),
         state.utterances.len()
     );
+}
+
+pub fn load_chapter_audio(state: &ChapterState, cmd_tx: &mpsc::Sender<Cmd>) {
+    let utts = chapter_utterances(state);
+    let len = utts.len();
+    best_effort_send(cmd_tx, Cmd::Reload(utts));
+    best_effort_send(cmd_tx, Cmd::Seek(0));
+    debug!("audio: loaded full chapter ({} utterances)", len);
+}
+
+pub fn chapter_utterances(state: &ChapterState) -> Vec<Utterance> {
+    let npages = state.pages.len();
+    if npages == 0 {
+        return state.utterances.clone();
+    }
+    let bounds: Vec<(usize, usize)> = (0..npages)
+        .map(|p| (page_first_offset(p, state), page_last_offset(p, state)))
+        .collect();
+    state
+        .utterances
+        .iter()
+        .enumerate()
+        .map(|(_idx, u)| {
+            let mut utt = u.clone();
+            let pg = utterance_page(u, &bounds);
+            if let Some(page_idx) = pg {
+                let page_last = bounds[page_idx].1;
+                utt.page_break = if u.end > page_last {
+                    Some(page_last.saturating_sub(u.start))
+                } else {
+                    None
+                };
+            } else {
+                utt.page_break = None;
+            }
+            utt
+        })
+        .collect()
+}
+
+pub fn first_utt_on_page(state: &ChapterState, target_page: usize) -> usize {
+    let npages = state.pages.len();
+    if target_page >= npages {
+        return state.utterances.len();
+    }
+    let bounds: Vec<(usize, usize)> = (0..npages)
+        .map(|p| (page_first_offset(p, state), page_last_offset(p, state)))
+        .collect();
+    for (i, u) in state.utterances.iter().enumerate() {
+        if utterance_page(u, &bounds) == Some(target_page) {
+            return i;
+        }
+    }
+    state.utterances.len()
+}
+
+#[allow(dead_code)]
+pub fn last_utt_on_page(state: &ChapterState, target_page: usize) -> usize {
+    let npages = state.pages.len();
+    if target_page >= npages {
+        return state.utterances.len().saturating_sub(1);
+    }
+    let bounds: Vec<(usize, usize)> = (0..npages)
+        .map(|p| (page_first_offset(p, state), page_last_offset(p, state)))
+        .collect();
+    let mut last = 0;
+    for (i, u) in state.utterances.iter().enumerate() {
+        if utterance_page(u, &bounds) == Some(target_page) {
+            last = i;
+        }
+    }
+    last
 }
 
 /// Send an audio command to the worker, ignoring a full/closed channel. The

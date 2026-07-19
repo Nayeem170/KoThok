@@ -29,6 +29,8 @@ export component ControlPanel inherits Rectangle {
     in property <image> book-cover-img;
     in property <int> page: 0;
     in property <int> page-count: 1;
+    in property <bool> audio-mode: false;
+    in property <bool> has-bookmark: false;
     in property <color> brand-green: #006A4E;
     in property <color> brand-red: #F42A41;
     in property <color> text-primary: #111111;
@@ -48,62 +50,46 @@ export component ControlPanel inherits Rectangle {
     callback panel-bt-toggle();
     callback panel-wifi-cycle(string);
     callback panel-bt-cycle(string);
-    callback panel-chapters();
 
     visible: root.visible-flag;
     background: #ffffff;
 
+    // Shares the header geometry used by content.slint and audio_player.slint:
+    // 110px tall, 76px buttons, 23px edge padding.
     Rectangle {
-        y: 0px; height: 80px; width: root.width;
+        y: 0px; height: 110px; width: root.width;
         background: #ffffff;
 
         Rectangle { y: 0px; height: 4px; width: root.width; background: root.brand-green; }
 
         ActionButton {
-            x: 18px; y: 16px;
-            width: 48px; height: 48px;
-            icon: @image-url("assets/reading.svg");
-            radius: 24px;
-            clicked => { root.jump-to-reading(); }
-        }
-
-        ActionButton {
-            x: 78px; y: 16px;
-            width: 48px; height: 48px;
-            icon: @image-url("assets/chapters.svg");
-            radius: 24px;
-            clicked => { root.panel-chapters(); }
+            x: 23px; y: 17px;
+            width: 76px; height: 76px;
+            icon: @image-url("assets/back.svg");
+            bg: root.brand-red;
+            radius: 38px;
+            clicked => { root.panel-close(); }
         }
 
         Text {
             text: "Settings";
-            color: root.text-secondary; font-size: 22px; font-weight: 700;
+            color: root.text-secondary; font-size: 33px; font-weight: 700;
             horizontal-alignment: center; vertical-alignment: center;
-            x: 96px; width: root.width - 192px; height: 80px;
+            x: 119px; width: root.width - 238px; height: 110px;
             overflow: elide;
         }
 
-        ActionButton {
-            x: root.width - 66px; y: 16px;
-            width: 48px; height: 48px;
-            icon: @image-url("assets/close.svg");
-            bg: root.brand-red;
-            radius: 24px;
-            clicked => { root.panel-close(); }
-        }
-
         Rectangle {
-            y: 79px; height: 1px; width: root.width;
+            y: 107px; height: 3px; width: root.width;
             background: root.track-color;
         }
     }
 
     VerticalLayout {
         padding-left: 24px; padding-right: 24px;
-        padding-top: 94px; padding-bottom: 24px;
+        // Clears the 110px header + 14px gap.
+        padding-top: 124px; padding-bottom: 24px;
         spacing: 14px;
-
-        Rectangle { height: 2px; background: root.separator; }
 
         HorizontalLayout {
             height: 24px;
@@ -351,10 +337,18 @@ export component ControlPanel inherits Rectangle {
                         visible: root.chapter-name-img-h > 0;
                     }
                 }
+                // `wrap` is not decoration here. A Text without it is no-wrap,
+                // and a no-wrap Text reports its *entire* string as its minimum
+                // width -- so a long chapter title ("Interpretable Features and
+                // Sparse Autoencoders") widened this column past the panel and
+                // cropped the page badge and progress bar above it. That is the
+                // same breakage a too-wide title raster caused, arriving by a
+                // different route, which is why it hit English books too.
                 Text {
                     text: (root.chapter-name != "" ? root.chapter-name : "-");
                     color: root.text-secondary; font-size: 19px;
                     horizontal-alignment: left;
+                    wrap: word-wrap;
                     visible: root.chapter-name-img-h == 0;
                 }
             }

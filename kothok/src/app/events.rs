@@ -1,15 +1,19 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Nayeem Bin Ahsan
 use std::cell::Cell;
 use std::sync::mpsc::{Receiver, Sender};
 
-use log::{debug, warn};
+use log::{debug, info, warn};
 
 use slint::{ModelRc, SharedString, VecModel};
 
-use crate::audio::glue::load_page_audio;
+use crate::audio::glue::{best_effort_send, load_page_audio};
 use crate::audio::{Cmd, Event};
 use crate::loop_state::LoopState;
 use crate::reader::{apply_page, switch_chapter, ChapterSwitchOpts};
 use crate::Reader;
+
+pub use kobo_core::rendering::layout::resolve_progress_target;
 
 use super::*;
 
@@ -58,8 +62,12 @@ pub fn process_audio_events(
                 ui_changed |= uc;
             }
             Event::Sentence { start, end } => {
-                debug!("cursor: Event::Sentence start={start} end={end} page={} prev_cs={} prev_ce={}",
-                    st.current_page, reader.get_cur_start(), reader.get_cur_end());
+                debug!(
+                    "cursor: Event::Sentence start={start} end={end} page={} prev_cs={} prev_ce={}",
+                    st.current_page,
+                    reader.get_cur_start(),
+                    reader.get_cur_end()
+                );
                 reader.set_cur_start(start as i32);
                 reader.set_cur_end(end as i32);
                 if let Some((pg_start, pg_end)) = st.state.pages.get(st.current_page) {
@@ -97,14 +105,27 @@ pub fn process_audio_events(
                         &st.chapter_offsets,
                         st.current_chapter,
                     );
-                    reader.set_saved_page((st.chapter_offsets[st.current_chapter] + st.current_page) as i32);
+                    reader.set_saved_page(
+                        (st.chapter_offsets[st.current_chapter] + st.current_page) as i32,
+                    );
                     text_dirty = true;
-                    let next_utts = crate::audio::glue::page_utterances(st.current_page, &st.state);
-                    let _ = cmd_tx.send(Cmd::Append(next_utts));
-                    debug!("page-break: visual page advanced to {} mid-sentence, appended {} utts", st.current_page + 1, st.state.utterances.len());
+                    if !matches!(st.view_mode, crate::ViewMode::Audio) {
+                        let next_utts =
+                            crate::audio::glue::page_utterances(st.current_page, &st.state);
+                        best_effort_send(cmd_tx, Cmd::Append(next_utts));
+                    }
+                    info!(
+                        "page-break: visual page advanced to {}",
+                        st.current_page + 1
+                    );
                 }
             }
             Event::Error(m) => {
+                // The driver has stopped (want_play=false). Reflect that in the
+                // transport, otherwise the play/pause button keeps showing
+                // "playing" over dead audio and the reader looks frozen.
+                reader.set_playing(false);
+                reader.set_paused(true);
                 reader.set_status(friendly_error(&m).into());
                 warn!("audio error: {m}");
                 ui_changed = true;
@@ -121,6 +142,53 @@ pub fn process_audio_events(
 fn handle_audio_ended(st: &mut LoopState, reader: &Reader, cmd_tx: &Sender<Cmd>) -> (bool, bool) {
     let mut text_dirty = false;
 
+    if matches!(st.view_mode, crate::ViewMode::Audio) {
+        if st.current_page + 1 < st.state.pages.len() {
+            st.current_page += 1;
+            apply_page(
+                reader,
+                &st.state,
+                st.current_page,
+                &st.chapter_offsets,
+                st.current_chapter,
+            );
+            reader
+                .set_saved_page((st.chapter_offsets[st.current_chapter] + st.current_page) as i32);
+            text_dirty = true;
+            best_effort_send(cmd_tx, Cmd::Play);
+            info!("audio-page: advanced to page {}", st.current_page + 1);
+        } else if st.current_chapter + 1 < st.chapter_count {
+            let nc = st.current_chapter + 1;
+            switch_chapter(
+                st,
+                reader,
+                cmd_tx,
+                nc,
+                ChapterSwitchOpts {
+                    to_last_page: false,
+                    update_cursor: true,
+                    load_audio: false,
+                },
+            );
+            text_dirty = true;
+            crate::audio::glue::load_chapter_audio(&st.state, cmd_tx);
+            best_effort_send(cmd_tx, Cmd::Play);
+            reader.set_playing(true);
+            reader.set_paused(false);
+            reader.set_status("".into());
+            reader
+                .set_saved_page((st.chapter_offsets[st.current_chapter] + st.current_page) as i32);
+            info!("audio-chapter: advanced to chapter {}", nc + 1);
+        } else {
+            reader.set_playing(false);
+            reader.set_paused(false);
+            reader.set_status("Book complete".into());
+            reader.set_cur_start(0);
+            reader.set_cur_end(0);
+        }
+        return (text_dirty, true);
+    }
+
     if st.current_page + 1 < st.state.pages.len() {
         st.current_page += 1;
         apply_page(
@@ -133,9 +201,9 @@ fn handle_audio_ended(st: &mut LoopState, reader: &Reader, cmd_tx: &Sender<Cmd>)
         reader.set_saved_page((st.chapter_offsets[st.current_chapter] + st.current_page) as i32);
         text_dirty = true;
         let next_utts = crate::audio::glue::page_utterances(st.current_page, &st.state);
-        let _ = cmd_tx.send(Cmd::Append(next_utts));
-        let _ = cmd_tx.send(Cmd::Play);
-        debug!(
+        best_effort_send(cmd_tx, Cmd::Append(next_utts));
+        best_effort_send(cmd_tx, Cmd::Play);
+        info!(
             "auto-page: {}/{} -> {}/{} (page audio ended)",
             st.current_page,
             st.state.pages.len(),
@@ -144,16 +212,22 @@ fn handle_audio_ended(st: &mut LoopState, reader: &Reader, cmd_tx: &Sender<Cmd>)
         );
     } else if st.current_chapter + 1 < st.chapter_count {
         let nc = st.current_chapter + 1;
-        switch_chapter(st, reader, cmd_tx, nc, ChapterSwitchOpts {
-            to_last_page: false,
-            update_cursor: true,
-            load_audio: false,
-        });
+        switch_chapter(
+            st,
+            reader,
+            cmd_tx,
+            nc,
+            ChapterSwitchOpts {
+                to_last_page: false,
+                update_cursor: true,
+                load_audio: false,
+            },
+        );
         text_dirty = true;
         let page_utts = crate::audio::glue::page_utterances(st.current_page, &st.state);
-        let _ = cmd_tx.send(Cmd::Reload(page_utts));
-        let _ = cmd_tx.send(Cmd::Seek(0));
-        let _ = cmd_tx.send(Cmd::Play);
+        best_effort_send(cmd_tx, Cmd::Reload(page_utts));
+        best_effort_send(cmd_tx, Cmd::Seek(0));
+        best_effort_send(cmd_tx, Cmd::Play);
         reader.set_playing(true);
         reader.set_paused(false);
         reader.set_status("".into());
@@ -216,11 +290,17 @@ pub(super) struct NavOutcome {
 }
 
 fn switch_to(st: &mut LoopState, reader: &Reader, cmd_tx: &Sender<Cmd>, nc: usize, to_last: bool) {
-    switch_chapter(st, reader, cmd_tx, nc, ChapterSwitchOpts {
-        to_last_page: to_last,
-        update_cursor: false,
-        load_audio: true,
-    });
+    switch_chapter(
+        st,
+        reader,
+        cmd_tx,
+        nc,
+        ChapterSwitchOpts {
+            to_last_page: to_last,
+            update_cursor: false,
+            load_audio: true,
+        },
+    );
 }
 
 fn apply_page_display(st: &LoopState, reader: &Reader, cmd_tx: &Sender<Cmd>) {
@@ -307,24 +387,4 @@ fn apply_progress_target(
     o.text_dirty = true;
     o.ui_changed = true;
     o
-}
-
-/// Pure: maps a progress-bar per-mille (0-1000) to a (chapter, local_page)
-/// pair using the cumulative chapter-offset table.
-pub(super) fn resolve_progress_target(
-    pt_val: i32,
-    chapter_offsets: &[usize],
-    chapter_count: usize,
-) -> (usize, usize) {
-    let total = (*chapter_offsets.last().unwrap_or(&1)).max(1);
-    let global = (pt_val as usize * total) / 1000;
-    let mut c = 0usize;
-    while c + 1 < chapter_offsets.len() && chapter_offsets[c + 1] <= global {
-        c += 1;
-    }
-    if c >= chapter_count {
-        c = chapter_count.saturating_sub(1);
-    }
-    let local = global.saturating_sub(*chapter_offsets.get(c).unwrap_or(&0));
-    (c, local)
 }
