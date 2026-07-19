@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Nayeem Bin Ahsan
 use kobo_core::Capabilities;
 
 use crate::device::{battery_pct, bt_name, bt_status, current_clock, wifi_name, wifi_status};

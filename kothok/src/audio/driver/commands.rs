@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Nayeem Bin Ahsan
 use super::*;
 use log::info;
 
@@ -12,7 +14,11 @@ impl DriverState {
         match cmd {
             Cmd::Play => {
                 if !self.want_play {
-                    info!("audio: Cmd::Play received (voice={}, {} utterances)", self.voice, self.utterances.len());
+                    info!(
+                        "audio: Cmd::Play received (voice={}, {} utterances)",
+                        self.voice,
+                        self.utterances.len()
+                    );
                     self.want_play = true;
                     if let Some(p) = self.player.as_mut() {
                         p.resume_clock();

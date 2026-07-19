@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Nayeem Bin Ahsan
 use super::*;
 
 pub(super) fn sync_panel_close(st: &mut LoopState, ctx: &LoopContext, msg: &str) {
@@ -20,10 +22,13 @@ pub(super) fn handle_exit_button(st: &mut LoopState, ctx: &LoopContext) -> LoopF
                     page: st.current_page,
                     cur_start: ctx.reader.get_cur_start() as usize,
                     cur_end: ctx.reader.get_cur_end() as usize,
+                    view_mode: st.view_mode,
+                    bookmark: st.bookmark,
+                    progress: ctx.reader.get_book_progress(),
                 },
             );
         }
-        let _ = ctx.cmd_tx.send(Cmd::Stop);
+        best_effort_send(&ctx.cmd_tx, Cmd::Stop);
         info!("EXIT: leaving app to nickel");
         return LoopFlow::Break;
     }
@@ -50,10 +55,13 @@ pub(super) fn handle_quit_button(st: &mut LoopState, ctx: &mut LoopContext) -> L
                     page: st.current_page,
                     cur_start: reader.get_cur_start() as usize,
                     cur_end: reader.get_cur_end() as usize,
+                    view_mode: st.view_mode,
+                    bookmark: st.bookmark,
+                    progress: reader.get_book_progress(),
                 },
             );
         }
-        let _ = ctx.cmd_tx.send(Cmd::Stop);
+        best_effort_send(&ctx.cmd_tx, Cmd::Stop);
         reader.set_playing(false);
         reader.set_paused(false);
         reader.set_cur_start(0);
@@ -88,6 +96,7 @@ pub(super) fn handle_quit_button(st: &mut LoopState, ctx: &mut LoopContext) -> L
             &mut st.picker_cover_cache,
             ctx.all_books,
             st.picker_scroll,
+            st.library_filter,
             &ctx.caps.current_clock(),
             ctx.caps.battery_pct(),
             if st.exit_armed {
@@ -95,12 +104,15 @@ pub(super) fn handle_quit_button(st: &mut LoopState, ctx: &mut LoopContext) -> L
             } else {
                 ""
             },
+            // Returning from a book: the whole screen was the reader a
+            // moment ago, so it needs the clearing pass.
+            PickerRefresh::Full,
         );
         st.picker_active = true;
         st.panel_open = false;
         reader.set_panel_open(false);
         st.picker_entered = Some(std::time::Instant::now());
-        st.picker_cells = picker_scroll_cells(ctx.all_books, st.picker_scroll);
+        st.picker_cells = picker_scroll_cells(ctx.all_books, st.picker_scroll, st.library_filter);
         st.prev_buffer.copy_from_slice(&st.buffer);
         return LoopFlow::Continue;
     }
@@ -126,7 +138,11 @@ pub(super) fn refresh_status(st: &mut LoopState, ctx: &LoopContext) {
         if wifi && st.wifi_list.is_empty() {
             st.wifi_list_fetched = false;
         }
-        if bt && st.bt_list.is_empty() {
+        // Key off the UI's on-state, not `bt` (== `bt_status()`, which reports
+        // *connected*, not *powered*). Gating a re-fetch on being connected
+        // deadlocks: the list is what you connect *from*, so an empty list could
+        // never refill once it had been cached against a powered-down adapter.
+        if ctx.reader.get_bt_on() && st.bt_list.is_empty() {
             st.bt_list_fetched = false;
         }
         if let Some(n) = ctx.caps.wifi_name() {
@@ -135,7 +151,8 @@ pub(super) fn refresh_status(st: &mut LoopState, ctx: &LoopContext) {
         if let Some(n) = ctx.caps.bt_name() {
             ctx.reader.set_bt_connected_name(SharedString::from(n));
         }
-        ctx.reader.set_play_enabled(ctx.reader.get_wifi_on() && ctx.reader.get_bt_on());
+        ctx.reader
+            .set_play_enabled(ctx.reader.get_wifi_on() && ctx.reader.get_bt_on());
     }
 }
 
@@ -155,12 +172,24 @@ pub(super) fn poll_offset_rx(st: &mut LoopState, ctx: &LoopContext) {
     if let Some(ref comp) = st.offset_rx {
         while let Ok(pct) = comp.pct_rx.try_recv() {
             ctx.reader.set_loading_pct(pct);
-            ctx.window.request_redraw();
+            // In audio mode the loading bar sits under the spinning disk, and
+            // audio renders force a heavy (GC16) refresh -- one per pct tick
+            // reads as the disk blinking. The disk is already on screen, so let
+            // the progress value update silently and skip the per-tick repaint;
+            // the final state is presented once loading completes below. Reading
+            // mode has no disk to flash, so it keeps the live progress bar.
+            if !matches!(st.view_mode, crate::ViewMode::Audio) {
+                ctx.window.request_redraw();
+            }
         }
         if let Ok(real_offsets) = comp.result_rx.try_recv() {
             st.chapter_offsets = real_offsets;
             st.offset_rx = None;
             ctx.reader.set_loading_visible(false);
+            // Audio mode suppresses incidental presents while loading (so the
+            // disk does not flash); force one now so the settled screen -- with
+            // the final header/footer state -- is drawn.
+            ctx.window.request_redraw();
             ctx.reader
                 .set_page((st.chapter_offsets[st.current_chapter] + st.current_page) as i32);
             ctx.reader

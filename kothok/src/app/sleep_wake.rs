@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Nayeem Bin Ahsan
 use std::os::unix::io::AsRawFd;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
@@ -7,15 +9,17 @@ use log::{debug, info};
 
 use slint::platform::software_renderer::Rgb565Pixel;
 
+use crate::audio::glue::best_effort_send;
 use crate::audio::Cmd;
 use crate::device::power::{frontlight_get, frontlight_set};
 use crate::device::{bt_toggle, wifi_status, wifi_toggle};
 use crate::loop_state::{LoopContext, LoopState};
 use crate::reader::apply_page;
 use crate::rendering::common::rgb565_as_bytes_ref;
-use crate::rendering::fb::{Fb, WAVE_DU, WAVE_GC16};
+use crate::rendering::fb::{Fb, WAVE_GC16};
 use crate::rendering::layout::PAD_TOP;
 use crate::rendering::render::{composite_text, refresh_text_cache, render_book_cover_scaled};
+use kobo_core::Capabilities;
 
 use super::*;
 
@@ -70,6 +74,15 @@ pub fn enter_sleep(st: &mut LoopState, ctx: &LoopContext, from_picker: bool, bt_
 }
 
 pub fn wake_from_sleep(st: &mut LoopState, ctx: &LoopContext) {
+    st.about_open = false;
+    st.picker_last_tap_idx = None;
+    st.exit_armed = false;
+
+    if st.picker_active {
+        wake_from_sleep_picker(st, ctx);
+        return;
+    }
+
     let reader = ctx.reader;
     let window = ctx.window;
     let fb = ctx.fb;
@@ -120,8 +133,8 @@ pub fn wake_from_sleep(st: &mut LoopState, ctx: &LoopContext) {
     } else {
         0
     };
-    let _ = ctx.cmd_tx.send(Cmd::Reload(utts));
-    let _ = ctx.cmd_tx.send(Cmd::Seek(target_idx));
+    best_effort_send(&ctx.cmd_tx, Cmd::Reload(utts));
+    best_effort_send(&ctx.cmd_tx, Cmd::Seek(target_idx));
     debug!("pwr: wake audio reload + seek to utt {}", target_idx);
     // Swap the screen from the sleep cover to the book page WHILE THE
     // FRONTLIGHT IS STILL OFF (it was dimmed in enter_sleep). Doing the content
@@ -135,31 +148,25 @@ pub fn wake_from_sleep(st: &mut LoopState, ctx: &LoopContext) {
     let _ = window.draw_if_needed(|r| {
         r.render(buffer, w);
     });
-    refresh_text_cache(
-        text_cache,
+    let pv = crate::rendering::text_overlay::PageView {
         w,
         h,
-        &state.all_rows,
-        current_page,
-        &state.pages,
-        PAD_TOP,
-        &state.row_heights,
-        &state.decoded_images,
+        rows: &state.all_rows,
+        page: current_page,
+        pages: &state.pages,
+        content_top: PAD_TOP,
+        row_heights: &state.row_heights,
+        decoded_images: &state.decoded_images,
         body_px,
         head_px,
         line_h,
-    );
+        style_runs: &state.style_runs,
+    };
+    refresh_text_cache(text_cache, &pv);
     composite_text(
         buffer,
         text_cache,
-        w,
-        h,
-        state.all_rows.as_slice(),
-        current_page,
-        state.pages.as_slice(),
-        PAD_TOP,
-        state.row_heights.as_slice(),
-        line_h,
+        &pv,
         reader.get_cur_start(),
         reader.get_cur_end(),
     );
@@ -186,7 +193,14 @@ pub fn wake_from_sleep(st: &mut LoopState, ctx: &LoopContext) {
     }
 }
 
-pub fn teardown(fb: &Fb, exit_flag: &Arc<AtomicBool>, power_dev: &str, w: usize, h: usize) {
+pub fn teardown(
+    fb: &Fb,
+    exit_flag: &Arc<AtomicBool>,
+    power_dev: &str,
+    w: usize,
+    h: usize,
+    session: &str,
+) {
     exit_flag.store(true, Ordering::SeqCst);
     {
         if let Ok(dev) = std::fs::OpenOptions::new().write(true).open(power_dev) {
@@ -206,37 +220,21 @@ pub fn teardown(fb: &Fb, exit_flag: &Arc<AtomicBool>, power_dev: &str, w: usize,
     // frozen nickel frame. Exit always reboots (AGENTS.md), so we never restore
     // nickel's framebuffer - the logo makes the shutdown look intentional.
     {
+        // The exit splash is the entry splash, already fully inked, with the
+        // status line reporting the session instead of the boot. Same layout and
+        // the same paint path, so the two screens cannot drift apart -- and the
+        // reboot wait becomes something worth looking at rather than dead time.
+        //
+        // Nothing animates here: shutdown has no progress to report, and a still
+        // screen is the calmest thing e-ink can show.
         let mut splash = vec![Rgb565Pixel(0); w * h];
-        crate::rendering::render::paint_kothok_splash(&mut splash);
+        crate::rendering::render::paint_splash(
+            &mut splash,
+            crate::rendering::render::SPLASH_STAGES,
+            session,
+        );
         fb.present(rgb565_as_bytes_ref(&splash), w, h, true, 0, 0, WAVE_GC16);
-        let r = kobo_core::rendering::loader::spinner_rect(w as i32, h as i32);
-        let y0 = (r.y as usize).saturating_sub(4);
-        let y1 = ((r.y + r.h + 4) as usize).min(h);
-        let bx = r.x.max(0) as usize;
-        let by = r.y.max(0) as usize;
-        let bw = (r.w as usize).min(w.saturating_sub(bx));
-        let bh = (r.h as usize).min(h.saturating_sub(by));
-        let saved_badge: Vec<Rgb565Pixel> = (0..bh)
-            .flat_map(|row| {
-                let py = by + row;
-                splash[py * w + bx..py * w + bx + bw].iter().copied()
-            })
-            .collect();
-        let mut angle = 0u32;
-        for _ in 0..6 {
-            angle = (angle + 60) % 360;
-            for row in 0..bh {
-                let py = by + row;
-                let src = &saved_badge[row * bw..(row + 1) * bw];
-                splash[py * w + bx..py * w + bx + bw].copy_from_slice(src);
-            }
-            kobo_core::rendering::loader::paint_spinner(
-                crate::rendering::common::rgb565_as_bytes(&mut splash),
-                w, h, angle,
-            );
-            fb.present(rgb565_as_bytes_ref(&splash), w, h, false, y0, y1, WAVE_DU);
-            std::thread::sleep(std::time::Duration::from_millis(110));
-        }
+        fb.wait_for_update_complete();
     }
     {
         const EV_KEY: u16 = 1;
@@ -276,4 +274,32 @@ pub fn teardown(fb: &Fb, exit_flag: &Arc<AtomicBool>, power_dev: &str, w: usize,
         }
     }
     info!("teardown complete");
+}
+
+fn wake_from_sleep_picker(st: &mut LoopState, ctx: &LoopContext) {
+    let fl_path = ctx.fl_path;
+    let saved_brightness = st.saved_brightness;
+
+    crate::rendering::picker::show_book_picker(
+        ctx.reader,
+        ctx.fb,
+        ctx.window,
+        &mut st.buffer,
+        &mut st.text_cache,
+        &mut st.picker_cover_cache,
+        ctx.all_books,
+        st.picker_scroll,
+        st.library_filter,
+        &ctx.caps.current_clock(),
+        ctx.caps.battery_pct(),
+        "",
+        crate::rendering::picker::PickerRefresh::Full,
+    );
+    st.prev_buffer.copy_from_slice(&st.buffer);
+
+    std::thread::sleep(std::time::Duration::from_millis(SLEEP_COVER_SETTLE_MS));
+
+    if let Some(ref path) = fl_path {
+        crate::device::power::restore_frontlight(path, saved_brightness);
+    }
 }

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Nayeem Bin Ahsan
 use kobo_core::Chapter;
 use slint::platform::software_renderer::Rgb565Pixel;
 
@@ -5,9 +7,14 @@ use crate::data::library::chapter_display_title;
 use crate::rendering::text_render;
 
 use crate::rendering::common::rgb565_as_bytes;
-use crate::rendering::draw::{fill_rounded_rect, measure_text};
+#[cfg(test)]
+use crate::rendering::draw::measure_text;
+use crate::rendering::draw::{fill_rounded_rect, truncate_to_width};
 
-pub const CH_LIST_TOP: i32 = 128;
+/// Top of the chapter rows: the shared 110px header plus the 48px gap this list
+/// has always had below it. Both the painter and the hit-test read this, so they
+/// stay in step.
+pub const CH_LIST_TOP: i32 = 158;
 pub const CH_LIST_BOTTOM_PAD: i32 = 136;
 pub const CH_ROW_H: i32 = 60;
 pub const CH_ROW_PITCH: i32 = 70;
@@ -89,22 +96,6 @@ pub fn paint_chapter_list(
             h,
         );
     }
-}
-
-fn truncate_to_width(s: &str, px: f32, max_w: usize) -> String {
-    if measure_text(s, px) <= max_w {
-        return s.to_string();
-    }
-    let mut out: String = s.chars().take(3).collect();
-    for ch in s.chars().skip(3) {
-        out.push(ch);
-        if measure_text(&(out.clone() + "..."), px) > max_w {
-            out.pop();
-            break;
-        }
-    }
-    out.push_str("...");
-    out
 }
 
 #[cfg(test)]

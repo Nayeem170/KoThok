@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Nayeem Bin Ahsan
 use std::cell::Cell;
 use std::rc::Rc;
 
@@ -25,6 +27,13 @@ pub struct Callbacks {
     pub jump_to_reading_cell: Rc<Cell<bool>>,
     pub font_pending_val: Rc<Cell<Option<i32>>>,
     pub font_last_change: Rc<Cell<Option<std::time::Instant>>>,
+    pub mode_toggle_cell: Rc<Cell<bool>>,
+    pub bookmark_set_cell: Rc<Cell<bool>>,
+    pub bookmark_jump_cell: Rc<Cell<bool>>,
+    pub lock_tap_cell: Rc<Cell<bool>>,
+    pub skip_forward_cell: Rc<Cell<bool>>,
+    pub skip_rewind_cell: Rc<Cell<bool>>,
+    pub settings_cell: Rc<Cell<bool>>,
 }
 
 struct ChapterCells {
@@ -92,6 +101,15 @@ pub fn register(reader: &Reader) -> Callbacks {
         poc.set(false);
     });
 
+    // The audio-mode gear must open the panel through Rust: setting Slint's
+    // `panel-open` directly leaves `st.panel_open` false, which both misclassifies
+    // touch as audio-mode and makes `sync_panel_close` skip the close.
+    let settings_cell = Rc::new(Cell::new(false));
+    let sc = settings_cell.clone();
+    reader.on_settings_tap(move || {
+        sc.set(true);
+    });
+
     let progress_target = Rc::new(Cell::new(-1i32));
     let pt = progress_target.clone();
     reader.on_progress_tap(move |frac: f32| {
@@ -152,12 +170,49 @@ pub fn register(reader: &Reader) -> Callbacks {
     let font_pending_val = Rc::new(Cell::new(None::<i32>));
     let font_last_change = Rc::new(Cell::new(None::<std::time::Instant>));
 
+    let mode_toggle_cell = Rc::new(Cell::new(false));
+    let mtc = mode_toggle_cell.clone();
+    reader.on_mode_toggle(move || {
+        mtc.set(true);
+    });
+
+    let bookmark_set_cell = Rc::new(Cell::new(false));
+    let bsc = bookmark_set_cell.clone();
+    reader.on_bookmark_set(move || {
+        bsc.set(true);
+    });
+
+    let bookmark_jump_cell = Rc::new(Cell::new(false));
+    let bjc = bookmark_jump_cell.clone();
+    reader.on_bookmark_jump(move || {
+        bjc.set(true);
+    });
+
+    let lock_tap_cell = Rc::new(Cell::new(false));
+    let ltc = lock_tap_cell.clone();
+    reader.on_lock_tap(move || {
+        ltc.set(true);
+    });
+
+    let skip_forward_cell = Rc::new(Cell::new(false));
+    let sfc = skip_forward_cell.clone();
+    reader.on_skip_forward(move || {
+        sfc.set(true);
+    });
+
+    let skip_rewind_cell = Rc::new(Cell::new(false));
+    let src = skip_rewind_cell.clone();
+    reader.on_skip_rewind(move || {
+        src.set(true);
+    });
+
     Callbacks {
         page_delta,
         quit,
         picker_scroll_delta,
         exit_app,
         panel_open_cell,
+        settings_cell,
         progress_target,
         panel_voice_cell,
         panel_frac,
@@ -172,5 +227,11 @@ pub fn register(reader: &Reader) -> Callbacks {
         jump_to_reading_cell: chapter.jump_cell,
         font_pending_val,
         font_last_change,
+        mode_toggle_cell,
+        bookmark_set_cell,
+        bookmark_jump_cell,
+        lock_tap_cell,
+        skip_forward_cell,
+        skip_rewind_cell,
     }
 }

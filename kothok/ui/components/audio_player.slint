@@ -1,0 +1,421 @@
+import { ScrollableText } from "scrollable_text.slint";
+
+// Layout mirrors mocks/layout1_final.html (428x579), scaled by width/428.
+// Panels range 758px (Nia) to 1440px (Sage) wide, so x positions are relative to
+// root.width and the disk derives from it. Button/font sizes are still fixed px.
+export component AudioPlayer inherits Rectangle {
+    in property <string> header-title: "";
+    in property <image> book-title-img;
+    in property <int> book-title-img-h: 0;
+    // Ring + circular-cropped cover + spindle, pre-rendered in Rust by
+    // rendering::vinyl. The software renderer segfaults on the `clip: true` +
+    // `border-radius` crop and cannot stroke the two-colour arc, so the whole
+    // disk arrives as one flat image.
+    in property <image> disk-img;
+    in property <string> chapter-name: "";
+    in property <image> chapter-name-img;
+    in property <int> chapter-name-img-h: 0;
+    in property <int> page: 0;
+    in property <int> page-count: 1;
+    /// Chapter-local page position, shown under the disk. The bottom bar keeps
+    /// book-global page/page-count.
+    in property <int> chapter-page: 1;
+    in property <int> chapter-page-count: 1;
+    in property <int> chapter-index: 0;
+    in property <int> chapter-count: 1;
+    in property <bool> playing: false;
+    in property <bool> play-enabled: false;
+    in property <bool> has-bookmark: false;
+    /// Book-level, matching the bottom bar's scope and reading mode's marker.
+    in property <float> bookmark-frac: -1.0;
+    /// Book-level progress for the bottom bar. The ring carries chapter-level
+    /// progress; the two scopes are deliberately different.
+    in property <float> bar-progress: 0.0;
+    in property <bool> header-visible: true;
+    in property <bool> locked: false;
+    in property <bool> title-overflow: false;
+    in property <color> brand-green: #006A4E;
+    in property <color> brand-red: #F42A41;
+
+    callback mode-toggle();
+    callback bookmark-set();
+    callback bookmark-jump();
+    callback lock();
+    callback play-pause-toggle();
+    callback progress-tap(float);
+    callback skip-forward();
+    callback skip-rewind();
+    callback library();
+    callback settings();
+    callback chapters();
+
+    visible: true;
+    background: #ffffff;
+
+    // Disk sizing is derived, not fixed: panels run 758px (Nia) to 1440px (Sage)
+    // wide. The mock is 428 wide with a 230-unit disk, so the disk is 230/428 of
+    // whatever width this device reports, and is centred in the body band.
+    property <length> disk-box: root.width * 230 / 428;
+    property <length> disk-y: 110px + (root.height - 110px - 371px - root.disk-box) / 2;
+
+    // Same inset, height and thumb as reading mode's bar (content.slint). The
+    // width differs on purpose: reading mode stops at width-200 to clear its
+    // footer play button, but audio mode's transport is on its own row, so the
+    // bar runs the full width with matching 56px margins.
+    property <length> bar-x: 56px;
+    property <length> bar-w: root.width - 112px;
+
+    // Header: mock 44px -> 110px.
+    Rectangle {
+        y: 0px;
+        height: 110px;
+        width: root.width;
+        background: #ffffff;
+
+        // Library (red), mock hbc 30px -> 76px, left padding 9px -> 23px.
+        Rectangle {
+            x: 23px; y: 17px;
+            width: 76px; height: 76px;
+            border-radius: 38px;
+            background: root.brand-red;
+            Image {
+                source: @image-url("assets/library.svg");
+                image-fit: contain;
+                width: 38px; height: 38px;
+                x: 19px; y: 19px;
+            }
+            TouchArea { width: 76px; height: 76px; clicked => { root.library(); } }
+        }
+
+        // Title fills the space between the two icon groups, as in the mock's flex:1.
+        Image {
+            source: root.book-title-img;
+            x: 119px;
+            width: root.width - 686px;
+            height: 76px;
+            y: 17px;
+            image-fit: contain;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            visible: root.book-title-img-h > 0;
+        }
+        ScrollableText {
+            txt: root.header-title;
+            txt-color: #666666; font-size: 33px; bold: true;
+            overflow: root.title-overflow;
+            x: 119px; width: root.width - 686px; y: 17px; height: 76px;
+            visible: root.book-title-img-h == 0;
+        }
+
+        // Right group: Chapters, Settings, Lock, separator, Jump, Bookmark, ModeToggle
+        // Identical to reading mode - only the Lock icon differs from Sleep.
+        Rectangle {
+            x: root.width - 99px; y: 17px;
+            width: 76px; height: 76px;
+            border-radius: 38px;
+            background: root.brand-green;
+            Image {
+                source: @image-url("assets/chapters.svg");
+                image-fit: contain;
+                width: 38px; height: 38px;
+                x: 19px; y: 19px;
+            }
+            TouchArea { width: 76px; height: 76px; clicked => { root.chapters(); } }
+        }
+
+        Rectangle {
+            x: root.width - 185px; y: 17px;
+            width: 76px; height: 76px;
+            border-radius: 38px;
+            background: root.brand-green;
+            Image {
+                source: @image-url("assets/gear.svg");
+                image-fit: contain;
+                width: 38px; height: 38px;
+                x: 19px; y: 19px;
+            }
+            TouchArea { width: 76px; height: 76px; clicked => { root.settings(); } }
+        }
+
+        Rectangle {
+            x: root.width - 271px; y: 17px;
+            width: 76px; height: 76px;
+            border-radius: 38px;
+            background: root.brand-green;
+            Image {
+                source: @image-url("assets/lock.svg");
+                image-fit: contain;
+                width: 38px; height: 38px;
+                x: 19px; y: 19px;
+            }
+            TouchArea { width: 76px; height: 76px; clicked => { root.lock(); } }
+        }
+
+        Rectangle {
+            x: root.width - 290px; y: 30px;
+            width: 3px; height: 50px;
+            background: #d0d0d0;
+        }
+
+        Rectangle {
+            x: root.width - 385px; y: 17px;
+            width: 76px; height: 76px;
+            border-radius: 38px;
+            background: root.brand-green;
+            Image {
+                source: @image-url("assets/jump.svg");
+                image-fit: contain;
+                width: 38px; height: 38px;
+                x: 19px; y: 19px;
+            }
+            TouchArea { width: 76px; height: 76px; clicked => { root.bookmark-jump(); } }
+        }
+
+        Rectangle {
+            x: root.width - 471px; y: 17px;
+            width: 76px; height: 76px;
+            border-radius: 38px;
+            background: root.brand-green;
+            Image {
+                source: @image-url("assets/bookmark.svg");
+                image-fit: contain;
+                width: 38px; height: 38px;
+                x: 19px; y: 19px;
+            }
+            TouchArea { width: 76px; height: 76px; clicked => { root.bookmark-set(); } }
+        }
+
+        Rectangle {
+            x: root.width - 557px; y: 17px;
+            width: 76px; height: 76px;
+            border-radius: 38px;
+            background: root.brand-green;
+            Image {
+                source: @image-url("assets/mode-toggle.svg");
+                image-fit: contain;
+                width: 38px; height: 38px;
+                x: 19px; y: 19px;
+            }
+            TouchArea { width: 76px; height: 76px; clicked => { root.mode-toggle(); } }
+        }
+
+        Rectangle {
+            y: 107px; height: 3px; width: root.width;
+            background: #d0d0d0;
+        }
+    }
+
+    // Disk, centered in the body band (y 110 .. 1077). The ring carries
+    // chapter-level progress and completes one cycle per chapter; Rust re-renders
+    // it only on page turns within the chapter. The cover does not spin -- see
+    // rendering::vinyl for why.
+    Image {
+        x: (root.width - root.disk-box) / 2;
+        y: root.disk-y;
+        width: root.disk-box;
+        height: root.disk-box;
+        source: root.disk-img;
+        image-fit: contain;
+    }
+
+    // Chapter + page, 70px below the disk (mock margin-top 28 + padding 8).
+    //
+    // Bangla arrives as a pre-rendered image, exactly as the book title above
+    // and the chapter name in the control panel already do: Slint's bundled
+    // face has no Bengali glyphs, so a Slint `Text` renders the chapter name as
+    // tofu. `set_chapter_name` was already producing this image and every other
+    // surface was already using it -- the audio screen was the one that was
+    // never wired up, which is why the chapter list read correctly and this did
+    // not.
+    Image {
+        source: root.chapter-name-img;
+        x: 140px; width: root.width - 280px;
+        y: root.disk-y + root.disk-box + 90px;
+        height: 50px;
+        image-fit: contain;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        visible: root.chapter-name-img-h > 0;
+    }
+    Text {
+        text: root.chapter-name != "" ? root.chapter-name : "-";
+        color: #111111; font-size: 40px; font-weight: 700;
+        horizontal-alignment: center; vertical-alignment: center;
+        x: 140px; width: root.width - 280px;
+        y: root.disk-y + root.disk-box + 90px;
+        height: 50px;
+        overflow: elide;
+        visible: root.chapter-name-img-h == 0;
+    }
+    Text {
+        text: "Page " + root.chapter-page + " of " + root.chapter-page-count + " in chapter";
+        color: #999999; font-size: 30px;
+        horizontal-alignment: center; vertical-alignment: center;
+        x: 140px; width: root.width - 280px;
+        y: root.disk-y + root.disk-box + 150px;
+        height: 38px;
+    }
+
+    // Footer: mock 148px -> 371px.
+    Rectangle {
+        y: root.height - 371px;
+        height: 371px;
+        width: root.width;
+        background: #ffffff;
+
+        Rectangle {
+            y: 0px; height: 3px; width: root.width;
+            background: #d0d0d0;
+        }
+
+        // Book progress bar. Geometry matches reading mode's exactly: 10px tall,
+        // 5px radius, 24px thumb with a 3px rim.
+        Rectangle {
+            y: 25px;
+            x: root.bar-x;
+            width: root.bar-w;
+            height: 10px;
+            border-radius: 5px;
+            background: root.brand-red;
+
+            Rectangle {
+                x: 0px;
+                height: 100%;
+                width: Math.clamp(root.bar-progress, 0.0, 1.0) * parent.width;
+                background: root.brand-green;
+                border-radius: 5px;
+            }
+
+            // Bookmark marker, parked off-screen when unset. Declared BEFORE the
+            // thumb so the thumb draws on top, matching reading mode -- the knob
+            // sits above the tick when the two coincide.
+            Rectangle {
+                x: root.has-bookmark && root.bookmark-frac >= 0.0
+                    ? root.bookmark-frac * parent.width - 7px : -400px;
+                y: -13px;
+                width: 15px;
+                height: 36px;
+                background: root.brand-green;
+                border-radius: 5px;
+                visible: root.has-bookmark && root.bookmark-frac >= 0.0;
+            }
+
+            Rectangle {
+                x: Math.clamp(root.bar-progress, 0.0, 1.0) * parent.width - 12px;
+                y: -7px;
+                width: 24px; height: 24px;
+                border-radius: 12px;
+                background: #ffffff;
+                border-width: 3px;
+                border-color: root.brand-green;
+            }
+
+            // Reading mode scrubs Rust-side via classify_footer_zone, but audio
+            // mode forwards touch to Slint, so the drag lives here: `moved` while
+            // pressed seeks continuously, giving the thumb the same feel.
+            pbar := TouchArea {
+                x: 0px; y: -25px;
+                width: parent.width; height: 60px;
+                mouse-cursor: none;
+                moved => {
+                    if (self.pressed) {
+                        root.progress-tap(Math.clamp(self.mouse-x / self.width, 0.0, 1.0));
+                    }
+                }
+                clicked => {
+                    root.progress-tap(Math.clamp(self.mouse-x / self.width, 0.0, 1.0));
+                }
+            }
+        }
+
+        // Labels, 10px under the bar.
+        Text {
+            x: root.bar-x; y: 50px;
+            width: root.bar-w / 2; height: 30px;
+            text: "Page " + (root.page + 1) + " / " + root.page-count;
+            color: #999999; font-size: 25px;
+            horizontal-alignment: left; vertical-alignment: center;
+        }
+        Text {
+            x: root.bar-x + root.bar-w / 2; y: 50px;
+            width: root.bar-w / 2; height: 30px;
+            text: "Ch " + (root.chapter-index + 1) + " of " + root.chapter-count;
+            color: #999999; font-size: 25px;
+            horizontal-alignment: right; vertical-alignment: center;
+        }
+
+        // Transport: three 125px circles, 70px gaps -> 515px total.
+        HorizontalLayout {
+            y: 115px;
+            x: 0px;
+            width: root.width;
+            height: 125px;
+            alignment: center;
+            spacing: 70px;
+
+            Rectangle {
+                width: 125px; height: 125px;
+                border-radius: 63px;
+                background: #ffffff;
+                // Mock's shadow stands in as a hairline border: no shadow support
+                // in the software renderer, and shadows are invisible on e-ink.
+                border-width: 3px;
+                border-color: #d0d0d0;
+                // The logo's triangle points LEFT (apex x=210, flat edge x=540),
+                // so the unmirrored logo is the rewind arrow.
+                Image {
+                    source: @image-url("../kothok-logo.svg");
+                    image-fit: contain;
+                    width: 55px; height: 55px;
+                    x: 35px; y: 35px;
+                }
+                TouchArea { width: 125px; height: 125px; clicked => { root.skip-rewind(); } }
+            }
+
+            Rectangle {
+                width: 125px; height: 125px;
+                border-radius: 63px;
+                // Gray when TTS is unavailable (needs both wifi and bt), matching
+                // reading mode's disabled play button.
+                background: !root.play-enabled
+                    ? #8a8a8a
+                    : (root.playing ? root.brand-red : root.brand-green);
+
+                // Pause bars, from the mock's 24-unit viewBox scaled to 55px.
+                Rectangle { visible: root.playing; x: 49px; y: 44px; width: 9px; height: 37px; border-radius: 2px; background: #ffffff; }
+                Rectangle { visible: root.playing; x: 67px; y: 44px; width: 9px; height: 37px; border-radius: 2px; background: #ffffff; }
+
+                // Play triangle as stacked rectangles: the software renderer has
+                // no Path support, so the steps are the shape.
+                Rectangle { visible: !root.playing; x: 48px; y: 32px; width: 5px;  height: 6px; background: #ffffff; }
+                Rectangle { visible: !root.playing; x: 48px; y: 38px; width: 14px; height: 6px; background: #ffffff; }
+                Rectangle { visible: !root.playing; x: 48px; y: 44px; width: 23px; height: 6px; background: #ffffff; }
+                Rectangle { visible: !root.playing; x: 48px; y: 50px; width: 32px; height: 6px; background: #ffffff; }
+                Rectangle { visible: !root.playing; x: 48px; y: 56px; width: 41px; height: 6px; background: #ffffff; }
+                Rectangle { visible: !root.playing; x: 48px; y: 62px; width: 41px; height: 6px; background: #ffffff; }
+                Rectangle { visible: !root.playing; x: 48px; y: 68px; width: 32px; height: 6px; background: #ffffff; }
+                Rectangle { visible: !root.playing; x: 48px; y: 74px; width: 23px; height: 6px; background: #ffffff; }
+                Rectangle { visible: !root.playing; x: 48px; y: 80px; width: 14px; height: 6px; background: #ffffff; }
+                Rectangle { visible: !root.playing; x: 48px; y: 86px; width: 5px;  height: 6px; background: #ffffff; }
+
+                TouchArea { width: 125px; height: 125px; clicked => { root.play-pause-toggle(); } }
+            }
+
+            Rectangle {
+                width: 125px; height: 125px;
+                border-radius: 63px;
+                background: #ffffff;
+                border-width: 3px;
+                border-color: #d0d0d0;
+                // Mirrored so the triangle points right, toward the next page.
+                Image {
+                    source: @image-url("../kothok-logo-flip.svg");
+                    image-fit: contain;
+                    width: 55px; height: 55px;
+                    x: 35px; y: 35px;
+                }
+                TouchArea { width: 125px; height: 125px; clicked => { root.skip-forward(); } }
+            }
+        }
+    }
+}

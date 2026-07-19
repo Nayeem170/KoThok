@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Nayeem Bin Ahsan
 use kobo_core::audio::synthesize_prepared;
 use log::debug;
 
@@ -42,17 +44,7 @@ pub(crate) async fn synth_prepare(
     rate: String,
     lang: String,
 ) -> Result<kobo_core::audio::Prepared, String> {
-    let text = normalize_tts_text(&text);
     synthesize_prepared(utt_idx, &text, &voice, &rate, &lang).await
-}
-
-fn normalize_tts_text(text: &str) -> String {
-    text.replace('\u{0964}', ". ")
-        .replace('\u{0965}', ". ")
-        .replace("\u{09AF}\u{09BC}", "\u{09DF}")
-        .replace(['\u{201C}', '\u{201D}', '"', '\u{2018}', '\u{2019}'], "")
-        .trim()
-        .to_string()
 }
 
 #[cfg(test)]
@@ -61,8 +53,12 @@ mod tests {
 
     #[test]
     fn voice_for_english_text_uses_base_voice() {
-        let (v, lang) = voice_for_text("Hello world", "en-US-EmmaNeural", "bn-BD-NabanitaNeural");
-        assert_eq!(v, "en-US-EmmaNeural");
+        let (v, lang) = voice_for_text(
+            "Hello world",
+            "en-US-EmmaMultilingualNeural",
+            "bn-BD-NabanitaNeural",
+        );
+        assert_eq!(v, "en-US-EmmaMultilingualNeural");
         assert_eq!(lang, "en-US");
     }
 
@@ -70,7 +66,7 @@ mod tests {
     fn voice_for_bangla_text_uses_bn_voice() {
         let (v, lang) = voice_for_text(
             "আমি বাংলায় কথা বলি",
-            "en-US-EmmaNeural",
+            "en-US-EmmaMultilingualNeural",
             "bn-BD-NabanitaNeural",
         );
         assert_eq!(v, "bn-BD-NabanitaNeural");
@@ -79,30 +75,38 @@ mod tests {
 
     #[test]
     fn voice_explicit_lang_overrides_detection() {
-        let (v, lang) =
-            voice_for_text_explicit("আমি", "en-US-EmmaNeural", "bn-BD-NabanitaNeural", "en-US");
-        assert_eq!(v, "en-US-EmmaNeural");
+        let (v, lang) = voice_for_text_explicit(
+            "আমি",
+            "en-US-EmmaMultilingualNeural",
+            "bn-BD-NabanitaNeural",
+            "en-US",
+        );
+        assert_eq!(v, "en-US-EmmaMultilingualNeural");
         assert_eq!(lang, "en-US");
     }
 
     #[test]
     fn voice_explicit_auto_delegates_to_detection() {
-        let (v, lang) =
-            voice_for_text_explicit("Hello", "en-US-EmmaNeural", "bn-BD-NabanitaNeural", "auto");
-        assert_eq!(v, "en-US-EmmaNeural");
+        let (v, lang) = voice_for_text_explicit(
+            "Hello",
+            "en-US-EmmaMultilingualNeural",
+            "bn-BD-NabanitaNeural",
+            "auto",
+        );
+        assert_eq!(v, "en-US-EmmaMultilingualNeural");
         assert_eq!(lang, "en-US");
     }
 
     #[test]
     fn voice_for_arabic_picks_lang_voice() {
-        let (v, lang) = voice_for_text("مرحبا بالعالم", "en-US-EmmaNeural", "bn-BD-NabanitaNeural");
+        let (v, lang) = voice_for_text(
+            "مرحبا بالعالم",
+            "en-US-EmmaMultilingualNeural",
+            "bn-BD-NabanitaNeural",
+        );
         assert_eq!(lang, "ar-SA");
         let voices = crate::panel::voices_for_lang("ar-SA");
-        let expected = voices
-            .first()
-            .expect("ar voice")
-            .id()
-            .to_string();
+        let expected = voices.first().expect("ar voice").id().to_string();
         assert_eq!(v, expected);
     }
 }

@@ -16,33 +16,17 @@ export component ChapterOverlay inherits Rectangle {
     visible: root.visible-flag;
     background: #ffffff;
 
+    // Shared header geometry: 110px tall, 76px buttons, 23px edge padding.
     Rectangle {
-        y: 0px; height: 80px; width: root.width;
+        y: 0px; height: 110px; width: root.width;
         background: #ffffff;
 
         ActionButton {
-            x: 18px; y: 16px;
-            width: 48px; height: 48px;
+            x: 23px; y: 17px;
+            width: 76px; height: 76px;
             icon: @image-url("assets/back.svg");
             bg: root.brand-red;
-            radius: 24px;
-            clicked => { root.chapter-preview-idx = -1; root.chapter-pending = -1; root.visible-flag = false; }
-        }
-
-        Text {
-            text: "Chapters";
-            color: root.text-secondary; font-size: 22px; font-weight: 700;
-            horizontal-alignment: center; vertical-alignment: center;
-            x: 96px; width: root.width - 192px; height: 80px;
-            overflow: elide;
-        }
-
-        ActionButton {
-            x: root.width - 66px; y: 16px;
-            width: 48px; height: 48px;
-            icon: @image-url("assets/close.svg");
-            bg: root.brand-red;
-            radius: 24px;
+            radius: 38px;
             clicked => {
                 root.chapter-preview-idx = -1;
                 root.chapter-pending = -1;
@@ -51,8 +35,16 @@ export component ChapterOverlay inherits Rectangle {
             }
         }
 
+        Text {
+            text: "Chapters";
+            color: root.text-secondary; font-size: 33px; font-weight: 700;
+            horizontal-alignment: center; vertical-alignment: center;
+            x: 119px; width: root.width - 238px; height: 110px;
+            overflow: elide;
+        }
+
         Rectangle {
-            y: 79px; height: 1px; width: root.width;
+            y: 107px; height: 3px; width: root.width;
             background: root.track-color;
         }
     }

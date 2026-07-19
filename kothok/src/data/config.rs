@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Nayeem Bin Ahsan
 use std::collections::HashMap;
 use std::fs;
 
@@ -6,6 +8,16 @@ use log::warn;
 pub use kobo_core::device::paths::{
     CONFIG_FILE, CRASH_LOG, POWER_DEV, PPM_DEBUG, PPM_DEPLOY, TOUCH_DEV,
 };
+
+pub const BOOK_DIR: &str = "/mnt/onboard";
+pub const DEVICE_BOOK: &str = "/mnt/onboard/.adds/book.epub";
+pub const BOOK_CACHE_DIR: &str = "/mnt/onboard/.adds/bookcache";
+pub const POSITIONS_FILE: &str = "/mnt/onboard/.adds/positions";
+pub const CACHE_DIR: &str = "/mnt/onboard/.adds/cache";
+pub const VOICE_CACHE_FILE: &str = "/mnt/onboard/.adds/kothok/voices.json";
+/// Screenshot output. On the onboard partition so captures come off over USB.
+#[cfg(feature = "screenshot")]
+pub const SHOTS_DIR: &str = "/mnt/onboard/.adds/shots";
 
 const KEY_FONT_SIZE: &str = "font_size";
 const KEY_TTS_LANG: &str = "tts_lang";
@@ -48,23 +60,7 @@ impl Default for AppConfig {
     }
 }
 
-/// Baseline slow-down applied at the "1x" center (slider 50). Edge-TTS neural
-/// voices - Bangla especially - run fast at native rate and words blur/overlap,
-/// so every speed is shifted slower by this many percentage points. The slider
-/// still spans the full -100%..+100% range around it.
-pub const RATE_BASELINE_OFFSET: i32 = -10;
-
-/// Map a 0..100 slider value to an Edge-TTS SSML prosody rate percentage.
-pub fn rate_percent(speed: i32) -> i32 {
-    ((speed - 50) * 2 + RATE_BASELINE_OFFSET).clamp(-100, 100)
-}
-
-/// Format a 0..100 slider value as an Edge-TTS rate string, e.g. "-10%".
-pub fn rate_string(speed: i32) -> String {
-    let pct = rate_percent(speed);
-    let sign = if pct >= 0 { "+" } else { "" };
-    format!("{sign}{pct}%")
-}
+pub use kothok_edge_tts::rate_string;
 
 /// Load config, using `base_font` as the `font_size` default when the file is
 /// absent or has no `font_size` line (first launch). Lets the caller pass a
@@ -245,20 +241,5 @@ mod tests {
         let loaded = load_config_from_base(&p, 36);
         assert_eq!(loaded, AppConfig::default());
         let _ = std::fs::remove_file(&p);
-    }
-
-    #[test]
-    fn rate_1x_is_slower_than_native() {
-        // At the 1x center (slider 50) the baseline offset makes speech slower
-        // than Edge-TTS native, so words stay clear (Bangla especially).
-        assert_eq!(rate_percent(50), RATE_BASELINE_OFFSET);
-        assert!(rate_percent(50) < 0, "1x must be a slow-down");
-        assert_eq!(rate_string(50), "-10%");
-    }
-
-    #[test]
-    fn rate_slider_spans_full_range() {
-        assert_eq!(rate_percent(0), -100);
-        assert_eq!(rate_percent(100), 90);
     }
 }

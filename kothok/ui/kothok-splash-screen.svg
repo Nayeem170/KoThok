@@ -1,11 +1,27 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1072 1448" width="1072" height="1448">
+  <!--
+    AUTHORING SOURCE, NOT A RUNTIME ASSET.
+
+    The reader never renders this file. It is rasterised at build time into the
+    separate part images the splash composes at runtime (see rendering/splash.rs):
+    word-read.png, word-listen.png, word-anywhere.png, lockup-kothok.png.
+
+    Composing from parts rather than shipping one flattened screen is what lets
+    the layout adapt to each panel and lets the words ink in one at a time. It
+    also means Fredoka is baked into the exported pixels here, on a machine that
+    has the font - the device has no network at splash time, so a webfont link
+    could never have resolved.
+
+    The brand red and green are the identity and they stay. On a colour panel
+    they render as colour; on a monochrome one the panel has 16 native grey
+    levels, so each word comes out as a clean solid grey (red at level 6, green
+    at 4, black at 1) rather than a halftone - the mottling that would rule this
+    out only happens to images the renderer dithers, not to solid text fills.
+    Lower contrast at 145px reads as lighter weight, which is a look, not damage.
+  -->
   <defs>
     <style>
-      @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@700&amp;display=swap');
-
-      .text-red {
-        fill: #F42A41;
-        stroke: #F42A41;
+      .word {
         stroke-width: 2px;
         font-family: 'Fredoka', sans-serif;
         font-weight: 700;
@@ -13,25 +29,9 @@
         letter-spacing: -1px;
       }
 
-      .text-green {
-        fill: #006A4E;
-        stroke: #006A4E;
-        stroke-width: 2px;
-        font-family: 'Fredoka', sans-serif;
-        font-weight: 700;
-        font-size: 145px;
-        letter-spacing: -1px;
-      }
-
-      .text-black {
-        fill: #0F0F0F;
-        stroke: #0F0F0F;
-        stroke-width: 2px;
-        font-family: 'Fredoka', sans-serif;
-        font-weight: 700;
-        font-size: 145px;
-        letter-spacing: -1px;
-      }
+      .word-red { fill: #F42A41; stroke: #F42A41; }
+      .word-green { fill: #006A4E; stroke: #006A4E; }
+      .word-black { fill: #0F0F0F; stroke: #0F0F0F; }
 
       .text-small {
         fill: #0F0F0F;
@@ -45,18 +45,35 @@
 
   <rect width="1072" height="1448" fill="#FCFCFC" />
 
-  <text x="120" y="320" class="text-red">Read</text>
-  <text x="120" y="490" class="text-green">Listen</text>
-  <text x="120" y="660" class="text-black">Anywhere</text>
+  <text x="120" y="320" class="word word-red">Read</text>
+  <text x="120" y="490" class="word word-green">Listen</text>
+  <text x="120" y="660" class="word word-black">Anywhere</text>
 
+  <!--
+    Bottom lockup: "with" [gap] mark [gap] "KoThok".
+
+    Aligned to measured ink, not to assumed advance widths. In the rendered PNG
+    the cap band of both words runs y 998..1060, so their optical centre is
+    y=1029 - the mark centres on that, NOT on the baseline. Sitting the mark on
+    the baseline (the previous y=960..1060) floated it 19.5px high.
+
+    The mark is 72px for a 63px cap height (1.15x). A brand mark should read a
+    touch larger than the type beside it; the previous 100px was 1.52x, which
+    made it dominate rather than sign the line. This ratio is the one number
+    worth eyeballing on device.
+
+    Ink gaps are 48px on both sides, measured off the rendered PNG rather than
+    computed from advance widths - "KoThok" carries a left side bearing, so its
+    text x sits 4px left of where its ink starts.
+  -->
   <text x="220" y="1060" class="text-small">with</text>
 
-  <svg x="390" y="960" width="100" height="100" viewBox="362 445 540 540">
+  <svg x="424" y="993" width="72" height="72" viewBox="362 445 540 540">
     <g transform="translate(362, 380)">
       <rect x="0" y="75" width="150" height="520" rx="75" ry="75" fill="#F42A41" />
       <path d="M 500,85 C 530,65 540,85 540,120 L 540,550 C 540,585 530,605 500,585 L 210,365 C 180,345 180,325 210,305 Z" fill="#006A4E" />
     </g>
   </svg>
 
-  <text x="510" y="1060" class="text-small">KoThok</text>
+  <text x="540" y="1060" class="text-small">KoThok</text>
 </svg>

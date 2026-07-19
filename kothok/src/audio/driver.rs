@@ -1,7 +1,9 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Nayeem Bin Ahsan
 use super::synth::{synth_prepare, voice_for_text_explicit};
 use super::types::{Cmd, Event, Utt, Utterance, PARA_GAP_FRAMES, SENTENCE_GAP_FRAMES};
 use kobo_core::audio::{Player, CHUNK_FRAMES, LEAD_FRAMES, LEAD_IN_FRAMES};
-use log::debug;
+use log::{debug, warn};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 use tokio::task::JoinHandle;
@@ -14,6 +16,17 @@ const A2DP_OPEN_RETRY_BACKOFF_MS: u64 = 500;
 const SINK_IDLE_KEEPALIVE_SECS: u64 = 3;
 const BUSY_SPIN_SLEEP_MS: u64 = 10;
 const IDLE_SLEEP_MS: u64 = 50;
+/// A synth (Edge-TTS over a websocket) that neither completes nor errors leaves
+/// `pending` set forever, and the pipeline silently freezes. This watchdog is a
+/// LAST-RESORT net for a task that never returns at all.
+///
+/// It must stay well above `synthesize_prepared`'s own budget, which already
+/// times out and retries internally: MAX_ATTEMPTS(3) x up to
+/// SYNTH_TIMEOUT_MAX_SECS(30) plus backoff, so ~91s worst case. Setting this
+/// below that budget aborts the inner retries mid-flight -- which made a long
+/// sentence fail identically on every run and skip the rest of the book.
+const SYNTH_TIMEOUT_SECS: u64 = 120;
+const MAX_SYNTH_RETRIES: u32 = 2;
 
 pub struct DriverConfig {
     pub voice: String,
@@ -59,6 +72,11 @@ struct DriverState {
     pending_idx: Option<usize>,
     pending_range: Option<(usize, usize, bool)>,
     pending_page_break: Option<usize>,
+    /// When the in-flight synth was spawned, for the hang watchdog.
+    pending_started: Option<Instant>,
+    /// Consecutive watchdog retries of the current utterance, capped by
+    /// `MAX_SYNTH_RETRIES` before the driver gives up with an error.
+    synth_retries: u32,
     scale_buf: Vec<i16>,
     chunk_samples: usize,
 }
@@ -88,6 +106,8 @@ impl DriverState {
             pending_idx: None,
             pending_range: None,
             pending_page_break: None,
+            pending_started: None,
+            synth_retries: 0,
             scale_buf: Vec::with_capacity(chunk_samples),
             chunk_samples,
         }
@@ -97,6 +117,7 @@ impl DriverState {
         if let Some(h) = self.pending.take() {
             h.abort();
         }
+        self.pending_started = None;
     }
 
     fn reset_pipeline(&mut self) {
@@ -104,6 +125,7 @@ impl DriverState {
         self.current = None;
         self.pending_range = None;
         self.ready_queue.clear();
+        self.synth_retries = 0;
     }
 }
 
@@ -120,14 +142,17 @@ pub(crate) async fn driver(
             st.try_open_sink().await;
             st.try_prefetch();
             st.try_collect().await;
+            st.check_synth_timeout();
             st.try_advance();
             st.write_audio().await;
-            if st.current.is_none()
-                && st.ready_queue.is_empty()
-                && st.pending.is_some()
-            {
+            if st.current.is_none() && st.ready_queue.is_empty() && st.pending.is_some() {
                 if let Some(p) = st.player.as_mut() {
-                    let _ = p.keepalive().await;
+                    // best-effort: keepalive is a no-op if the sink already
+                    // closed; a failed keepalive is non-fatal, the next
+                    // tick re-opens the sink via try_open_sink.
+                    if let Err(e) = p.keepalive().await {
+                        warn!("audio keepalive failed: {e}");
+                    }
                 }
                 tokio::time::sleep(Duration::from_millis(50)).await;
             }

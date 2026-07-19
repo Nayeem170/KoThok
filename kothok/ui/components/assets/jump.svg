@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="28" height="28">
+  <!-- Jump-to-bookmark: arrow landing on a bookmark pennant. Deliberately not a
+       door-and-arrow, which is what exit.svg/exit.png use in the library header. -->
+  <path d="M 14 4 H 21 V 20 L 17.5 16.5 L 14 20 Z" fill="white"/>
+  <line x1="2" y1="12" x2="9" y2="12" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+  <polyline points="6,8.5 9.5,12 6,15.5" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

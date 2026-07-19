@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Nayeem Bin Ahsan
 use kobo_core::{Capabilities, Chapter};
 use slint::platform::software_renderer::{MinimalSoftwareWindow, Rgb565Pixel};
 
@@ -57,11 +59,14 @@ pub(super) fn init_picker(
         &mut picker_cover_cache,
         all_books,
         picker_scroll,
+        render::LibraryFilter::default(),
         &setup.caps.current_clock(),
         setup.caps.battery_pct(),
         "",
+        render::PickerRefresh::Full,
     );
-    let picker_cells = render::picker_scroll_cells(all_books, picker_scroll);
+    let picker_cells =
+        render::picker_scroll_cells(all_books, picker_scroll, render::LibraryFilter::default());
     Some((
         true,
         picker_scroll,
@@ -86,6 +91,9 @@ pub(super) type BookInit = (
     String,
     bool,
     bool,
+    crate::ViewMode,
+    Option<crate::Bookmark>,
+    Option<std::time::Instant>,
 );
 
 pub(super) fn init_book(
@@ -121,7 +129,7 @@ pub(super) fn init_book(
     reader.set_picker_active(false);
     screen.window.request_redraw();
     let mut buffer = vec![Rgb565Pixel(0); screen.w * screen.h];
-    let _ = screen.window.draw_if_needed(|r| {
+    screen.window.draw_if_needed(|r| {
         r.render(&mut buffer, screen.w);
     });
     screen.fb.present(
@@ -141,8 +149,13 @@ pub(super) fn init_book(
             page: 0,
             cur_start: 0,
             cur_end: 0,
+            view_mode: crate::ViewMode::Reading,
+            bookmark: None,
+            progress: 0.0,
         });
     let current_chapter = pos.chapter;
+    let initial_view_mode = pos.view_mode;
+    let initial_bookmark = pos.bookmark;
 
     let t_bs = std::time::Instant::now();
     let mut chapters_mut = chapters.clone();
@@ -191,22 +204,25 @@ pub(super) fn init_book(
         );
     } else {
         screen.window.request_redraw();
-        let _ = screen.window.draw_if_needed(|r| {
+        screen.window.draw_if_needed(|r| {
             r.render(&mut buffer, screen.w);
         });
         render::overlay_text(
             &mut buffer,
-            screen.w,
-            screen.h,
-            &state.all_rows,
-            current_page,
-            &state.pages,
-            PAD_TOP,
-            &state.row_heights,
-            &state.decoded_images,
-            setup.body_px,
-            setup.head_px,
-            setup.line_h,
+            &render::PageView {
+                w: screen.w,
+                h: screen.h,
+                rows: &state.all_rows,
+                page: current_page,
+                pages: &state.pages,
+                content_top: PAD_TOP,
+                row_heights: &state.row_heights,
+                decoded_images: &state.decoded_images,
+                body_px: setup.body_px,
+                head_px: setup.head_px,
+                line_h: setup.line_h,
+                style_runs: &state.style_runs,
+            },
         );
         screen.fb.present(
             rgb565_as_bytes_ref(&buffer),
@@ -235,6 +251,9 @@ pub(super) fn init_book(
             current_book_path,
             cover_page_visible,
             text_dirty,
+            initial_view_mode,
+            initial_bookmark,
+            None,
         )),
         None,
     )

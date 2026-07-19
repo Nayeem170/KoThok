@@ -1,12 +1,13 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Nayeem Bin Ahsan
 use kobo_core::{Chapter, EpubBook};
 
 use log::{debug, info, warn};
 
-use crate::data::persistence::POSITIONS_FILE;
+use crate::data::config::{BOOK_CACHE_DIR, POSITIONS_FILE};
 
-pub const DEVICE_BOOK: &str = "/mnt/onboard/.adds/book.epub";
-pub const BOOK_DIR: &str = "/mnt/onboard";
-const BOOK_CACHE_DIR: &str = "/mnt/onboard/.adds/bookcache";
+pub use crate::data::config::{BOOK_DIR, DEVICE_BOOK};
+pub use kobo_core::formats::{detect_language, progress_from_offsets};
 
 /// On-disk cache of a fully-parsed EPUB (issue 2): the expensive part of opening
 /// a large book is the per-chapter XHTML extraction (`html_text::extract`). This
@@ -69,14 +70,20 @@ fn load_cached_book(path: &str) -> Option<CachedBook> {
 }
 
 fn save_cached_book(path: &str, mtime: u64, language: &Option<String>, chapters: &[Chapter]) {
-    let _ = std::fs::create_dir_all(BOOK_CACHE_DIR);
+    // best-effort: cache write; a failure (read-only fs, full disk) only means
+    // the next open re-parses - the reader still works from the in-memory copy.
+    if let Err(e) = std::fs::create_dir_all(BOOK_CACHE_DIR) {
+        warn!("bookcache mkdir failed: {e}");
+    }
     let cached = CachedBook {
         mtime,
         language: language.clone(),
         chapters: chapters.to_vec(),
     };
     if let Ok(bytes) = bincode::serialize(&cached) {
-        let _ = std::fs::write(book_cache_path(path), bytes);
+        if let Err(e) = std::fs::write(book_cache_path(path), bytes) {
+            warn!("bookcache write failed: {e}");
+        }
     }
 }
 
@@ -98,6 +105,8 @@ pub fn scan_epubs(root: &str) -> Option<Vec<EpubEntry>> {
         std::collections::HashMap::new();
     let mut pos_pages: std::collections::HashMap<String, (usize, usize)> =
         std::collections::HashMap::new();
+    let mut stored_progress: std::collections::HashMap<String, f32> =
+        std::collections::HashMap::new();
     if let Some(ref data) = pos_data {
         for (i, line) in data.lines().enumerate() {
             let parts: Vec<&str> = line.split('|').collect();
@@ -108,13 +117,31 @@ pub fn scan_epubs(root: &str) -> Option<Vec<EpubEntry>> {
                     let pg = parts[2].parse::<usize>().unwrap_or(0);
                     pos_pages.insert(book_path.to_string(), (ch, pg));
                 }
+                // Progress the reader recorded when it last saved. Absent on
+                // lines written before the field existed.
+                if let Some(p) = parts
+                    .get(7)
+                    .and_then(|s| s.trim().parse::<f32>().ok())
+                    .filter(|p| p.is_finite() && *p > 0.0)
+                {
+                    stored_progress.insert(book_path.to_string(), p.clamp(0.0, 1.0));
+                }
             }
         }
     }
     for b in books.iter_mut() {
-        b.progress = pos_pages
+        // Prefer what the reader recorded. Deriving it here needs the offset
+        // cache, which is keyed by font size and thrown away on any layout
+        // change that repaginates -- so a part-read book would otherwise show
+        // 0 % until it was opened again.
+        b.progress = stored_progress
             .get(&b.path)
-            .map(|(ch, pg)| book_progress(&b.path, *ch, *pg))
+            .copied()
+            .or_else(|| {
+                pos_pages
+                    .get(&b.path)
+                    .map(|(ch, pg)| book_progress(&b.path, *ch, *pg))
+            })
             .unwrap_or(0.0);
     }
     let has_position: std::collections::HashSet<String> = last_opened.keys().cloned().collect();
@@ -143,19 +170,6 @@ fn book_progress(path: &str, chapter: usize, page: usize) -> f32 {
         Some(o) => progress_from_offsets(&o, chapter, page),
         None => 0.0,
     }
-}
-
-/// Pure fraction-read computation from per-chapter page offsets. Extracted from
-/// book_progress so it is unit-testable without on-device cache files.
-/// `offsets[c]` = page count before chapter c; `offsets.last()` = total pages.
-fn progress_from_offsets(offsets: &[usize], chapter: usize, page: usize) -> f32 {
-    let total = *offsets.last().unwrap_or(&1).max(&1);
-    let overall = offsets
-        .get(chapter)
-        .copied()
-        .unwrap_or(0)
-        .saturating_add(page);
-    (overall as f32 / total as f32).clamp(0.0, 1.0)
 }
 
 fn walk(dir: &str, out: &mut Vec<EpubEntry>) {
@@ -204,54 +218,6 @@ fn epub_metadata(path: &str) -> (String, Option<String>) {
     }
 }
 
-// Detect the book language from its CONTENT (script), taking priority over the
-// EPUB's dc:language tag - many books carry a wrong/English tag. Returns the
-// language code only when a non-Latin script dominates (>=10% of letters), so a
-// stray foreign quote in an English book doesn't mis-detect; Latin-only text
-// falls through to the caller's metadata/default.
-pub fn detect_language(chapters: &[Chapter]) -> Option<String> {
-    const BUDGET: usize = 262_144;
-    let mut bn = 0u32;
-    let mut ar = 0u32;
-    let mut letters = 0u32;
-    let mut scanned = 0usize;
-    for ch in chapters {
-        for c in ch.text.chars() {
-            match c {
-                '\u{0980}'..='\u{09FF}' => {
-                    bn += 1;
-                    letters += 1;
-                }
-                '\u{0600}'..='\u{06FF}' => {
-                    ar += 1;
-                    letters += 1;
-                }
-                c if c.is_alphabetic() => letters += 1,
-                _ => {}
-            }
-            scanned += c.len_utf8().max(1);
-            if scanned >= BUDGET {
-                break;
-            }
-        }
-        if scanned >= BUDGET {
-            break;
-        }
-    }
-    if letters == 0 {
-        return None;
-    }
-    let frac_bn = bn as f32 / letters as f32;
-    let frac_ar = ar as f32 / letters as f32;
-    if frac_bn >= 0.10 {
-        Some(crate::meta::LANG_BN_BD.to_string())
-    } else if frac_ar >= 0.10 {
-        Some(crate::meta::LANG_AR_SA.to_string())
-    } else {
-        None
-    }
-}
-
 pub fn open_book(path: &str) -> Option<(Vec<Chapter>, Option<String>)> {
     if let Some(cached) = load_cached_book(path) {
         info!(
@@ -283,36 +249,8 @@ pub fn open_book(path: &str) -> Option<(Vec<Chapter>, Option<String>)> {
     }
 }
 
-/// Display title for a chapter: the EPUB-declared title if present, otherwise
-/// derived from the chapter's first heading element, then its first text line -
-/// never a bare "Chapter N" position (issue L23).
 pub fn chapter_display_title(ch: &Chapter, idx: usize) -> String {
-    if let Some(t) = ch.title.as_deref() {
-        let t = t.trim();
-        if !t.is_empty() {
-            return t.to_string();
-        }
-    }
-    for seg in &ch.segments {
-        let is_heading = seg.tag.len() == 2
-            && seg.tag.starts_with('h')
-            && seg.tag.as_bytes()[1].is_ascii_digit();
-        if is_heading {
-            if let Some(slice) = ch.text.get(seg.start..seg.end) {
-                let t = slice.trim();
-                if !t.is_empty() {
-                    return t.to_string();
-                }
-            }
-        }
-    }
-    if let Some(first) = ch.text.lines().find(|l| !l.trim().is_empty()) {
-        let t = first.trim();
-        if !t.is_empty() {
-            return t.to_string();
-        }
-    }
-    format!("Chapter {}", idx + 1)
+    ch.display_title(idx)
 }
 
 #[cfg(test)]

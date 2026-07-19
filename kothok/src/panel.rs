@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Nayeem Bin Ahsan
 pub mod callbacks;
 
 pub use callbacks::process_panel_callbacks;
@@ -7,8 +9,9 @@ pub use kothok_edge_tts::{
     DEFAULT_VOICE_BN, DEFAULT_VOICE_EN,
 };
 
+use crate::data::config::VOICE_CACHE_FILE;
+
 const FONT_DEBOUNCE_MS: u64 = 600;
-const VOICE_CACHE_FILE: &str = "/mnt/onboard/.adds/kothok/voices.json";
 
 pub fn load_voice_cache() -> Vec<kothok_edge_tts::VoiceInfo> {
     kothok_edge_tts::load_voice_cache(VOICE_CACHE_FILE)
@@ -52,7 +55,11 @@ pub fn spawn_wifi_bt_list_fetch() -> std::sync::mpsc::Receiver<WifiBtListResult>
         let (wifi, wifi_ids_valid) = if networks.len() >= saved.len() && !networks.is_empty() {
             let v: Vec<WifiEntry> = networks
                 .iter()
-                .map(|n| WifiEntry { ssid: n.ssid.clone(), id: n.id, connected: n.connected })
+                .map(|n| WifiEntry {
+                    ssid: n.ssid.clone(),
+                    id: n.id,
+                    connected: n.connected,
+                })
                 .collect();
             (v, true)
         } else if !saved.is_empty() {
@@ -60,14 +67,22 @@ pub fn spawn_wifi_bt_list_fetch() -> std::sync::mpsc::Receiver<WifiBtListResult>
                 .iter()
                 .map(|s| {
                     let c = !connected_ssid.is_empty() && s.as_str() == connected_ssid;
-                    WifiEntry { ssid: s.clone(), id: 0, connected: c }
+                    WifiEntry {
+                        ssid: s.clone(),
+                        id: 0,
+                        connected: c,
+                    }
                 })
                 .collect();
             (v, false)
         } else if !networks.is_empty() {
             let v: Vec<WifiEntry> = networks
                 .iter()
-                .map(|n| WifiEntry { ssid: n.ssid.clone(), id: n.id, connected: n.connected })
+                .map(|n| WifiEntry {
+                    ssid: n.ssid.clone(),
+                    id: n.id,
+                    connected: n.connected,
+                })
                 .collect();
             (v, true)
         } else {
@@ -77,9 +92,14 @@ pub fn spawn_wifi_bt_list_fetch() -> std::sync::mpsc::Receiver<WifiBtListResult>
         let devices = bt_list_devices();
         let bt: Vec<BtEntry> = devices
             .iter()
-            .map(|d| BtEntry { name: d.name.clone(), path: d.path.clone(), connected: d.connected })
+            .map(|d| BtEntry {
+                name: d.name.clone(),
+                path: d.path.clone(),
+                connected: d.connected,
+            })
             .collect();
 
+        // best-effort: main loop may have closed the panel/result channel
         let _ = tx.send(WifiBtListResult {
             wifi,
             wifi_ids_valid,

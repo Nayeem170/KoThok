@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Nayeem Bin Ahsan
 use super::*;
 use log::info;
 
@@ -14,6 +16,7 @@ impl DriverState {
             match Player::open().await {
                 Ok(mut p) => {
                     let lead_in = vec![0i16; LEAD_IN_FRAMES * 2];
+                    // best-effort: a rejected lead-in just means the sink starts mid-stream
                     let _ = p.write_chunk(&lead_in).await;
                     self.player = Some(p);
                     send_event(&self.evt_tx, Event::Playing);
@@ -83,7 +86,10 @@ impl DriverState {
         let rate = self.rate.clone();
         let (utt_voice, utt_lang) =
             voice_for_text_explicit(&text, &self.voice, &self.bn_voice, crate::meta::LANG_AUTO);
-        info!("audio: synth #{} voice={utt_voice} lang={utt_lang}", self.idx);
+        info!(
+            "audio: synth #{} voice={utt_voice} lang={utt_lang}",
+            self.idx
+        );
         let synth_idx = self.idx;
         self.pending = Some(tokio::task::spawn_local(synth_prepare(
             synth_idx,
@@ -93,10 +99,76 @@ impl DriverState {
             crate::meta::LANG_AUTO.into(),
         )));
         self.pending_range = Some((s, e, para_end));
-        self.pending_page_break = self.utterances.get(self.idx)
-            .and_then(|u| u.page_break);
+        self.pending_page_break = self.utterances.get(self.idx).and_then(|u| u.page_break);
         self.pending_idx = Some(self.idx);
+        self.pending_started = Some(Instant::now());
         self.idx += 1;
+    }
+
+    /// Watchdog for a hung synth. Edge-TTS runs over a websocket; a flaky link
+    /// can leave the request neither completing nor erroring, so `pending` would
+    /// sit forever and playback silently freezes (no `Ended`, no `Error`). If a
+    /// synth outruns the deadline, abort and retry the SAME utterance a few
+    /// times; give up with an `Error` once retries are exhausted so the UI can
+    /// reflect the stop instead of showing a frozen "playing".
+    pub(super) fn check_synth_timeout(&mut self) {
+        let hung = matches!(
+            self.pending_started,
+            Some(t) if t.elapsed().as_secs() >= SYNTH_TIMEOUT_SECS
+        );
+        if self.pending.is_none() || !hung {
+            return;
+        }
+        self.abort_pending();
+        self.fail_current_synth("synth timeout".into());
+    }
+
+    /// The synth for the current utterance produced no audio (network error or
+    /// hang). Retry the SAME utterance a few times before giving up. Crucial:
+    /// `try_prefetch` already advanced `idx` past this utterance, so without
+    /// rewinding, a failure would silently drop it -- and a run of failures on a
+    /// flaky link drops several in a row, which is heard as the reader "skipping
+    /// a long portion" and resuming from a separate block. The caller must have
+    /// cleared `self.pending` already.
+    fn fail_current_synth(&mut self, reason: String) {
+        let idx = self
+            .pending_idx
+            .take()
+            .unwrap_or(self.idx.saturating_sub(1));
+        self.pending_range = None;
+        self.pending_page_break = None;
+        // Rewind to the failed utterance in BOTH cases: `try_prefetch` already
+        // stepped `idx` past it, so leaving it there drops the utterance. On a
+        // retry we re-synth it now; on give-up we stay anchored to it and pause,
+        // so pressing Play retries the same spot instead of skipping ahead. This
+        // is the guarantee that a synth failure never silently skips content.
+        self.idx = idx;
+        // Name the offending sentence in the log. Without it a "stops at the
+        // same place" report cannot be traced to a specific utterance, and the
+        // text is exactly what is needed to reproduce the synth off-device.
+        let snippet: String = self
+            .utterances
+            .get(idx)
+            .map(|u| u.text.chars().take(90).collect())
+            .unwrap_or_else(|| "<out of range>".into());
+        let chars = self
+            .utterances
+            .get(idx)
+            .map_or(0, |u| u.text.chars().count());
+        if self.synth_retries < MAX_SYNTH_RETRIES {
+            self.synth_retries += 1;
+            info!(
+                "audio: synth #{idx} failed ({reason}), retry {}/{MAX_SYNTH_RETRIES} | {chars} chars | {snippet:?}",
+                self.synth_retries
+            );
+        } else {
+            self.synth_retries = 0;
+            self.want_play = false;
+            info!(
+                "audio: synth #{idx} failed ({reason}), paused at utt (retries on resume) | {chars} chars | {snippet:?}"
+            );
+            send_event(&self.evt_tx, Event::Error(reason));
+        }
     }
 
     pub(super) async fn try_collect(&mut self) {
@@ -111,8 +183,10 @@ impl DriverState {
         let Some(h) = self.pending.take() else {
             return;
         };
+        self.pending_started = None;
         match h.await {
             Ok(Ok(prep)) => {
+                self.synth_retries = 0;
                 if let Some((s, e, para_end)) = self.pending_range.take() {
                     let synth_idx = self.pending_idx.unwrap_or(self.idx.saturating_sub(1));
                     self.ready_queue.push(ReadyUtt {
@@ -122,18 +196,19 @@ impl DriverState {
                         para_end,
                         page_break: self.pending_page_break.take(),
                     });
-                    info!("audio: TTS synth OK (utt #{synth_idx}, {} ready)", self.ready_queue.len());
+                    info!(
+                        "audio: TTS synth OK (utt #{synth_idx}, {} ready)",
+                        self.ready_queue.len()
+                    );
                 }
             }
             Ok(Err(e)) => {
                 info!("audio: TTS synth FAILED: {e}");
-                self.want_play = false;
-                send_event(&self.evt_tx, Event::Error(e));
+                self.fail_current_synth(e);
             }
             Err(e) => {
                 info!("audio: TTS synth task error: {e}");
-                self.want_play = false;
-                send_event(&self.evt_tx, Event::Error(format!("synth task: {e}")));
+                self.fail_current_synth(format!("synth task: {e}"));
             }
         }
     }
@@ -144,8 +219,9 @@ impl DriverState {
         }
         if !self.ready_queue.is_empty() {
             let u = self.ready_queue.remove(0);
-            let page_break_ticks = u.page_break
-                .and_then(|break_off| compute_page_break_ticks(&u.prep, break_off));
+            let page_break_ticks = u
+                .page_break
+                .and_then(|break_off| u.prep.tick_at_offset(break_off));
             send_event(
                 &self.evt_tx,
                 Event::Sentence {
@@ -181,6 +257,7 @@ impl DriverState {
                 if let Some(p) = self.player.as_mut() {
                     let extra = PARA_GAP_FRAMES.saturating_sub(SENTENCE_GAP_FRAMES);
                     let gap = vec![0i16; extra * 2];
+                    // best-effort: a dropped inter-sentence gap only tightens cadence
                     let _ = p.write_chunk(&gap).await;
                 }
             }
@@ -192,7 +269,8 @@ impl DriverState {
         };
 
         if let (Some(break_ticks), false) = (utt.page_break_ticks, utt.page_break_fired) {
-            let elapsed_ticks = (utt.pos as f64 / (kobo_core::audio::TARGET_RATE as f64 * 2.0) * 10_000_000.0) as u64;
+            let elapsed_ticks = (utt.pos as f64 / (kobo_core::audio::TARGET_RATE as f64 * 2.0)
+                * 10_000_000.0) as u64;
             if elapsed_ticks >= break_ticks {
                 utt.page_break_fired = true;
                 send_event(&self.evt_tx, Event::PageBreak);
@@ -259,18 +337,4 @@ impl DriverState {
         }
         tokio::time::sleep(Duration::from_millis(IDLE_SLEEP_MS)).await;
     }
-}
-
-fn compute_page_break_ticks(
-    prep: &kobo_core::audio::Prepared,
-    break_text_offset: usize,
-) -> Option<u64> {
-    let mut acc = 0usize;
-    for (ticks, word) in &prep.bounds {
-        if acc >= break_text_offset {
-            return Some(*ticks);
-        }
-        acc += word.len() + 1;
-    }
-    prep.bounds.last().map(|(t, _)| *t)
 }

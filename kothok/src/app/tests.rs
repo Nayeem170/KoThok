@@ -1,6 +1,50 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Nayeem Bin Ahsan
 use super::events::{resolve_progress_target, NavOutcome};
 
 use super::*;
+use crate::audio::Utterance;
+
+fn utt(start: usize, end: usize) -> Utterance {
+    Utterance {
+        text: String::new(),
+        start,
+        end,
+        para_end: false,
+        page_break: None,
+    }
+}
+
+#[test]
+fn resolve_start_target_finds_containing_utterance() {
+    let utts = [utt(0, 10), utt(10, 20), utt(20, 30)];
+    assert_eq!(resolve_start_target(5, &utts), 0);
+    assert_eq!(resolve_start_target(15, &utts), 1);
+    assert_eq!(resolve_start_target(25, &utts), 2);
+}
+
+#[test]
+fn resolve_start_target_at_boundary_starts_next() {
+    let utts = [utt(0, 10), utt(10, 20)];
+    assert_eq!(resolve_start_target(10, &utts), 1, "start of utt 1");
+}
+
+#[test]
+fn resolve_start_target_outside_returns_zero() {
+    let utts = [utt(10, 20), utt(30, 40)];
+    assert_eq!(
+        resolve_start_target(0, &utts),
+        0,
+        "before first -> fallback"
+    );
+    assert_eq!(resolve_start_target(25, &utts), 0, "in gap -> fallback");
+    assert_eq!(resolve_start_target(50, &utts), 0, "past last -> fallback");
+}
+
+#[test]
+fn resolve_start_target_empty_returns_zero() {
+    assert_eq!(resolve_start_target(5, &[]), 0);
+}
 
 #[test]
 fn sleep_plan_nevers_powers_bt_when_off() {

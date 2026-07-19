@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Nayeem Bin Ahsan
 use super::*;
 use crate::rendering::layout::ChapterState;
 use crate::Row;
@@ -41,15 +43,15 @@ fn sample_utterances() -> Vec<Utterance> {
             text: "Sentence one.".into(),
             start: 0,
             end: 10,
-                para_end: false,
-                page_break: None,
-            },
-            Utterance {
-                text: "Sentence two.".into(),
-                start: 12,
-                end: 25,
-                para_end: false,
-                page_break: None,
+            para_end: false,
+            page_break: None,
+        },
+        Utterance {
+            text: "Sentence two.".into(),
+            start: 12,
+            end: 25,
+            para_end: false,
+            page_break: None,
         },
         Utterance {
             text: "Sentence three.".into(),
@@ -75,6 +77,7 @@ fn make_chapter_state() -> ChapterState {
         pages: vec![(0, 2), (2, 4)],
         utterances: sample_utterances(),
         decoded_images: std::collections::HashMap::new(),
+        style_runs: Vec::new(),
     }
 }
 
@@ -218,6 +221,7 @@ fn page_utterances_spanning_stays_on_start_page() {
             },
         ],
         decoded_images: std::collections::HashMap::new(),
+        style_runs: Vec::new(),
     };
     let utts0 = page_utterances(0, &state);
     assert_eq!(utts0.len(), 1, "spanning sentence on its start page");
@@ -272,6 +276,7 @@ fn page_utterances_spanning_attributed_to_start_page() {
             },
         ],
         decoded_images: std::collections::HashMap::new(),
+        style_runs: Vec::new(),
     };
     let p0 = page_utterances(0, &state);
     let p1 = page_utterances(1, &state);
@@ -288,6 +293,7 @@ fn page_utterances_empty_chapter() {
         pages: vec![(0, 0)],
         utterances: vec![],
         decoded_images: std::collections::HashMap::new(),
+        style_runs: Vec::new(),
     };
     assert!(page_utterances(0, &state).is_empty());
 }

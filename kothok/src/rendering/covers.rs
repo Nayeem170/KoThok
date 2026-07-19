@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Nayeem Bin Ahsan
 use slint::platform::software_renderer::Rgb565Pixel;
 
 use kobo_core::EpubBook;
@@ -7,10 +9,12 @@ use crate::rendering::text_render;
 
 use crate::rendering::common::rgb565_as_bytes;
 use crate::rendering::draw::{measure_text, paint_placeholder_box};
-use crate::rendering::splash::{paint_kothok_splash, splash_png};
+use crate::rendering::splash::{paint_kothok_splash, splash_cover};
 
-pub type CoverCache =
-    std::collections::HashMap<(String, usize, usize), Option<crate::rendering::text_render::DecodedImage>>;
+pub type CoverCache = std::collections::HashMap<
+    (String, usize, usize),
+    Option<crate::rendering::text_render::DecodedImage>,
+>;
 
 fn resolve_cover(
     cover_bytes: Option<&[u8]>,
@@ -19,7 +23,7 @@ fn resolve_cover(
 ) -> Option<crate::rendering::text_render::DecodedImage> {
     cover_bytes
         .and_then(|b| text_render::decode_image(b, max_w, max_h))
-        .or_else(|| text_render::decode_image(splash_png(), max_w, max_h))
+        .or_else(|| splash_cover(max_w, max_h))
 }
 
 pub(crate) fn paint_cover_cached(
@@ -130,4 +134,22 @@ pub fn cover_image(cover_bytes: Option<&[u8]>, max_w: usize, max_h: usize) -> sl
         img.height as u32,
     );
     slint::Image::from_rgb8(pb)
+}
+
+/// Decoded cover art for the audio-mode disk, sized for a `size`-px disk.
+///
+/// Falls back to the KoThok splash art when a book has no cover of its own, so
+/// the disk centre is never empty. The caller crops it to a circle, and the crop
+/// applies to whichever image comes back.
+pub fn disk_cover(
+    book_path: &str,
+    size: usize,
+) -> Option<crate::rendering::text_render::DecodedImage> {
+    if book_path.is_empty() || size == 0 {
+        return None;
+    }
+    let raw = EpubBook::cover_bytes(book_path);
+    // `max_h` is generous: the disk samples the image's short edge, so the art
+    // only has to be at least `size` across that edge to fill the circle.
+    resolve_cover(raw.as_deref(), size, size * 4)
 }
