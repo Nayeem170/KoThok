@@ -63,7 +63,7 @@ pub fn content_h() -> i32 {
 }
 
 pub const VERSION: &str = "1.0.0";
-pub const BUILD_TAG: &str = "L161-lazy-cjk-fonts";
+pub const BUILD_TAG: &str = "L162-published-deps";
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ViewMode {
