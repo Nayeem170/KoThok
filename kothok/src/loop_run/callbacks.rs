@@ -23,6 +23,13 @@ pub(super) fn process_loop_callbacks(st: &mut LoopState, ctx: &mut LoopContext) 
             st.pending_tap_at = None;
         }
     }
+    // Snapshot the page BEFORE both audio-driven and manual page changes.
+    // Reading this after process_audio_events hid TTS auto-advance from the
+    // status-clear below: a "Bookmarked page 42" footer stayed pinned while
+    // the page number underneath silently advanced. Capturing up front lets
+    // either kind of turn retire a stale status line.
+    let pre_nav_ch = st.current_chapter;
+    let pre_nav_pg = st.current_page;
     let af = process_audio_events(st, ctx.evt_rx, reader, cmd_tx);
     ui_changed |= af.ui_changed;
     page_changed |= af.page_changed;
@@ -37,8 +44,6 @@ pub(super) fn process_loop_callbacks(st: &mut LoopState, ctx: &mut LoopContext) 
             st.reading_end = ce as usize;
         }
     }
-    let pre_nav_ch = st.current_chapter;
-    let pre_nav_pg = st.current_page;
     let (nav_text, nav_ui) =
         process_page_navigation(st, reader, cmd_tx, &cb.page_delta, &cb.progress_target);
     st.text_dirty |= nav_text;
