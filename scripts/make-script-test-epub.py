@@ -22,7 +22,7 @@ import sys
 import zipfile
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-OUT = os.path.join(SCRIPT_DIR, "script-test.epub")
+OUT = os.path.normpath(os.path.join(SCRIPT_DIR, "..", "kothok", "samples", "script-test.epub"))
 SAMPLES_SUBDIR = "samples"
 
 # (script label, required font file, sample text)
