@@ -6,13 +6,24 @@ classifies each paragraph independently, so one mixed book exercises every face
 and every fallback path in a single open. A missing face shows up immediately as
 a row of blank boxes next to its label.
 
+With --deploy, also copies the EPUB to <kobo>/samples after building, auto-
+detecting the USB mount the same way kothok/scripts/deploy.ps1 does (a .adds or
+.kobo marker at the drive root). An MD5 mismatch after copy aborts.
+
 The script names mirror `Script` in kobo-core; the font column names the face
 that must be present in `.adds/fonts` for that row to render.
 """
+import argparse
+import hashlib
 import os
+import shutil
+import string
+import sys
 import zipfile
 
-OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "script-test.epub")
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+OUT = os.path.join(SCRIPT_DIR, "script-test.epub")
+SAMPLES_SUBDIR = "samples"
 
 # (script label, required font file, sample text)
 SAMPLES = [
@@ -42,6 +53,62 @@ SAMPLES = [
     ("Korean", "NotoSansKR.ttf", "안녕하세요 세계, 오늘 좋은 책을 읽고 있습니다."),
     ("Chinese", "NotoSansSC.ttf", "你好世界，我今天在读一本好书。"),
 ]
+
+def find_kobo():
+    """Return the mounted Kobo onboard root, or None.
+
+    Mirrors Find-Kobo in kothok/scripts/deploy.ps1: any filesystem root that
+    carries a .adds or .kobo marker is treated as the device.
+    """
+    if sys.platform == "win32":
+        for letter in string.ascii_uppercase:
+            root = f"{letter}:\\"
+            if _looks_like_kobo(root):
+                return root
+        return None
+
+    bases = ["/Volumes"] if sys.platform == "darwin" else ["/media", "/run/media"]
+    for base in bases:
+        if not os.path.isdir(base):
+            continue
+        for user in os.listdir(base):
+            user_dir = os.path.join(base, user)
+            if not os.path.isdir(user_dir):
+                continue
+            for name in os.listdir(user_dir):
+                mount = os.path.join(user_dir, name)
+                if _looks_like_kobo(mount):
+                    return mount
+    return None
+
+
+def _looks_like_kobo(root):
+    return os.path.isdir(root) and (
+        os.path.isdir(os.path.join(root, ".adds"))
+        or os.path.isdir(os.path.join(root, ".kobo"))
+    )
+
+
+def md5_of(path):
+    h = hashlib.md5()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def deploy(kobo_root):
+    dest_dir = os.path.join(kobo_root, SAMPLES_SUBDIR)
+    os.makedirs(dest_dir, exist_ok=True)
+    target = os.path.join(dest_dir, os.path.basename(OUT))
+    shutil.copy2(OUT, target)
+    src = md5_of(OUT)
+    dst = md5_of(target)
+    if src != dst:
+        print(f"ERROR: MD5 mismatch after copy (src={src} dst={dst})", file=sys.stderr)
+        sys.exit(1)
+    print(f"deployed -> {target} ({os.path.getsize(target)} bytes, md5 {src})")
+
 
 CONTAINER = """<?xml version="1.0"?>
 <container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
@@ -119,5 +186,31 @@ def build():
     print(f"wrote {OUT} ({os.path.getsize(OUT)} bytes, {len(SAMPLES)} passages)")
 
 
-if __name__ == "__main__":
+def main():
+    parser = argparse.ArgumentParser(
+        description="Build a multi-script EPUB for font/render testing on Kobo.",
+    )
+    parser.add_argument(
+        "--deploy", action="store_true",
+        help=f"copy the built EPUB to <kobo>/{SAMPLES_SUBDIR} after building",
+    )
+    parser.add_argument(
+        "--kobo", metavar="PATH",
+        help="explicit Kobo mount root (default: auto-detect via .adds/.kobo marker)",
+    )
+    args = parser.parse_args()
+
     build()
+
+    if args.deploy:
+        kobo = args.kobo or find_kobo()
+        if not kobo:
+            print("ERROR: Kobo not found. Plug it in or pass --kobo PATH.",
+                  file=sys.stderr)
+            sys.exit(1)
+        print(f"kobo: {kobo}")
+        deploy(kobo)
+
+
+if __name__ == "__main__":
+    main()
