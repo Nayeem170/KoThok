@@ -63,7 +63,7 @@ pub fn content_h() -> i32 {
 }
 
 pub const VERSION: &str = "1.0.0";
-pub const BUILD_TAG: &str = "L162-published-deps";
+pub const BUILD_TAG: &str = "L163-fix-audio-panel-close";
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ViewMode {

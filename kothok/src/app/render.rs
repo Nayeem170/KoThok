@@ -131,7 +131,17 @@ pub fn render_and_present(
             && !st.picker_active
             && audio;
         st.disk_spin_only = false;
-        if spin_only || (st.disk_settle && audio && !st.panel_open && !st.picker_active) {
+        // A panel/mode transition presents the whole screen on GC16, which
+        // already clears the disk's A2 ghosting - so a pending `disk_settle`
+        // (set when opening the panel stops the spinning disk) is redundant and
+        // must NOT take the disk-only early-return path, or the close present is
+        // skipped and the panel pixels are never cleared ("menu not closing").
+        if panel_transition {
+            st.disk_settle = false;
+        }
+        if spin_only
+            || (st.disk_settle && !panel_transition && audio && !st.panel_open && !st.picker_active)
+        {
             let settle = !spin_only;
             st.disk_settle = false;
             // The grains moved, so each rect moves with its own: it spans that
