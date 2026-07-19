@@ -89,6 +89,26 @@ Copy-Item -LiteralPath $runSh  -Destination (Join-Path $stage 'mnt\onboard\.adds
 Copy-Item -LiteralPath $nmCfg  -Destination (Join-Path $stage 'mnt\onboard\.adds\nm\config')
 Copy-Item -LiteralPath $libnm  -Destination (Join-Path $stage 'usr\local\Kobo\imageformats\libnm.so')
 
+# --- fonts ------------------------------------------------------------------
+# Every script's face ships with the install so reading never needs a network
+# connection - only read-aloud does. Fetch them with scripts/fetch-fonts.ps1.
+$fontSrc = Join-Path $PackageDir 'fonts'
+if (-not (Test-Path $fontSrc)) {
+    throw @"
+No fonts staged at $fontSrc.
+Run scripts\fetch-fonts.ps1 first - without them every non-Latin script renders
+as blank boxes on the device.
+"@
+}
+$fontFiles = Get-ChildItem $fontSrc -Filter '*.ttf'
+if ($fontFiles.Count -eq 0) { throw "No .ttf files in $fontSrc" }
+
+$fontDst = Join-Path $stage 'mnt\onboard\.adds\fonts'
+New-Item -ItemType Directory -Force -Path $fontDst | Out-Null
+foreach ($f in $fontFiles) { Copy-Item -LiteralPath $f.FullName -Destination $fontDst }
+Write-Host ("  fonts: {0} face(s), {1} MB" -f $fontFiles.Count,
+    [math]::Round(($fontFiles | Measure-Object Length -Sum).Sum / 1MB, 1))
+
 $verFile = Join-Path $stage 'mnt\onboard\.adds\kothok-version'
 "KoThok $Version ($BuildTag)`r`nbuild: $BuildTag`r`nbuilt: $(Get-Date -Format o)" | Set-Content -LiteralPath $verFile -NoNewline:$false
 
@@ -118,6 +138,16 @@ $result = wsl.exe -e bash -lc $tarCmd
 if ($LASTEXITCODE -ne 0 -or ($result -notcontains 'TARBUILT')) {
     throw "WSL tar failed:`n$result"
 }
+
+# --- font archive ------------------------------------------------------------
+# The tarball covers a first install, but an update only replaces the binary -
+# so an existing device would keep whatever font set it was installed with.
+# Shipping the faces separately lets the installer top up an update in place.
+$fontZip = Join-Path $dist 'kothok-fonts.zip'
+if (Test-Path $fontZip) { Remove-Item -LiteralPath $fontZip -Force }
+Compress-Archive -Path (Join-Path $fontSrc '*.ttf') -DestinationPath $fontZip
+Write-Host ("Fonts: {0} ({1} MB)" -f $fontZip,
+    [math]::Round((Get-Item -LiteralPath $fontZip).Length / 1MB, 2))
 
 # --- report ------------------------------------------------------------------
 $tgz = Join-Path $dist $outName

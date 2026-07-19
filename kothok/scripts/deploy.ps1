@@ -27,6 +27,7 @@ $ScriptDir  = Split-Path -Parent $PSCommandPath
 $ProjectDir = Split-Path -Parent $ScriptDir
 $Binary     = Join-Path $ProjectDir 'target\armv7-unknown-linux-musleabihf\release\kothok'
 $Libnm      = Join-Path $ScriptDir '..\package\assets\libnm.so'
+$FontSrc    = Join-Path $ScriptDir '..\package\fonts'
 
 function Step($msg)  { Write-Host "`n  $msg" -ForegroundColor White }
 function Ok($msg)    { Write-Host "  [OK] $msg" -ForegroundColor Green }
@@ -37,6 +38,37 @@ function Fail($msg)  {
     Write-Host ""
     exit 1
 }
+
+# Keep the device's font set in step with the binary. The app looks faces up by
+# name from FONT_SPECS, so a binary that knows 23 scripts on a device carrying
+# five renders the other eighteen as blank boxes - and nothing in the app
+# reports that, it just draws nothing.
+function Sync-Fonts($fontSrc, $addsDir) {
+    if (-not (Test-Path -LiteralPath $fontSrc)) {
+        Info "No fonts staged at $fontSrc - run scripts\fetch-fonts.ps1"
+        Info "Non-Latin books will render as blank boxes."
+        return
+    }
+    $faces = Get-ChildItem -LiteralPath $fontSrc -Filter '*.ttf'
+    if ($faces.Count -eq 0) { return }
+
+    $fontDir = Join-Path $addsDir 'fonts'
+    New-Item -ItemType Directory -Force -Path $fontDir | Out-Null
+
+    $copied = 0
+    foreach ($f in $faces) {
+        $dest = Join-Path $fontDir $f.Name
+        if ((Test-Path -LiteralPath $dest) -and ((Get-Item -LiteralPath $dest).Length -eq $f.Length)) {
+            continue
+        }
+        Copy-Item -LiteralPath $f.FullName -Destination $dest -Force
+        $copied++
+    }
+    $total = (Get-ChildItem -LiteralPath $fontDir -Filter '*.ttf').Count
+    if ($copied -gt 0) { Ok "Fonts: $total on device ($copied updated)" }
+    else { Info "Fonts: $total on device (all current)" }
+}
+
 function Find-Kobo {
     if ($IsWindows -or $PSVersionTable.Platform -ne 'Unix') {
         $d = Get-PSDrive -PSProvider FileSystem | Where-Object {
@@ -211,6 +243,16 @@ if ($isFirstInstall) {
     Copy-Item -LiteralPath $nmCfg  -Destination (Join-Path $stage 'mnt\onboard\.adds\nm\config')
     Copy-Item -LiteralPath $Libnm  -Destination (Join-Path $stage 'usr\local\Kobo\imageformats\libnm.so')
 
+    if (Test-Path -LiteralPath $FontSrc) {
+        $stagedFonts = Join-Path $stage 'mnt\onboard\.adds\fonts'
+        New-Item -ItemType Directory -Force -Path $stagedFonts | Out-Null
+        $faces = Get-ChildItem -LiteralPath $FontSrc -Filter '*.ttf'
+        foreach ($f in $faces) { Copy-Item -LiteralPath $f.FullName -Destination $stagedFonts }
+        Info "Bundling $($faces.Count) font face(s)"
+    } else {
+        Info "No fonts staged - run scripts\fetch-fonts.ps1 for non-Latin scripts"
+    }
+
     $verFile = Join-Path $stage 'mnt\onboard\.adds\kothok-version'
     "KoThok $version ($buildTag)" | Set-Content -LiteralPath $verFile
 
@@ -257,6 +299,8 @@ else {
     if ($hostHash -ne $devHash) {
         Fail "MD5 mismatch! host=$hostHash dev=$devHash"
     }
+
+    Sync-Fonts $FontSrc $addsDir
 
     Write-Host ""
     Write-Host "  ============================" -ForegroundColor Green

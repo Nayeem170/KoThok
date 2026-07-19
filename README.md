@@ -2,11 +2,15 @@
 
 ![platform](https://img.shields.io/badge/platform-Kobo%20e--ink-blue)
 ![Rust](https://img.shields.io/badge/Rust-stable-orange)
-![license](https://img.shields.io/badge/license-MIT-green)
+![license](https://img.shields.io/badge/license-PolyForm--NC-green)
 
 A custom e-reader application for **Kobo devices** (Clara Colour, Libra Colour,
 and all MTK/NXP models), written in Rust. Renders directly to the e-ink
 framebuffer with Bluetooth (A2DP) audio / read-aloud via Microsoft Edge TTS.
+
+Reading works offline. **Read-aloud needs WiFi** - the voices are synthesized
+by Microsoft Edge's TTS service over the internet. Bluetooth A2DP speaker
+required for audio output.
 
 KoThok is launched from a NickelMenu entry; it stops the stock "nickel" UI on
 entry and reboots back to nickel on exit.
@@ -21,7 +25,7 @@ can be reused in other projects.
 flowchart TD
     APP["<b>kothok-app</b><br/>Reader UI | audio | books"]
     CORE["<b>kobo-core</b><br/>Device SDK | A2DP | e-ink"]
-    TTS["<b>kothok-edge-tts</b><br/>Edge TTS | 400+ voices"]
+    TTS["<b>kothok-edge-tts</b><br/>Edge TTS | 300+ voices"]
 
     APP ==>|"depends on"| CORE
     CORE -->|"uses"| TTS
@@ -33,9 +37,10 @@ flowchart TD
 
 | Repo | Role |
 |---|---|
-| **EReader** (this) | Reader app: Slint UI, main loop, audio driver, book picker, control panel |
-| [**kobo-core**](https://crates.io/crates/kobo-core) | Device SDK: framebuffer, touch, frontlight, fonts, EPUB, A2DP audio |
-| [**kothok-edge-tts**](https://crates.io/crates/kothok-edge-tts) | Edge TTS client: WebSocket protocol, 400+ voices, MP3 + word boundaries |
+| [**KoThok**](https://github.com/Nayeem170/KoThok) (this) | Reader app: Slint UI, main loop, audio driver, book picker, control panel |
+| [**kobo-core**](https://github.com/Nayeem170/kobo-core) ([crates.io](https://crates.io/crates/kobo-core)) | Device SDK: framebuffer, touch, frontlight, fonts, EPUB, A2DP audio |
+| [**kothok-edge-tts**](https://github.com/Nayeem170/kothok-edge-tts) ([crates.io](https://crates.io/crates/kothok-edge-tts)) | Edge TTS client: WebSocket protocol, 300+ voices, MP3 + word boundaries |
+| [**kothok-site**](https://github.com/Nayeem170/kothok-site) | Marketing site and 3D demo |
 
 ## What's new
 
@@ -128,7 +133,7 @@ graph LR
 ## Repository layout
 
 ```
-EReader/
+KoThok/
 ├─ installer/                     install scripts (download from website)
 │  ├─ install.bat                 Windows launcher
 │  ├─ install.command             macOS launcher
@@ -177,4 +182,6 @@ pwsh kothok/scripts/deploy.ps1
 
 ## License
 
-MIT
+KoThok app: **PolyForm-Noncommercial-1.0.0** (source-available, non-commercial).
+[kobo-core](https://github.com/Nayeem170/kobo-core) and
+[kothok-edge-tts](https://github.com/Nayeem170/kothok-edge-tts): **MIT**.
