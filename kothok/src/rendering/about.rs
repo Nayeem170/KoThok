@@ -101,6 +101,12 @@ pub fn show_about(fb: &Fb, buffer: &mut [Rgb565Pixel], device_model: &str) {
         y,
         HINT,
     );
+    y += 20;
+
+    for line in &["KoThok@bitops.bd", "github.com/Nayeem170/kothok"] {
+        y += text_center(buf, w, h, line, dpf(23.0), cx, y, INK);
+        y += 10;
+    }
 
     draw_h_line(buf, w, cx - 300, y + 40, 600, DIVIDER);
     y += 72;
@@ -112,14 +118,16 @@ pub fn show_about(fb: &Fb, buffer: &mut [Rgb565Pixel], device_model: &str) {
     y += text_center(buf, w, h, "Software Engineer", dpf(22.0), cx, y, MUTED);
     y += 28;
 
-    for line in &[
-        "nayeemasis@hotmail.com",
-        "github.com/Nayeem170/kothok",
+    y += text_center(
+        buf,
+        w,
+        h,
         "linkedin.com/in/nayeembinahsan",
-    ] {
-        y += text_center(buf, w, h, line, dpf(23.0), cx, y, INK);
-        y += 10;
-    }
+        dpf(23.0),
+        cx,
+        y,
+        INK,
+    );
 
     y += 20;
     text_center(

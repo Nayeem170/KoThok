@@ -119,6 +119,9 @@ pub(super) fn process_loop_callbacks(st: &mut LoopState, ctx: &mut LoopContext) 
         reader.set_panel_open(true);
         reader.set_battery_pct(ctx.caps.battery_pct());
         reader.set_clock(SharedString::from(ctx.caps.current_clock()));
+        reader.set_sleep_label(
+            crate::panel::callbacks::sleep::sleep_label(ctx.cfg.reading_auto_sleep_secs).into(),
+        );
         if let Some(ref path) = ctx.fl_path {
             if let Some(hw) = frontlight_get(path) {
                 reader.set_brightness_val(hw as i32);
