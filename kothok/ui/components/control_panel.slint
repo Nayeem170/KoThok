@@ -152,9 +152,10 @@ export component ControlPanel inherits Rectangle {
         SelectorRow {
             label: root.tts-voice-label;
             on-state: true;
-            center-active: true;
+            connected: true;
             center-toggle: false;
             brand-green: root.brand-green;
+            brand-red: root.brand-red;
             bg-off: root.bg-off;
             bg-pressed: root.bg-pressed;
             prev => { root.panel-voice("prev"); }
@@ -201,11 +202,15 @@ export component ControlPanel inherits Rectangle {
         }
 
         SelectorRow {
-            label: root.wifi-name != "" ? root.wifi-name : (root.wifi-on ? "WiFi On" : "WiFi Off");
+            label: !root.wifi-on ? "WiFi Off"
+                : (root.wifi-name != "" && root.wifi-name == root.wifi-connected-name
+                   ? "connected to " + root.wifi-name
+                   : (root.wifi-name != "" ? "connecting to " + root.wifi-name : "WiFi connecting..."));
             on-state: root.wifi-on;
-            center-active: root.wifi-on && root.wifi-name == root.wifi-connected-name;
+            connected: root.wifi-on && root.wifi-name != "" && root.wifi-name == root.wifi-connected-name;
             center-toggle: true;
             brand-green: root.brand-green;
+            brand-red: root.brand-red;
             bg-off: root.bg-off;
             bg-pressed: root.bg-pressed;
             prev => { root.panel-wifi-cycle("prev"); }
@@ -214,11 +219,15 @@ export component ControlPanel inherits Rectangle {
         }
 
         SelectorRow {
-            label: root.bt-name != "" ? root.bt-name : (root.bt-on ? "BT On" : "BT Off");
+            label: !root.bt-on ? "BT Off"
+                : (root.bt-name != "" && root.bt-name == root.bt-connected-name
+                   ? "connected to " + root.bt-name
+                   : (root.bt-name != "" ? "connecting to " + root.bt-name : "BT connecting..."));
             on-state: root.bt-on;
-            center-active: root.bt-on && root.bt-name == root.bt-connected-name;
+            connected: root.bt-on && root.bt-name != "" && root.bt-name == root.bt-connected-name;
             center-toggle: true;
             brand-green: root.brand-green;
+            brand-red: root.brand-red;
             bg-off: root.bg-off;
             bg-pressed: root.bg-pressed;
             prev => { root.panel-bt-cycle("prev"); }
