@@ -32,7 +32,18 @@ pub(super) fn open_book_from_picker(
     st.chapters = loaded_chapters;
     crate::rendering::render::set_rtl(is_rtl(book_lang.as_deref()));
     if let Some(msg) = crate::device::fonts::ensure_font_for_script(book_lang.as_deref(), "") {
-        reader.set_status(msg.into());
+        let status = if crate::device::wifi::wifi_status() {
+            let script = book_lang
+                .as_deref()
+                .map(crate::device::fonts::script_for_lang)
+                .unwrap_or(kobo_core::rendering::text_render::Script::Latin);
+            let label = crate::device::fonts::font_label_for_script(script).unwrap_or("script");
+            st.font_download_rx = Some(crate::device::font_download::spawn(script));
+            format!("Downloading {} font...", label)
+        } else {
+            msg
+        };
+        reader.set_status(status.into());
         window.request_redraw();
         window.draw_if_needed(|r| {
             r.render(&mut st.buffer, w);

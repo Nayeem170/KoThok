@@ -37,6 +37,7 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 bincode = "1"
+ureq = { version = "2", features = ["tls"] }
 
 [build-dependencies]
 slint-build = "=1.8.0"

@@ -218,5 +218,25 @@ pub(super) fn process_loop_callbacks(st: &mut LoopState, ctx: &mut LoopContext) 
 
     jump::handle_jump_to_reading(st, reader, cb, cmd_tx, ctx);
 
+    if let Some(rx) = st.font_download_rx.take() {
+        match rx.try_recv() {
+            Ok(result) => {
+                if result.ok {
+                    info!("font-dl: {:?} installed, re-rendering", result.script);
+                    reader.set_status(Default::default());
+                    st.text_dirty = true;
+                    ui_changed = true;
+                } else {
+                    reader.set_status("Font download failed".into());
+                    ui_changed = true;
+                }
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => {
+                st.font_download_rx = Some(rx);
+            }
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => {}
+        }
+    }
+
     (ui_changed, page_changed)
 }
