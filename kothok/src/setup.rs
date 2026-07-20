@@ -214,6 +214,9 @@ fn init_reader_and_config(w: usize, hw_cfg: &hw::DeviceConfig) -> ReaderSetup {
     reader.set_tts_voice(SharedString::from(cfg.tts_voice.clone()));
     reader.set_tts_speed(cfg.tts_rate);
     reader.set_font_size_val(cfg.font_size);
+    reader.set_sleep_label(
+        crate::panel::callbacks::sleep::sleep_label(cfg.reading_auto_sleep_secs).into(),
+    );
     let caps = KoboCapabilities;
     reader.set_wifi_on(caps.network_available());
     reader.set_bt_on(caps.audio_sink_available());

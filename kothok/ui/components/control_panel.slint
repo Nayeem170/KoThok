@@ -15,6 +15,7 @@ export component ControlPanel inherits Rectangle {
     in property <string> bt-name: "";
     in property <string> wifi-connected-name: "";
     in property <string> bt-connected-name: "";
+    in property <string> sleep-label: "Off";
     in property <string> clock: "";
     in property <int> battery-pct: 0;
     in property <string> book-title: "";
@@ -50,6 +51,7 @@ export component ControlPanel inherits Rectangle {
     callback panel-bt-toggle();
     callback panel-wifi-cycle(string);
     callback panel-bt-cycle(string);
+    callback panel-sleep-cycle(string);
 
     visible: root.visible-flag;
     background: #ffffff;
@@ -128,6 +130,19 @@ export component ControlPanel inherits Rectangle {
             value-text: root.font-size-val + "px";
             fill-frac: (root.font-size-val - 20) / 40.0;
             set-frac(f) => { root.panel-frac(2, f); }
+        }
+
+        SelectorRow {
+            label: "Sleep: " + root.sleep-label;
+            on-state: true;
+            connected: true;
+            center-toggle: false;
+            brand-green: root.brand-green;
+            brand-red: root.brand-red;
+            bg-off: root.bg-off;
+            bg-pressed: root.bg-pressed;
+            prev => { root.panel-sleep-cycle("prev"); }
+            next => { root.panel-sleep-cycle("next"); }
         }
 
         HorizontalLayout {

@@ -26,6 +26,7 @@ const KEY_TTS_RATE: &str = "tts_rate";
 const KEY_VOLUME: &str = "volume";
 const KEY_BRIGHTNESS: &str = "brightness";
 const KEY_NATURAL_SCROLL: &str = "natural_scroll";
+const KEY_READING_AUTO_SLEEP: &str = "reading_auto_sleep";
 const KEY_VOICE_PREFIX: &str = "voice.";
 
 const TTS_RATE_DEFAULT: i32 = 60;
@@ -43,6 +44,10 @@ pub struct AppConfig {
     pub voices: HashMap<String, String>,
     /// Natural scroll (content follows finger). false = inverted/standard-list.
     pub natural_scroll: bool,
+    /// Auto-sleep delay in reading mode, in seconds. 0 = never (screen stays on
+    /// until the power button). Matches e-reader convention: e-ink draws nothing
+    /// when static, so the only drain is the frontlight the reader needs anyway.
+    pub reading_auto_sleep_secs: u32,
 }
 
 impl Default for AppConfig {
@@ -56,6 +61,7 @@ impl Default for AppConfig {
             brightness: 50,
             voices: HashMap::new(),
             natural_scroll: true,
+            reading_auto_sleep_secs: 0,
         }
     }
 }
@@ -98,6 +104,10 @@ pub fn load_config_from_base(path: &str, base_font: i32) -> AppConfig {
                         .clamp(0, 100)
                 }
                 KEY_NATURAL_SCROLL => cfg.natural_scroll = val == "1" || val == "true",
+                KEY_READING_AUTO_SLEEP => {
+                    cfg.reading_auto_sleep_secs =
+                        val.parse::<u32>().unwrap_or(0).min(3600)
+                }
                 _ if key.starts_with(KEY_VOICE_PREFIX) => {
                     let lang = key.trim_start_matches(KEY_VOICE_PREFIX).to_string();
                     if !lang.is_empty() {
@@ -113,9 +123,10 @@ pub fn load_config_from_base(path: &str, base_font: i32) -> AppConfig {
 
 pub fn save_config_to(cfg: &AppConfig, path: &str) {
     let mut data = format!(
-        "{KEY_FONT_SIZE}={}\n{KEY_TTS_LANG}={}\n{KEY_TTS_VOICE}={}\n{KEY_TTS_RATE}={}\n{KEY_VOLUME}={}\n{KEY_BRIGHTNESS}={}\n{KEY_NATURAL_SCROLL}={}\n",
+        "{KEY_FONT_SIZE}={}\n{KEY_TTS_LANG}={}\n{KEY_TTS_VOICE}={}\n{KEY_TTS_RATE}={}\n{KEY_VOLUME}={}\n{KEY_BRIGHTNESS}={}\n{KEY_NATURAL_SCROLL}={}\n{KEY_READING_AUTO_SLEEP}={}\n",
         cfg.font_size, cfg.tts_lang, cfg.tts_voice, cfg.tts_rate, cfg.volume, cfg.brightness,
-        if cfg.natural_scroll { 1 } else { 0 }
+        if cfg.natural_scroll { 1 } else { 0 },
+        cfg.reading_auto_sleep_secs
     );
     for (lang, voice) in &cfg.voices {
         data.push_str(&format!("{KEY_VOICE_PREFIX}{lang}={voice}\n"));
@@ -231,6 +242,26 @@ mod tests {
         assert_eq!(cfg.volume, 0, "volume clamped to min");
         assert_eq!(cfg.brightness, 100);
         let _ = std::fs::remove_file(&p);
+    }
+
+    #[test]
+    fn config_reading_auto_sleep_roundtrip() {
+        let p = tmp_path("sleep");
+        let mut cfg = AppConfig::default();
+        cfg.reading_auto_sleep_secs = 300;
+        save_config_to(&cfg, &p);
+        let loaded = load_config_from_base(&p, 36);
+        assert_eq!(loaded.reading_auto_sleep_secs, 300);
+        let _ = std::fs::remove_file(&p);
+    }
+
+    #[test]
+    fn config_reading_auto_sleep_defaults_off() {
+        assert_eq!(
+            AppConfig::default().reading_auto_sleep_secs,
+            0,
+            "reading auto-sleep defaults to off"
+        );
     }
 
     #[test]

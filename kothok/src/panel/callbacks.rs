@@ -3,6 +3,7 @@
 mod chapters;
 mod connectivity;
 mod font;
+pub(crate) mod sleep;
 mod sliders;
 mod voice;
 
@@ -32,6 +33,7 @@ pub fn process_panel_callbacks(
     connectivity::ensure_wifi_bt_lists(st, reader);
     connectivity::handle_wifi(reader, st, &cb.wifi_toggle_cell, &cb.wifi_cycle_cell);
     connectivity::handle_bt(reader, st, &cb.bt_toggle_cell, &cb.bt_cycle_cell);
+    sleep::handle_sleep_cycle(reader, cfg, &cb.sleep_cycle_cell);
     text_dirty |= chapters::handle_chapter_overlay(st, reader, cmd_tx, cb);
 
     text_dirty

@@ -306,8 +306,22 @@ pub(super) fn auto_sleep(st: &mut LoopState, ctx: &mut LoopContext) -> LoopFlow 
         return LoopFlow::Normal;
     }
 
-    if !reader.get_playing() && st.last_activity.elapsed().as_secs() > AUTO_SLEEP_SECS {
-        if st.view_mode == crate::ViewMode::Audio {
+    let audio_mode = st.view_mode == crate::ViewMode::Audio;
+    // Audio mode locks at the fixed 60s (you are listening, not looking, so
+    // dimming the frontlight saves battery). Reading mode uses the user-
+    // configured value; 0 means never -- e-ink draws nothing when static, and
+    // the reader needs the frontlight on to read, so auto-sleep there only
+    // interrupts the experience.
+    let sleep_threshold = if audio_mode {
+        AUTO_SLEEP_SECS
+    } else {
+        ctx.cfg.reading_auto_sleep_secs as u64
+    };
+    if !reader.get_playing()
+        && sleep_threshold > 0
+        && st.last_activity.elapsed().as_secs() > sleep_threshold
+    {
+        if audio_mode {
             st.system_state = SystemState::Locked;
             st.lock_time = Some(std::time::Instant::now());
             reader.set_audio_locked(true);

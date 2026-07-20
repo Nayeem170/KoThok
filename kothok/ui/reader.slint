@@ -62,6 +62,7 @@ export component Reader inherits Window {
     in-out property <string> bt-name: "";
     in-out property <string> wifi-connected-name: "";
     in-out property <string> bt-connected-name: "";
+    in-out property <string> sleep-label: "Off";
     in-out property <bool> chapter-overlay-open: false;
     in-out property <[ChapterItem]> chapter-items;
     in-out property <int> current-chapter-idx: 0;
@@ -90,6 +91,7 @@ export component Reader inherits Window {
     callback panel-bt-toggle();
     callback panel-wifi-cycle(string);
     callback panel-bt-cycle(string);
+    callback panel-sleep-cycle(string);
     callback panel-chapters();
     callback progress-tap(float);
     callback panel-frac(int, float);
@@ -208,6 +210,7 @@ export component Reader inherits Window {
         bt-name: root.bt-name;
         wifi-connected-name: root.wifi-connected-name;
         bt-connected-name: root.bt-connected-name;
+        sleep-label: root.sleep-label;
         clock: root.clock;
         battery-pct: root.battery-pct;
         book-title: root.book-title;
@@ -241,6 +244,7 @@ export component Reader inherits Window {
         panel-bt-toggle => { root.panel-bt-toggle(); }
         panel-wifi-cycle(s) => { root.panel-wifi-cycle(s); }
         panel-bt-cycle(s) => { root.panel-bt-cycle(s); }
+        panel-sleep-cycle(s) => { root.panel-sleep-cycle(s); }
     }
 
     chapter-overlay := ChapterOverlay {
