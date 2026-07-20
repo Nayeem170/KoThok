@@ -386,3 +386,54 @@ fn load_page_audio_out_of_range_page_sends_empty_reload() {
         other => panic!("expected Reload, got {other:?}"),
     }
 }
+
+#[test]
+fn no_utterance_dropped_across_all_pages_realistic_text() {
+    use crate::rendering::layout::{build_state, BODY_PX};
+    use kobo_core::Chapter;
+
+    let paras = [
+        "In a hole in the ground there lived a hobbit. Not a nasty, dirty, wet hole, filled with the ends of worms and an oozy smell, nor yet a dry, bare, sandy hole with nothing in it to sit down on or to eat: it was a hobbit-hole, and that means comfort.",
+        "It had a perfectly round door like a porthole, painted green, with a shiny yellow brass knob in the exact middle. The door opened on to a tube-shaped hall like a tunnel: a very comfortable tunnel without smoke, with panelled walls, and floors tiled and carpeted, provided with chairs, and lots and lots of pegs for hats and coats.",
+        "This hobbit was a very well-to-do hobbit, and his name was Baggins. The Bagginses had lived in the neighbourhood of The Hill for time out of mind, and people considered them very respectable, not only because most of them were rich, but also because they never had any adventures or did anything unexpected.",
+        "The mother of our particular hobbit was the famous Belladonna Took, one of the three remarkable daughters of the Old Took, head of the hobbits who lived across The Water, the small river that ran at the foot of The Hill. It was often said that long ago one of the Took ancestors must have taken a fairy wife.",
+        "Once upon a time, in a quiet little village nestled between rolling green hills and a dense forest, there lived an old clockmaker named Elias. His shop was a treasure trove of ticking and chiming, with clocks of every shape and size covering every wall and shelf. Some were grand father clocks that stood taller than a man, while others were tiny pocket watches no bigger than a thumbnail. Every morning, Elias would unlock the creaky wooden door of his shop, step inside, and listen to the symphony of a hundred tiny heartbeats, all ticking in slightly different rhythms.",
+        "The villagers said that Elias could fix any clock, no matter how old or broken. They brought him timepieces that had been silent for decades, and he would take them apart, clean each gear and spring, oil the mechanisms, and put them back together so they ran as well as the day they were made. His hands were steady and his eyes were sharp, despite his advanced age, and he took great pride in every repair.",
+        "One rainy afternoon, a young girl named Lily pushed open the door of the shop, clutching a small wooden box to her chest. She was soaking wet and shivering, but her eyes were bright with determination. She placed the box on the counter and opened it to reveal a delicate silver pocket watch, its face cracked and its hands frozen at midnight. She told Elias that it had belonged to her grandfather, who had recently passed away, and that she wanted it to tick again.",
+        "Elias picked up the watch and examined it carefully under his magnifying glass. The mechanism was old and intricate, with tiny gears no wider than a grain of rice. Some of the parts were corroded, and the main spring had snapped. He told Lily that it would take several days to repair, and she agreed to come back at the end of the week.",
+    ];
+    let xhtml = format!(
+        "<html><body>{}</body></html>",
+        paras.iter().map(|p| format!("<p>{p}</p>")).collect::<String>()
+    );
+    let mut ch = Chapter::from_xhtml(0, None, &xhtml);
+    let st = build_state(&mut ch, BODY_PX, 60.0, 48);
+
+    assert!(st.pages.len() > 1, "test text must span multiple pages");
+    assert!(!st.utterances.is_empty(), "must produce utterances");
+
+    let total: Vec<usize> = (0..st.pages.len())
+        .flat_map(|p| page_utterances(p, &st))
+        .map(|u| u.start)
+        .collect();
+    let dropped: Vec<&Utterance> = st
+        .utterances
+        .iter()
+        .filter(|u| !total.contains(&u.start))
+        .collect();
+    assert!(
+        dropped.is_empty(),
+        "{} utterance(s) dropped across pages: {:?}",
+        dropped.len(),
+        dropped.iter().map(|u| (u.start, u.end, u.text.as_str())).collect::<Vec<_>>()
+    );
+
+    let mut starts = total.clone();
+    starts.sort();
+    starts.dedup();
+    assert_eq!(
+        starts.len(),
+        total.len(),
+        "some utterance assigned to multiple pages"
+    );
+}
