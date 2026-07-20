@@ -62,8 +62,8 @@ pub fn content_h() -> i32 {
     (h() - layout::PAD_TOP - layout::FOOTER_H as usize) as i32
 }
 
-pub const VERSION: &str = "1.0.0";
-pub const BUILD_TAG: &str = "L163-fix-audio-panel-close";
+pub const VERSION: &str = "0.2.0";
+pub const BUILD_TAG: &str = "L170-v0.2.0-release";
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ViewMode {
