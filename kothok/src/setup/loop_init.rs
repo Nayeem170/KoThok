@@ -115,6 +115,7 @@ pub(super) fn build_loop_state(
         voice_rx: None,
         voice_fetch_attempted: false,
         wifi_bt_list_rx: None,
+        font_download_rx: None,
         wifi_list: Vec::new(),
         wifi_list_idx: 0,
         wifi_list_fetched: false,
