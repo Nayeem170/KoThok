@@ -177,6 +177,16 @@ fn walk(dir: &str, out: &mut Vec<EpubEntry>) {
         for e in entries.filter_map(|e| e.ok()) {
             let path = e.path();
             if path.is_dir() {
+                // Skip hidden dirs (.adds, .kobo, .kobo-images, etc.): these
+                // are system/app infrastructure, not user book folders. Without
+                // this, test EPUBs and the extracted current-book leak into the
+                // library listing.
+                if path
+                    .file_name()
+                    .is_some_and(|n| n.to_string_lossy().starts_with('.'))
+                {
+                    continue;
+                }
                 walk(&path.to_string_lossy(), out);
             } else if path.extension().is_some_and(|ext| ext == "epub") {
                 let path_str = path.to_string_lossy().into_owned();

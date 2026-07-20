@@ -6,7 +6,7 @@ classifies each paragraph independently, so one mixed book exercises every face
 and every fallback path in a single open. A missing face shows up immediately as
 a row of blank boxes next to its label.
 
-With --deploy, also copies the EPUB to <kobo>/samples after building, auto-
+With --deploy, also copies the EPUB to <kobo>/.adds/kothok after building, auto-
 detecting the USB mount the same way kothok/scripts/deploy.ps1 does (a .adds or
 .kobo marker at the drive root). An MD5 mismatch after copy aborts.
 
@@ -23,7 +23,9 @@ import zipfile
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.normpath(os.path.join(SCRIPT_DIR, "..", "kothok", "samples", "script-test.epub"))
-SAMPLES_SUBDIR = "samples"
+# Device destination: the app folder, NOT samples/ (which KoThok scans for
+# books and the test epub would pollute the library).
+DEVICE_DEST = ".adds/kothok"
 
 # (script label, required font file, sample text)
 SAMPLES = [
@@ -98,7 +100,7 @@ def md5_of(path):
 
 
 def deploy(kobo_root):
-    dest_dir = os.path.join(kobo_root, SAMPLES_SUBDIR)
+    dest_dir = os.path.join(kobo_root, DEVICE_DEST)
     os.makedirs(dest_dir, exist_ok=True)
     target = os.path.join(dest_dir, os.path.basename(OUT))
     shutil.copy2(OUT, target)
@@ -192,7 +194,7 @@ def main():
     )
     parser.add_argument(
         "--deploy", action="store_true",
-        help=f"copy the built EPUB to <kobo>/{SAMPLES_SUBDIR} after building",
+        help=f"copy the built EPUB to <kobo>/{DEVICE_DEST} after building",
     )
     parser.add_argument(
         "--kobo", metavar="PATH",
