@@ -10,9 +10,9 @@ use crate::VERSION;
 use slint::platform::software_renderer::Rgb565Pixel;
 
 const INK: u16 = 0x0000;
-const MUTED: u16 = 0x8410;
-const HINT: u16 = 0xB5B6;
-const DIVIDER: u16 = 0xE71C;
+const MUTED: u16 = 0x528A;
+const HINT: u16 = 0x738E;
+const DIVIDER: u16 = 0xCE73;
 const ACCENT: u16 = ACCENT_BAR_RGB565;
 
 const LOGO_PNG: &[u8] = include_bytes!("../../ui/kothok-logo.png");
