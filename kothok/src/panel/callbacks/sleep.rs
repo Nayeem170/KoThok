@@ -12,11 +12,7 @@ use crate::Reader;
 /// Reading-mode auto-sleep options: (seconds, label). 0 = never.
 const SLEEP_OPTIONS: [(u32, &str); 3] = [(0, "Off"), (300, "5 min"), (900, "15 min")];
 
-pub(super) fn handle_sleep_cycle(
-    reader: &Reader,
-    cfg: &mut AppConfig,
-    cycle_cell: &Cell<i32>,
-) {
+pub(super) fn handle_sleep_cycle(reader: &Reader, cfg: &mut AppConfig, cycle_cell: &Cell<i32>) {
     let dir = cycle_cell.replace(0);
     if dir == 0 {
         return;
@@ -41,9 +37,7 @@ pub(super) fn handle_sleep_cycle(
     save_config(cfg);
     debug!(
         "sleep-cycle: {} -> {} ({}s)",
-        SLEEP_OPTIONS[cur_idx].1,
-        label,
-        secs
+        SLEEP_OPTIONS[cur_idx].1, label, secs
     );
 }
 

@@ -13,7 +13,7 @@
 
 .USAGE
   .\make-release.ps1                      # uses Cargo.toml version
-  .\make-release.ps1 -Version 1.0.0
+  .\make-release.ps1 -Version 0.2.0
 
 .REQUIRES
   - Release binary built:
@@ -47,9 +47,9 @@ function Read-CargoVersion {
 }
 
 function Read-BuildTag {
-    $main = Get-Content (Join-Path $PackageDir '..\src\main.rs') -Raw
-    if ($main -match 'BUILD_TAG:\s*&str\s*=\s*"([^"]+)"') { return $matches[1] }
-    return 'unknown'
+    # BUILD_TAG now derives from Cargo.toml via env!("CARGO_PKG_VERSION"), so
+    # there is no hardcoded string to regex -- just use the version itself.
+    return "v$(Read-CargoVersion)"
 }
 
 if (-not $Version) { $Version = Read-CargoVersion }

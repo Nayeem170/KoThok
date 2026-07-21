@@ -105,8 +105,7 @@ pub fn load_config_from_base(path: &str, base_font: i32) -> AppConfig {
                 }
                 KEY_NATURAL_SCROLL => cfg.natural_scroll = val == "1" || val == "true",
                 KEY_READING_AUTO_SLEEP => {
-                    cfg.reading_auto_sleep_secs =
-                        val.parse::<u32>().unwrap_or(0).min(3600)
+                    cfg.reading_auto_sleep_secs = val.parse::<u32>().unwrap_or(0).min(3600)
                 }
                 _ if key.starts_with(KEY_VOICE_PREFIX) => {
                     let lang = key.trim_start_matches(KEY_VOICE_PREFIX).to_string();

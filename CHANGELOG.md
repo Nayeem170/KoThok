@@ -9,6 +9,7 @@ All notable changes to KoThok are documented here.
 - Bookmark anchors to the first line of the current page when the cursor is stale or audio is off. Works in any mode, online or offline.
 - Stale footer status ("Bookmarked page N") now clears on TTS auto page-turn, so the live page count shows through.
 - Reading marker spans the whole page on wake and page-turn (no more half-highlight).
+- One sleep setting applies to both reading and audio mode (was 60s fixed for audio).
 
 ### Read-aloud (TTS)
 - Audio resume preserves cursor position across wake/sleep (no restart from page top).
@@ -16,6 +17,17 @@ All notable changes to KoThok are documented here.
 - Bangla TTS voice selection fixed.
 - Settings panel now closes correctly on back tap in audio mode.
 - Double-flicker on wake eliminated (frontlight off + redundant present removed).
+
+### Audio mode
+- Page count and chapter number below the disk now update on auto-advance (was stuck at Page 1).
+- Left/right swipe added for page navigation (was bypassed in audio mode).
+- Bookmark jump seeks within the full chapter audio instead of replacing it with one page.
+- Progress bar and swipe navigation seek within the chapter instead of reloading page audio.
+
+### Fonts
+- On-demand font download over WiFi: missing fonts auto-download the first time a book in that script is opened. No prompt, no language picker.
+- NotoSans.ttf (Latin/Greek/Cyrillic) can also auto-download and installs for all three scripts.
+- Lets the KoboRoot.tgz ship without 17 MB of CJK fonts - they download on first use.
 
 ### Library
 - EPUB scanner skips hidden directories (.adds, .kobo, etc.). Test books and extracted content no longer pollute the library.
@@ -27,6 +39,7 @@ All notable changes to KoThok are documented here.
 - Library page header.
 - About screen updated: contact info, GitHub, LinkedIn.
 - Sleep timeout selector added to the Settings panel under Display.
+- Version shown on About page from a single source (Cargo.toml via env!).
 
 ### Infrastructure
 - Cross-platform uninstaller (uninstall.bat / .command / .sh via USB file method).

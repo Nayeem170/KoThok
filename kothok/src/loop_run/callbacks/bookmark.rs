@@ -109,10 +109,21 @@ pub(super) fn handle_bookmark_jump(
                 .copied()
                 .unwrap_or(0);
             reader.set_saved_page((base + st.current_page) as i32);
-            let utts = crate::audio::glue::page_utterances(st.current_page, &st.state);
-            let target = crate::audio::glue::utterance_index_for_offset(&utts, bm.offset);
-            best_effort_send(cmd_tx, Cmd::Reload(utts));
-            best_effort_send(cmd_tx, Cmd::Seek(target));
+            if matches!(st.view_mode, crate::ViewMode::Audio) {
+                // Audio mode: the full chapter is already queued (by
+                // switch_chapter or a prior load). Seek to the utterance
+                // matching the bookmark offset within the chapter -- do NOT
+                // reload, which would replace the chapter with one page.
+                let chapter_utts = crate::audio::glue::chapter_utterances(&st.state);
+                let target =
+                    crate::audio::glue::utterance_index_for_offset(&chapter_utts, bm.offset);
+                best_effort_send(cmd_tx, Cmd::Seek(target));
+            } else {
+                let utts = crate::audio::glue::page_utterances(st.current_page, &st.state);
+                let target = crate::audio::glue::utterance_index_for_offset(&utts, bm.offset);
+                best_effort_send(cmd_tx, Cmd::Reload(utts));
+                best_effort_send(cmd_tx, Cmd::Seek(target));
+            }
             st.text_dirty = true;
             reader.set_status(
                 if restored {
@@ -123,12 +134,12 @@ pub(super) fn handle_bookmark_jump(
                 .into(),
             );
             info!(
-                "bookmark-jump: ch={} pg={} off={} line_restored={} utt={}",
+                "bookmark-jump: ch={} pg={} off={} line_restored={} audio_mode={}",
                 bm.chapter + 1,
                 st.current_page + 1,
                 bm.offset,
                 restored,
-                target
+                matches!(st.view_mode, crate::ViewMode::Audio),
             );
         }
     } else {

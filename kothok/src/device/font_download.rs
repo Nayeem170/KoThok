@@ -22,11 +22,13 @@ use crate::device::fonts::font_filename_for_script;
 const DOWNLOAD_TIMEOUT_SECS: u64 = 120;
 
 fn font_url(script: Script) -> Option<String> {
-    const NOTO: &str =
-        "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts";
+    const NOTO: &str = "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts";
     const CJK: &str = "https://github.com/notofonts/noto-cjk/raw/main/Sans/SubsetOTF";
 
+    // NotoSans.ttf is the base face: it covers Latin, Greek and Cyrillic.
+    // Any of the three resolves to the same file.
     let family = match script {
+        Script::Latin | Script::Greek | Script::Cyrillic => "NotoSans",
         Script::Bengali => "NotoSansBengali",
         Script::Devanagari => "NotoSansDevanagari",
         Script::Arabic => "NotoSansArabic",
@@ -48,10 +50,15 @@ fn font_url(script: Script) -> Option<String> {
         Script::Japanese => return Some(format!("{CJK}/JP/NotoSansJP-Regular.otf")),
         Script::Korean => return Some(format!("{CJK}/KR/NotoSansKR-Regular.otf")),
         Script::Chinese => return Some(format!("{CJK}/SC/NotoSansSC-Regular.otf")),
-        Script::Latin | Script::Greek | Script::Cyrillic | Script::Other => return None,
+        Script::Other => return None,
     };
     Some(format!("{NOTO}/{family}/hinted/ttf/{family}-Regular.ttf"))
 }
+
+/// Scripts that share the NotoSans.ttf base face. When it is downloaded or
+/// loaded from disk, it must be installed for all three so a Greek book does
+/// not leave Cyrillic as blank boxes (and vice versa).
+const BASE_FACE_SCRIPTS: &[Script] = &[Script::Latin, Script::Greek, Script::Cyrillic];
 
 pub struct FontDownloadResult {
     pub script: Script,
@@ -96,13 +103,20 @@ fn download(script: Script) -> FontDownloadResult {
     };
 
     let mut data = Vec::new();
-    if let Err(e) = response.into_reader().take(20 * 1024 * 1024).read_to_end(&mut data) {
+    if let Err(e) = response
+        .into_reader()
+        .take(20 * 1024 * 1024)
+        .read_to_end(&mut data)
+    {
         log::warn!("font-dl: {filename} read failed: {e}");
         return FontDownloadResult { script, ok: false };
     }
 
     if data.len() < 1024 {
-        log::warn!("font-dl: {filename} suspiciously small ({} bytes), rejecting", data.len());
+        log::warn!(
+            "font-dl: {filename} suspiciously small ({} bytes), rejecting",
+            data.len()
+        );
         return FontDownloadResult { script, ok: false };
     }
 
@@ -120,8 +134,24 @@ fn download(script: Script) -> FontDownloadResult {
         "font-dl: saved {filename} ({} KB), installing",
         data.len() / 1024
     );
-    if install_font(script, data) {
-        log::info!("font-dl: {filename} installed");
+    // NotoSans.ttf covers Latin + Greek + Cyrillic. Install for all three so
+    // a book in any of those scripts renders without a second download.
+    let scripts_to_install: Vec<Script> = if BASE_FACE_SCRIPTS.contains(&script) {
+        BASE_FACE_SCRIPTS.to_vec()
+    } else {
+        vec![script]
+    };
+    let mut all_ok = true;
+    for s in &scripts_to_install {
+        if !install_font(*s, data.clone()) {
+            all_ok = false;
+        }
+    }
+    if all_ok {
+        log::info!(
+            "font-dl: {filename} installed for {} script(s)",
+            scripts_to_install.len()
+        );
         FontDownloadResult { script, ok: true }
     } else {
         log::warn!("font-dl: {filename} saved but install_font rejected it");
