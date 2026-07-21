@@ -5,7 +5,7 @@ use std::sync::mpsc::{Receiver, Sender};
 
 use log::{debug, info, warn};
 
-use slint::{ModelRc, SharedString, VecModel};
+use slint::SharedString;
 
 use crate::audio::glue::{best_effort_send, load_page_audio};
 use crate::audio::{Cmd, Event};
@@ -24,7 +24,7 @@ pub fn process_audio_events(
     cmd_tx: &Sender<Cmd>,
 ) -> AudioFlags {
     let mut ui_changed = false;
-    let page_changed = false;
+    let mut page_changed = false;
     let mut text_dirty = false;
     while let Ok(ev) = evt_rx.try_recv() {
         match ev {
@@ -109,6 +109,8 @@ pub fn process_audio_events(
                         (st.chapter_offsets[st.current_chapter] + st.current_page) as i32,
                     );
                     text_dirty = true;
+                    ui_changed = true;
+                    page_changed = true;
                     if !matches!(st.view_mode, crate::ViewMode::Audio) {
                         let next_utts =
                             crate::audio::glue::page_utterances(st.current_page, &st.state);
@@ -304,17 +306,28 @@ fn switch_to(st: &mut LoopState, reader: &Reader, cmd_tx: &Sender<Cmd>, nc: usiz
 }
 
 fn apply_page_display(st: &LoopState, reader: &Reader, cmd_tx: &Sender<Cmd>) {
-    let (s, e) = st
-        .state
-        .pages
-        .get(st.current_page)
-        .copied()
-        .unwrap_or((0, 0));
-    let rows = st.state.all_rows.get(s..e).unwrap_or(&[]).to_vec();
-    reader.set_rows(ModelRc::new(VecModel::from(rows)));
-    reader.set_page((st.chapter_offsets[st.current_chapter] + st.current_page) as i32);
-    reader.set_page_count(*st.chapter_offsets.last().unwrap_or(&1) as i32);
-    load_page_audio(st.current_page, &st.state, cmd_tx);
+    crate::reader::apply_page(
+        reader,
+        &st.state,
+        st.current_page,
+        &st.chapter_offsets,
+        st.current_chapter,
+    );
+    if matches!(st.view_mode, crate::ViewMode::Audio) {
+        // Audio mode has the full chapter queued. Seek to the utterance
+        // starting on this page instead of reloading with one page's worth.
+        let (s, _) = st
+            .state
+            .pages
+            .get(st.current_page)
+            .copied()
+            .unwrap_or((0, 0));
+        let chapter_utts = crate::audio::glue::chapter_utterances(&st.state);
+        let target = crate::audio::glue::utterance_index_for_offset(&chapter_utts, s as usize);
+        best_effort_send(cmd_tx, Cmd::Seek(target));
+    } else {
+        load_page_audio(st.current_page, &st.state, cmd_tx);
+    }
 }
 
 fn apply_page_delta(
@@ -374,15 +387,16 @@ fn apply_progress_target(
         return o;
     }
     let (c, local) = resolve_progress_target(pt_val, &st.chapter_offsets, st.chapter_count);
+    let lp = local.min(st.state.pages.len().saturating_sub(1));
     if c != st.current_chapter {
         switch_to(st, reader, cmd_tx, c, false);
-        o.navigated = true;
-    }
-    let lp = local.min(st.state.pages.len().saturating_sub(1));
-    if lp != st.current_page {
         st.current_page = lp;
-        o.navigated = true;
         apply_page_display(st, reader, cmd_tx);
+        o.navigated = true;
+    } else if lp != st.current_page {
+        st.current_page = lp;
+        apply_page_display(st, reader, cmd_tx);
+        o.navigated = true;
     }
     o.text_dirty = true;
     o.ui_changed = true;

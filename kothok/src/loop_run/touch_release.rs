@@ -125,6 +125,31 @@ pub(super) fn on_release(
                 }
                 debug!("audio: panel OPEN (swipe-down)");
             }
+            // Left/right swipe for page navigation, same as reading mode.
+            if matches!(st.view_mode, ViewMode::Audio)
+                && !st.panel_open
+                && !reader.get_chapter_overlay_open()
+                && swipe_dx.abs() > touch::SWIPE_MIN_DX
+                && swipe_dx.abs() > swipe_dy.abs()
+            {
+                let dir = gesture::classify_swipe(
+                    swipe_dx,
+                    swipe_dy,
+                    touch::SWIPE_MIN_DX,
+                    dt.as_millis(),
+                );
+                match dir {
+                    gesture::SwipeDirection::Left => {
+                        cb.page_delta.set(cb.page_delta.get() + 1);
+                        debug!("audio: swipe LEFT -> next page");
+                    }
+                    gesture::SwipeDirection::Right => {
+                        cb.page_delta.set(cb.page_delta.get() - 1);
+                        debug!("audio: swipe RIGHT -> prev page");
+                    }
+                    _ => {}
+                }
+            }
             if reader.get_chapter_overlay_open() {
                 match gesture::chapter_overlay_target(
                     dy,
