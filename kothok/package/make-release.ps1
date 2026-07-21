@@ -13,7 +13,7 @@
 
 .USAGE
   .\make-release.ps1                      # uses Cargo.toml version
-  .\make-release.ps1 -Version 1.0.0
+  .\make-release.ps1 -Version 0.2.0
 
 .REQUIRES
   - Release binary built:
