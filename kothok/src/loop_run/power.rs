@@ -307,16 +307,10 @@ pub(super) fn auto_sleep(st: &mut LoopState, ctx: &mut LoopContext) -> LoopFlow 
     }
 
     let audio_mode = st.view_mode == crate::ViewMode::Audio;
-    // Audio mode locks at the fixed 60s (you are listening, not looking, so
-    // dimming the frontlight saves battery). Reading mode uses the user-
-    // configured value; 0 means never -- e-ink draws nothing when static, and
-    // the reader needs the frontlight on to read, so auto-sleep there only
-    // interrupts the experience.
-    let sleep_threshold = if audio_mode {
-        AUTO_SLEEP_SECS
-    } else {
-        ctx.cfg.reading_auto_sleep_secs as u64
-    };
+    // One setting for both modes: the user picks Off / 5 min / 15 min in the
+    // panel and it applies everywhere. Reading mode sleeps; audio mode locks
+    // (dims frontlight, keeps radios). 0 means never.
+    let sleep_threshold = ctx.cfg.reading_auto_sleep_secs as u64;
     if !reader.get_playing()
         && sleep_threshold > 0
         && st.last_activity.elapsed().as_secs() > sleep_threshold
@@ -339,12 +333,12 @@ pub(super) fn auto_sleep(st: &mut LoopState, ctx: &mut LoopContext) -> LoopFlow 
             lock_radios(st, ctx);
             info!(
                 "AUTO-LOCK after {}s inactivity (audio mode)",
-                AUTO_SLEEP_SECS
+                sleep_threshold
             );
             st.last_activity = std::time::Instant::now();
             return LoopFlow::Continue;
         }
-        info!("AUTO-SLEEP after {}s inactivity", AUTO_SLEEP_SECS);
+        info!("AUTO-SLEEP after {}s inactivity", sleep_threshold);
         if st.panel_open {
             st.panel_open = false;
             cb.panel_open_cell.set(false);
