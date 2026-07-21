@@ -147,3 +147,44 @@ fn every_opening_stage_has_a_status_message() {
         assert!(!m.is_empty(), "stage {i} has no status message");
     }
 }
+
+/// Render the finished splash to a PNG next to the package, so the marketing
+/// site can ship the real composed screen instead of a hand-drawn stand-in.
+///
+/// The boot splash never lives in `st.buffer` (setup paints it on a private
+/// buffer and presents directly), so a live header/corner capture comes back
+/// black. This composes the same image offline. Gated behind `screenshot`
+/// (the asset-generation feature) so it never runs in normal CI.
+#[test]
+#[cfg(feature = "screenshot")]
+fn render_splash_png_for_site() {
+    use image::codecs::png::PngEncoder;
+    use image::{ExtendedColorType, ImageEncoder};
+    use slint::platform::software_renderer::Rgb565Pixel;
+
+    let w = crate::w();
+    let h = crate::h();
+    let mut buf = vec![Rgb565Pixel(0xFFFF); w * h];
+    paint_kothok_splash(&mut buf);
+
+    let mut rgb = vec![0u8; w * h * 3];
+    for (i, px) in buf.iter().enumerate() {
+        let v = px.0;
+        let r = ((v >> 11) & 0x1f) as u8;
+        let g = ((v >> 5) & 0x3f) as u8;
+        let b = (v & 0x1f) as u8;
+        rgb[i * 3] = (r << 3) | (r >> 2);
+        rgb[i * 3 + 1] = (g << 2) | (g >> 4);
+        rgb[i * 3 + 2] = (b << 3) | (b >> 2);
+    }
+
+    let dir = std::env::var("CARGO_MANIFEST_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let out = dir.join("splash-render.png");
+    let file = std::fs::File::create(&out).expect("create splash png");
+    PngEncoder::new(file)
+        .write_image(&rgb, w as u32, h as u32, ExtendedColorType::Rgb8)
+        .expect("encode splash png");
+    eprintln!("render_splash_png_for_site: wrote {}", out.display());
+}
