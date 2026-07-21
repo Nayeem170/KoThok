@@ -125,7 +125,7 @@ pub(super) fn poll_and_dispatch_touch(st: &mut LoopState, ctx: &mut LoopContext)
                             #[cfg(feature = "screenshot")]
                             {
                                 st.shot_armed =
-                                    gesture::is_in_screenshot_zone(dx, dy, ctx.w as f32);
+                                    gesture::is_in_screenshot_zone(dx, dy, ctx.w as f32, ctx.h as f32);
                                 st.shot_done = false;
                                 if st.shot_armed {
                                     st.prev_down = st.frame_down;
@@ -234,6 +234,7 @@ pub(super) fn poll_and_dispatch_touch(st: &mut LoopState, ctx: &mut LoopContext)
                                         dy,
                                         now.duration_since(st.press_time).as_millis(),
                                         ctx.w as f32,
+                                        ctx.h as f32,
                                     )
                                 {
                                     match crate::rendering::screenshot::capture(

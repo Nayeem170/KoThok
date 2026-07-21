@@ -98,51 +98,50 @@ fn header_zone_below_band_is_none() {
 
 #[test]
 #[cfg(feature = "screenshot")]
-fn screenshot_zone_is_the_header_centre_third() {
-    // Inside: centre of the band. Outside: both header button clusters and
-    // anything below the band. The zone gates whether a press is withheld
-    // from the tap path, so a false positive would eat real taps.
-    assert!(is_in_screenshot_zone(536.0, 55.0, 1072.0));
-    assert!(!is_in_screenshot_zone(30.0, 55.0, 1072.0));
-    assert!(!is_in_screenshot_zone(1011.0, 55.0, 1072.0));
-    assert!(!is_in_screenshot_zone(536.0, 111.0, 1072.0));
+fn screenshot_zone_is_the_bottom_left_corner() {
+    // Screen is 1072x1448. The zone gates whether a press is withheld from
+    // the tap path, so a false positive would eat real taps.
+    // Inside the corner.
+    assert!(is_in_screenshot_zone(50.0, 1400.0, 1072.0, 1448.0));
+    // Outside: top-left (header library button area).
+    assert!(!is_in_screenshot_zone(30.0, 55.0, 1072.0, 1448.0));
+    // Outside: header centre, where the audio mode-toggle lives.
+    assert!(!is_in_screenshot_zone(536.0, 55.0, 1072.0, 1448.0));
+    // Outside: bottom-right corner.
+    assert!(!is_in_screenshot_zone(1011.0, 1400.0, 1072.0, 1448.0));
+    // Outside: bottom edge but right of the corner.
+    assert!(!is_in_screenshot_zone(536.0, 1400.0, 1072.0, 1448.0));
 }
 
 #[test]
 #[cfg(feature = "screenshot")]
-fn screenshot_hold_in_header_centre() {
-    assert!(is_screenshot_hold(536.0, 55.0, 540.0, 58.0, 2100, 1072.0));
+fn screenshot_hold_in_bottom_left_corner() {
+    assert!(is_screenshot_hold(70.0, 1410.0, 73.0, 1412.0, 2100, 1072.0, 1448.0));
 }
 
 #[test]
 #[cfg(feature = "screenshot")]
 fn screenshot_hold_rejected_when_too_brief() {
-    assert!(!is_screenshot_hold(536.0, 55.0, 536.0, 55.0, 900, 1072.0));
+    assert!(!is_screenshot_hold(70.0, 1410.0, 70.0, 1410.0, 900, 1072.0, 1448.0));
 }
 
 #[test]
 #[cfg(feature = "screenshot")]
-fn screenshot_hold_rejected_below_header_band() {
-    assert!(!is_screenshot_hold(
-        536.0, 400.0, 536.0, 400.0, 2100, 1072.0
-    ));
-}
-
-#[test]
-#[cfg(feature = "screenshot")]
-fn screenshot_hold_rejected_over_a_header_button() {
-    // Chapters sits at 973 and Library at 23; neither may trigger a capture.
-    assert!(!is_screenshot_hold(
-        1011.0, 55.0, 1011.0, 55.0, 2100, 1072.0
-    ));
-    assert!(!is_screenshot_hold(30.0, 55.0, 30.0, 55.0, 2100, 1072.0));
+fn screenshot_hold_rejected_outside_the_corner() {
+    // The old header-centre zone must NOT trigger now (the audio mode-toggle
+    // sits there at x~515).
+    assert!(!is_screenshot_hold(536.0, 55.0, 536.0, 55.0, 2100, 1072.0, 1448.0));
+    // Bottom-right corner.
+    assert!(!is_screenshot_hold(1011.0, 1400.0, 1011.0, 1400.0, 2100, 1072.0, 1448.0));
+    // Mid-screen.
+    assert!(!is_screenshot_hold(50.0, 700.0, 50.0, 700.0, 2100, 1072.0, 1448.0));
 }
 
 #[test]
 #[cfg(feature = "screenshot")]
 fn screenshot_hold_rejected_when_finger_drifts() {
-    // A slow swipe starting in the zone is still a swipe, not a capture.
-    assert!(!is_screenshot_hold(536.0, 55.0, 700.0, 58.0, 2100, 1072.0));
+    // A slow swipe starting in the corner is still a swipe, not a capture.
+    assert!(!is_screenshot_hold(70.0, 1410.0, 400.0, 1410.0, 2100, 1072.0, 1448.0));
 }
 
 #[test]

@@ -111,31 +111,26 @@ pub fn classify_header_zone(dx: f32, dy: f32, w: f32) -> HeaderZone {
 }
 
 /// How long the screenshot hold must last. Well past any tap or swipe, so the
-/// gesture stays unambiguous even on screens where the press lands on a button.
+/// gesture stays unambiguous.
 #[cfg(feature = "screenshot")]
 pub const SCREENSHOT_HOLD_MS: u128 = 2000;
 /// Finger drift tolerated over the hold. A swipe leaves this band immediately.
 #[cfg(feature = "screenshot")]
 pub const SCREENSHOT_DRIFT_PX: f32 = 30.0;
-/// Reuses the shared 110px header band that every mode's header occupies.
+/// Side of the bottom-left corner square that arms a capture. The header is
+/// full of buttons (library, chapters, mode-toggle, ...), so the capture zone
+/// moved to a corner no control occupies. A press here is withheld from the
+/// tap path entirely, so it never collides with a seek-bar scrub.
 #[cfg(feature = "screenshot")]
-const SCREENSHOT_BAND_H: f32 = 110.0;
+const SCREENSHOT_CORNER: f32 = 140.0;
 
-/// The capture zone: the centre third of the header band.
-///
-/// The one region no mode puts a control in - `classify_header_zone` and
-/// `picker_hit_test` both return None across it. A press starting here is held
-/// back from the normal tap path so the hold can play out.
+/// The capture zone: the bottom-left corner of the screen.
 #[cfg(feature = "screenshot")]
-pub fn is_in_screenshot_zone(dx: f32, dy: f32, w: f32) -> bool {
-    if dy >= SCREENSHOT_BAND_H {
-        return false;
-    }
-    let third = w / 3.0;
-    dx >= third && dx < third * 2.0
+pub fn is_in_screenshot_zone(dx: f32, dy: f32, _w: f32, h: f32) -> bool {
+    dx < SCREENSHOT_CORNER && dy > h - SCREENSHOT_CORNER
 }
 
-/// Screenshot gesture: hold the middle of the header band still for 2s.
+/// Screenshot gesture: hold the bottom-left corner still for 2s.
 ///
 /// Tested while the finger is still down, not on release. The library grid acts
 /// on `tap_xy` at press time and audio mode forwards the press straight to
@@ -149,11 +144,14 @@ pub fn is_screenshot_hold(
     cur_dy: f32,
     dt_ms: u128,
     w: f32,
+    h: f32,
 ) -> bool {
     if dt_ms < SCREENSHOT_HOLD_MS {
         return false;
     }
-    if !is_in_screenshot_zone(press_dx, press_dy, w) || !is_in_screenshot_zone(cur_dx, cur_dy, w) {
+    if !is_in_screenshot_zone(press_dx, press_dy, w, h)
+        || !is_in_screenshot_zone(cur_dx, cur_dy, w, h)
+    {
         return false;
     }
     (cur_dx - press_dx).abs() <= SCREENSHOT_DRIFT_PX
