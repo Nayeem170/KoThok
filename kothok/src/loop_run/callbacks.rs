@@ -144,7 +144,19 @@ pub(super) fn process_loop_callbacks(st: &mut LoopState, ctx: &mut LoopContext) 
         let frac = st
             .bookmark
             .and_then(|bm| {
-                let global = st.chapter_offsets.get(bm.chapter).copied().unwrap_or(0) + bm.page;
+                // A font-size change repaginates the loaded chapter, so the
+                // stored page number drifts and the seek-bar marker would
+                // land away from the reading cursor. Derive the page from the
+                // stable offset when the bookmark is in the loaded chapter;
+                // other chapters keep the stored estimate (their pagination is
+                // not rebuilt until they are opened).
+                let page_in_chapter = if bm.chapter == st.current_chapter {
+                    bookmark::page_for_bookmark(st, &bm)
+                } else {
+                    bm.page
+                };
+                let global =
+                    st.chapter_offsets.get(bm.chapter).copied().unwrap_or(0) + page_in_chapter;
                 Some((global as f32 / total).clamp(0.0, 1.0))
             })
             .unwrap_or(-1.0);
