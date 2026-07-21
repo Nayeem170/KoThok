@@ -404,7 +404,10 @@ fn no_utterance_dropped_across_all_pages_realistic_text() {
     ];
     let xhtml = format!(
         "<html><body>{}</body></html>",
-        paras.iter().map(|p| format!("<p>{p}</p>")).collect::<String>()
+        paras
+            .iter()
+            .map(|p| format!("<p>{p}</p>"))
+            .collect::<String>()
     );
     let mut ch = Chapter::from_xhtml(0, None, &xhtml);
     let st = build_state(&mut ch, BODY_PX, 60.0, 48);
@@ -425,7 +428,10 @@ fn no_utterance_dropped_across_all_pages_realistic_text() {
         dropped.is_empty(),
         "{} utterance(s) dropped across pages: {:?}",
         dropped.len(),
-        dropped.iter().map(|u| (u.start, u.end, u.text.as_str())).collect::<Vec<_>>()
+        dropped
+            .iter()
+            .map(|u| (u.start, u.end, u.text.as_str()))
+            .collect::<Vec<_>>()
     );
 
     let mut starts = total.clone();

@@ -22,8 +22,7 @@ use crate::device::fonts::font_filename_for_script;
 const DOWNLOAD_TIMEOUT_SECS: u64 = 120;
 
 fn font_url(script: Script) -> Option<String> {
-    const NOTO: &str =
-        "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts";
+    const NOTO: &str = "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts";
     const CJK: &str = "https://github.com/notofonts/noto-cjk/raw/main/Sans/SubsetOTF";
 
     // NotoSans.ttf is the base face: it covers Latin, Greek and Cyrillic.
@@ -104,13 +103,20 @@ fn download(script: Script) -> FontDownloadResult {
     };
 
     let mut data = Vec::new();
-    if let Err(e) = response.into_reader().take(20 * 1024 * 1024).read_to_end(&mut data) {
+    if let Err(e) = response
+        .into_reader()
+        .take(20 * 1024 * 1024)
+        .read_to_end(&mut data)
+    {
         log::warn!("font-dl: {filename} read failed: {e}");
         return FontDownloadResult { script, ok: false };
     }
 
     if data.len() < 1024 {
-        log::warn!("font-dl: {filename} suspiciously small ({} bytes), rejecting", data.len());
+        log::warn!(
+            "font-dl: {filename} suspiciously small ({} bytes), rejecting",
+            data.len()
+        );
         return FontDownloadResult { script, ok: false };
     }
 
@@ -142,7 +148,10 @@ fn download(script: Script) -> FontDownloadResult {
         }
     }
     if all_ok {
-        log::info!("font-dl: {filename} installed for {} script(s)", scripts_to_install.len());
+        log::info!(
+            "font-dl: {filename} installed for {} script(s)",
+            scripts_to_install.len()
+        );
         FontDownloadResult { script, ok: true }
     } else {
         log::warn!("font-dl: {filename} saved but install_font rejected it");

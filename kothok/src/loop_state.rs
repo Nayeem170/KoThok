@@ -156,8 +156,7 @@ pub struct LoopState {
 
     pub wifi_bt_list_rx: Option<Receiver<crate::panel::WifiBtListResult>>,
 
-    pub font_download_rx:
-        Option<Receiver<crate::device::font_download::FontDownloadResult>>,
+    pub font_download_rx: Option<Receiver<crate::device::font_download::FontDownloadResult>>,
 
     pub wifi_list: Vec<(String, u32)>,
     pub wifi_list_idx: usize,
