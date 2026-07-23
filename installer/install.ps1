@@ -156,6 +156,11 @@ Copy it to the Kobo USB root, eject, and reboot.
     Copy-Item -LiteralPath $tgzPath -Destination $koboRoot -Force
     $tgzHash = (Get-FileHash -LiteralPath $tgzPath -Algorithm MD5).Hash
 
+    # Fonts ship inside the tgz, but extract only after the reboot. Top them up
+    # from kothok-fonts.zip now too, so every face is in .adds/fonts the moment
+    # the install finishes - even if a tgz ever shipped without them.
+    Install-Fonts $release $addsDir $TempDir
+
     Write-Host ""
     Write-Host "  ============================" -ForegroundColor Green
     Write-Host "  FIRST INSTALL COMPLETE" -ForegroundColor Green

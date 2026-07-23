@@ -87,6 +87,7 @@ fn main() {
     let (mut touch_dev, touch_fd, touch_cfg) =
         init_touch(&init.input_devs, &init.hw_cfg, init.w, init.h);
     let (power_pressed, exit_flag) = init_power(&init.input_devs);
+    let media_signals = init_media_keys(&init.input_devs, &exit_flag);
     let (cmd_tx, evt_rx) = init_audio(
         &init.cfg,
         init.st.current_page,
@@ -116,6 +117,7 @@ fn main() {
         w: init.w,
         h: init.h,
         power_pressed: &power_pressed,
+        media_signals: &media_signals,
         fl_path: &init.fl_path,
     };
 
@@ -210,6 +212,17 @@ fn init_power(
         &input_devs.power_dev,
     );
     (power_pressed, exit_flag)
+}
+
+fn init_media_keys(
+    input_devs: &hw::InputDevices,
+    exit_flag: &std::sync::Arc<std::sync::atomic::AtomicBool>,
+) -> crate::device::media_keys::MediaSignals {
+    use crate::device::media_keys::{spawn_media_key_monitor, MediaSignals};
+    let signals = MediaSignals::new();
+    let skip = vec![input_devs.touch_dev.clone(), input_devs.power_dev.clone()];
+    spawn_media_key_monitor(signals.clone(), exit_flag.clone(), skip);
+    signals
 }
 
 fn init_audio(

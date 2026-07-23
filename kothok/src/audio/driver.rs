@@ -8,6 +8,7 @@ use std::sync::mpsc;
 use std::time::{Duration, Instant};
 use tokio::task::JoinHandle;
 
+mod cache;
 mod commands;
 mod pipeline;
 
@@ -42,6 +43,7 @@ enum VoiceParam {
 }
 
 struct ReadyUtt {
+    idx: usize,
     prep: kobo_core::audio::Prepared,
     start: usize,
     end: usize,
@@ -79,6 +81,8 @@ struct DriverState {
     synth_retries: u32,
     scale_buf: Vec<i16>,
     chunk_samples: usize,
+    cache: cache::PcmCache,
+    current_idx: usize,
 }
 
 impl DriverState {
@@ -110,6 +114,8 @@ impl DriverState {
             synth_retries: 0,
             scale_buf: Vec::with_capacity(chunk_samples),
             chunk_samples,
+            cache: cache::PcmCache::new(),
+            current_idx: 0,
         }
     }
 

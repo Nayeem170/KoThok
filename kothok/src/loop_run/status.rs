@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (c) 2026 Nayeem Bin Ahsan
 use super::*;
+use crate::Reader;
 
 pub(super) fn sync_panel_close(st: &mut LoopState, ctx: &LoopContext, msg: &str) {
     if st.panel_open && !ctx.cb.panel_open_cell.get() {
@@ -11,22 +12,83 @@ pub(super) fn sync_panel_close(st: &mut LoopState, ctx: &LoopContext, msg: &str)
     }
 }
 
+/// Shortest gap between two position writes while reading.
+///
+/// The cursor moves once per spoken sentence, so saving on every change would
+/// rewrite the positions file every few seconds for the whole session -- the
+/// write is a full read-modify-rewrite, and this is eMMC. Losing at most this
+/// much progress to a flat battery is the trade.
+const POSITION_AUTOSAVE_SECS: u64 = 15;
+
+/// The position as it stands right now.
+fn current_position(st: &LoopState, reader: &Reader) -> persistence::ReadingPosition {
+    persistence::ReadingPosition {
+        chapter: st.current_chapter,
+        page: st.current_page,
+        cur_start: reader.get_cur_start().max(0) as usize,
+        cur_end: reader.get_cur_end().max(0) as usize,
+        view_mode: st.view_mode,
+        bookmark: st.bookmark,
+        progress: reader.get_book_progress(),
+    }
+}
+
+/// Write the reading position now, unconditionally. For the moments where
+/// losing it is not acceptable: leaving the book, leaving the app, sleeping.
+pub(crate) fn save_position_now(st: &mut LoopState, reader: &Reader) {
+    if st.current_book_path.is_empty() {
+        return;
+    }
+    let pos = current_position(st, reader);
+    save_position(
+        std::path::Path::new(POSITIONS_FILE),
+        &st.current_book_path,
+        &pos,
+    );
+    st.saved_pos = Some((pos.chapter, pos.page, pos.cur_start));
+    st.saved_pos_at = Some(std::time::Instant::now());
+}
+
+/// Write the reading position if it has actually moved and the rate limit has
+/// elapsed. Called every loop iteration; almost always a no-op.
+///
+/// Without this, a crash or a flat battery lost the whole session, because the
+/// only writes were on the two clean exits.
+pub(super) fn autosave_position(st: &mut LoopState, ctx: &LoopContext) {
+    if st.picker_active || st.current_book_path.is_empty() {
+        return;
+    }
+    let reader = ctx.reader;
+    let now = (
+        st.current_chapter,
+        st.current_page,
+        reader.get_cur_start().max(0) as usize,
+    );
+    if st.saved_pos == Some(now) {
+        return;
+    }
+    // First move of a session establishes the baseline without a write; the
+    // rate limit then governs from there.
+    let due = match st.saved_pos_at {
+        Some(t) => t.elapsed().as_secs() >= POSITION_AUTOSAVE_SECS,
+        None => true,
+    };
+    if !due {
+        return;
+    }
+    save_position_now(st, reader);
+    debug!(
+        "position: autosaved ch={} pg={} off={}",
+        now.0 + 1,
+        now.1 + 1,
+        now.2
+    );
+}
+
 pub(super) fn handle_exit_button(st: &mut LoopState, ctx: &LoopContext) -> LoopFlow {
     if ctx.cb.exit_app.get() {
-        if !st.picker_active && !st.current_book_path.is_empty() {
-            save_position(
-                std::path::Path::new(POSITIONS_FILE),
-                &st.current_book_path,
-                &persistence::ReadingPosition {
-                    chapter: st.current_chapter,
-                    page: st.current_page,
-                    cur_start: ctx.reader.get_cur_start() as usize,
-                    cur_end: ctx.reader.get_cur_end() as usize,
-                    view_mode: st.view_mode,
-                    bookmark: st.bookmark,
-                    progress: ctx.reader.get_book_progress(),
-                },
-            );
+        if !st.picker_active {
+            save_position_now(st, ctx.reader);
         }
         best_effort_send(&ctx.cmd_tx, Cmd::Stop);
         info!("EXIT: leaving app to nickel");
@@ -46,21 +108,11 @@ pub(super) fn handle_quit_button(st: &mut LoopState, ctx: &mut LoopContext) -> L
         if st.picker_active {
             return LoopFlow::Break;
         }
-        if !st.current_book_path.is_empty() {
-            save_position(
-                std::path::Path::new(POSITIONS_FILE),
-                &st.current_book_path,
-                &persistence::ReadingPosition {
-                    chapter: st.current_chapter,
-                    page: st.current_page,
-                    cur_start: reader.get_cur_start() as usize,
-                    cur_end: reader.get_cur_end() as usize,
-                    view_mode: st.view_mode,
-                    bookmark: st.bookmark,
-                    progress: reader.get_book_progress(),
-                },
-            );
-        }
+        save_position_now(st, reader);
+        // Leaving the book clears the baseline: the next book opened must not
+        // inherit this one's saved tuple and skip its own first autosave.
+        st.saved_pos = None;
+        st.saved_pos_at = None;
         best_effort_send(&ctx.cmd_tx, Cmd::Stop);
         reader.set_playing(false);
         reader.set_paused(false);

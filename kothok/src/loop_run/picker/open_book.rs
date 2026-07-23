@@ -31,7 +31,19 @@ pub(super) fn open_book_from_picker(
         .unwrap_or_else(|| (vec![Chapter::from_xhtml(0, None, SAMPLE_CHAPTER)], None));
     st.chapters = loaded_chapters;
     crate::rendering::render::set_rtl(is_rtl(book_lang.as_deref()));
-    if let Some(msg) = crate::device::fonts::ensure_font_for_script(book_lang.as_deref(), "") {
+    // ensure_font_for_script falls back to detect_script(sample) when the book
+    // declares no dc:language; an empty sample mis-detects CJK as Latin, so the
+    // lazy CJK face never loads and the page renders blank. Feed real text.
+    let font_sample: String = st
+        .chapters
+        .iter()
+        .take(2)
+        .flat_map(|c| c.text.chars())
+        .take(8192)
+        .collect();
+    if let Some(msg) =
+        crate::device::fonts::ensure_font_for_script(book_lang.as_deref(), &font_sample)
+    {
         let status = if crate::device::wifi::wifi_status() {
             let script = book_lang
                 .as_deref()
@@ -90,10 +102,16 @@ pub(super) fn open_book_from_picker(
             bookmark: None,
             progress: 0.0,
         });
-    st.current_chapter = pos.chapter;
     st.current_book_path = book_path.to_string();
     st.view_mode = pos.view_mode;
     st.bookmark = pos.bookmark.filter(|bm| bm.chapter < st.chapter_count);
+    // Resume where reading stopped, not at the bookmark. A bookmark is a place
+    // you chose to be able to return to; opening the book is not that request.
+    // Jumping to it here silently threw away every page read since it was set,
+    // and -- because the fallback was chapter 0, offset 0 -- a book that had
+    // never been bookmarked reopened at page one however far it had been read.
+    // The ribbon is how you go to a bookmark.
+    st.current_chapter = pos.chapter;
     set_book_meta(
         reader,
         &all_books[idx].title,
@@ -109,6 +127,10 @@ pub(super) fn open_book_from_picker(
         t_open.elapsed().as_millis()
     );
     let t_bs = std::time::Instant::now();
+    // `open_book_session` already resolves both halves of this: a non-zero
+    // `cur_start` locates the page from the offset (stable across font changes)
+    // and snaps the cursor to that exact row; a zero one falls back to `page`
+    // with the cursor on its first line.
     let session = book_session::open_book_session(
         &mut st.chapters,
         &pos,
@@ -137,7 +159,7 @@ pub(super) fn open_book_from_picker(
     reader.set_playing(false);
     reader.set_paused(false);
     let pick_cn =
-        crate::data::library::chapter_display_title(&st.chapters[pos.chapter], pos.chapter);
+        crate::data::library::chapter_display_title(&st.chapters[st.current_chapter], st.current_chapter);
     set_chapter_name(reader, &pick_cn);
     let audio = matches!(st.view_mode, crate::ViewMode::Audio);
     reader.set_audio_mode(audio);
@@ -185,6 +207,12 @@ pub(super) fn open_book_from_picker(
         st.prev_view_mode = st.view_mode;
         if audio {
             crate::audio::glue::load_chapter_audio(&st.state, &cmd_tx);
+            let off = reader.get_cur_start().max(0) as usize;
+            if off > 0 {
+                let idx =
+                    crate::audio::glue::utterance_index_for_offset(&st.state.utterances, off);
+                crate::audio::glue::best_effort_send(&cmd_tx, Cmd::Seek(idx));
+            }
         } else {
             load_page_audio(st.current_page, &st.state, &cmd_tx);
         }

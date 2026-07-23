@@ -72,13 +72,14 @@ pub fn toggle_playback(
         };
     }
     let cur = reader.get_cur_start().max(0) as usize;
-    let page_utts = page_utterances(current_page, state);
+    let page = state.page_for_offset(cur).unwrap_or(current_page);
+    let page_utts = page_utterances(page, state);
     let target = resolve_start_target(cur, &page_utts);
     if target == 0
         && !page_utts.is_empty()
         && !page_utts.iter().any(|u| cur >= u.start && cur < u.end)
     {
-        let (rs, re) = state.pages.get(current_page).copied().unwrap_or((0, 0));
+        let (rs, re) = state.pages.get(page).copied().unwrap_or((0, 0));
         if let Some(rows) = state.all_rows.get(rs..re) {
             for row in rows {
                 if row.start < row.end {
@@ -89,7 +90,7 @@ pub fn toggle_playback(
             }
         }
     }
-    reader.set_saved_page((chapter_offsets[current_chapter] + current_page) as i32);
+    reader.set_saved_page((chapter_offsets[current_chapter] + page) as i32);
     let cs = reader.get_cur_start();
     let (off, end) = if cs > 0 {
         (cs as usize, reader.get_cur_end().max(0) as usize)
@@ -103,7 +104,7 @@ pub fn toggle_playback(
     reader.set_paused(false);
     PlayToggle {
         ch: current_chapter,
-        pg: current_page,
+        pg: page,
         off,
         end,
     }

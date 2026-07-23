@@ -70,6 +70,28 @@ pub fn process_audio_events(
                 );
                 reader.set_cur_start(start as i32);
                 reader.set_cur_end(end as i32);
+                if let Some(page) = st.state.page_for_offset(start) {
+                    if page != st.current_page {
+                        info!(
+                            "sentence-page: advancing {} -> {} (off={})",
+                            st.current_page + 1,
+                            page + 1,
+                            start
+                        );
+                        st.current_page = page;
+                        apply_page(
+                            reader,
+                            &st.state,
+                            st.current_page,
+                            &st.chapter_offsets,
+                            st.current_chapter,
+                        );
+                        reader.set_saved_page(
+                            (st.chapter_offsets[st.current_chapter] + st.current_page) as i32,
+                        );
+                        text_dirty = true;
+                    }
+                }
                 if let Some((pg_start, pg_end)) = st.state.pages.get(st.current_page) {
                     let mut found_row = -1i32;
                     for (ri, row) in st.state.all_rows[*pg_start..*pg_end].iter().enumerate() {
@@ -145,21 +167,7 @@ fn handle_audio_ended(st: &mut LoopState, reader: &Reader, cmd_tx: &Sender<Cmd>)
     let mut text_dirty = false;
 
     if matches!(st.view_mode, crate::ViewMode::Audio) {
-        if st.current_page + 1 < st.state.pages.len() {
-            st.current_page += 1;
-            apply_page(
-                reader,
-                &st.state,
-                st.current_page,
-                &st.chapter_offsets,
-                st.current_chapter,
-            );
-            reader
-                .set_saved_page((st.chapter_offsets[st.current_chapter] + st.current_page) as i32);
-            text_dirty = true;
-            best_effort_send(cmd_tx, Cmd::Play);
-            info!("audio-page: advanced to page {}", st.current_page + 1);
-        } else if st.current_chapter + 1 < st.chapter_count {
+        if st.current_chapter + 1 < st.chapter_count {
             let nc = st.current_chapter + 1;
             switch_chapter(
                 st,

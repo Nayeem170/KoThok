@@ -115,14 +115,11 @@ fn screenshot_zone_is_the_bottom_left_corner() {
 
 #[test]
 #[cfg(feature = "screenshot")]
-fn screenshot_hold_in_bottom_left_corner() {
+fn screenshot_tap_in_bottom_left_corner_captures() {
+    // A quick tap (or a longer hold) in the corner captures - the press is
+    // withheld from the tap path, so duration no longer matters.
     assert!(is_screenshot_hold(70.0, 1410.0, 73.0, 1412.0, 2100, 1072.0, 1448.0));
-}
-
-#[test]
-#[cfg(feature = "screenshot")]
-fn screenshot_hold_rejected_when_too_brief() {
-    assert!(!is_screenshot_hold(70.0, 1410.0, 70.0, 1410.0, 900, 1072.0, 1448.0));
+    assert!(is_screenshot_hold(70.0, 1410.0, 70.0, 1410.0, 120, 1072.0, 1448.0));
 }
 
 #[test]

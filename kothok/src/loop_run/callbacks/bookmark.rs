@@ -173,12 +173,7 @@ pub(super) fn page_for_bookmark(st: &LoopState, bm: &crate::Bookmark) -> usize {
 
 /// Index of the page whose rows cover `offset`, if any.
 pub(super) fn page_for_offset(st: &LoopState, offset: usize) -> Option<usize> {
-    st.state.pages.iter().position(|(s, e)| {
-        st.state.all_rows.get(*s..*e).is_some_and(|rows| {
-            rows.iter()
-                .any(|r| r.start < r.end && offset >= r.start as usize && offset < r.end as usize)
-        })
-    })
+    st.state.page_for_offset(offset)
 }
 
 pub(super) fn restore_cursor_line(st: &LoopState, reader: &Reader, offset: usize) -> bool {

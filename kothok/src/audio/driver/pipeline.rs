@@ -77,15 +77,33 @@ impl DriverState {
         {
             return;
         }
-        let (text, s, e, para_end) = (
-            self.utterances[self.idx].text.clone(),
-            self.utterances[self.idx].start,
-            self.utterances[self.idx].end,
-            self.utterances[self.idx].para_end,
-        );
+        let text = self.utterances[self.idx].text.clone();
         let rate = self.rate.clone();
         let (utt_voice, utt_lang) =
             voice_for_text_explicit(&text, &self.voice, &self.bn_voice, crate::meta::LANG_AUTO);
+
+        if let Some(cached) = self.cache.lookup(&text, &utt_voice, &rate) {
+            let start = self.utterances[self.idx].start;
+            let end = self.utterances[self.idx].end;
+            let para_end = self.utterances[self.idx].para_end;
+            let page_break = self.utterances.get(self.idx).and_then(|u| u.page_break);
+            info!(
+                "audio: PCM cache hit #{} ({} ready)",
+                self.idx,
+                self.ready_queue.len() + 1,
+            );
+            self.ready_queue.push(ReadyUtt {
+                idx: self.idx,
+                prep: cached.prep,
+                start,
+                end,
+                para_end,
+                page_break,
+            });
+            self.idx += 1;
+            return;
+        }
+
         info!(
             "audio: synth #{} voice={utt_voice} lang={utt_lang}",
             self.idx
@@ -93,12 +111,16 @@ impl DriverState {
         let synth_idx = self.idx;
         self.pending = Some(tokio::task::spawn_local(synth_prepare(
             synth_idx,
-            text,
+            text.clone(),
             utt_voice,
-            rate,
+            rate.clone(),
             crate::meta::LANG_AUTO.into(),
         )));
-        self.pending_range = Some((s, e, para_end));
+        self.pending_range = Some((
+            self.utterances[synth_idx].start,
+            self.utterances[synth_idx].end,
+            self.utterances[synth_idx].para_end,
+        ));
         self.pending_page_break = self.utterances.get(self.idx).and_then(|u| u.page_break);
         self.pending_idx = Some(self.idx);
         self.pending_started = Some(Instant::now());
@@ -189,13 +211,33 @@ impl DriverState {
                 self.synth_retries = 0;
                 if let Some((s, e, para_end)) = self.pending_range.take() {
                     let synth_idx = self.pending_idx.unwrap_or(self.idx.saturating_sub(1));
-                    self.ready_queue.push(ReadyUtt {
+                    let ru = ReadyUtt {
+                        idx: synth_idx,
                         prep,
                         start: s,
                         end: e,
                         para_end,
                         page_break: self.pending_page_break.take(),
+                    };
+                    let cache_key = (
+                        self.utterances[synth_idx].text.clone(),
+                        voice_for_text_explicit(
+                            &self.utterances[synth_idx].text,
+                            &self.voice,
+                            &self.bn_voice,
+                            crate::meta::LANG_AUTO,
+                        ).0,
+                        self.rate.clone(),
+                    );
+                    self.cache.store(cache_key, ReadyUtt {
+                        idx: ru.idx,
+                        prep: ru.prep.clone(),
+                        start: ru.start,
+                        end: ru.end,
+                        para_end: ru.para_end,
+                        page_break: ru.page_break,
                     });
+                    self.ready_queue.push(ru);
                     info!(
                         "audio: TTS synth OK (utt #{synth_idx}, {} ready)",
                         self.ready_queue.len()
@@ -219,6 +261,7 @@ impl DriverState {
         }
         if !self.ready_queue.is_empty() {
             let u = self.ready_queue.remove(0);
+            self.current_idx = u.idx;
             let page_break_ticks = u
                 .page_break
                 .and_then(|break_off| u.prep.tick_at_offset(break_off));

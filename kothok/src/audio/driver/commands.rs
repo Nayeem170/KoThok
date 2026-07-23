@@ -45,7 +45,7 @@ impl DriverState {
                 self.utterances.extend(new_utts);
                 debug!("APPEND utterances (total {})", self.utterances.len());
             }
-            Cmd::Seek(target) => self.handle_seek(target).await,
+            Cmd::Seek(target) => self.handle_seek(target),
             Cmd::Rate(r) => self.handle_voice_param_change(&r, VoiceParam::Rate),
             Cmd::Voice(v) => self.handle_voice_param_change(&v, VoiceParam::Voice),
             Cmd::BnVoice(v) => self.handle_voice_param_change(&v, VoiceParam::BnVoice),
@@ -73,16 +73,10 @@ impl DriverState {
         debug!("RELOAD chapter ({} utterances)", self.utterances.len());
     }
 
-    async fn handle_seek(&mut self, target: usize) {
+    fn handle_seek(&mut self, target: usize) {
         self.abort_pending();
         self.reset_pipeline();
         self.idx = target.min(self.utterances.len());
-        if self.want_play {
-            if let Some(p) = self.player.take() {
-                // best-effort: drain errors caught by sink-error recovery
-                let _ = p.drain_and_stop().await;
-            }
-        }
         debug!("SEEK to utterance {}/{}", self.idx, self.utterances.len());
     }
 
@@ -101,8 +95,9 @@ impl DriverState {
                 debug!("BN_VOICE changed to {new_val}");
             }
         }
+        let resume_at = self.current_idx;
         self.abort_pending();
-        self.idx = self.pending_idx.take().unwrap_or(self.idx);
-        self.pending_range = None;
+        self.reset_pipeline();
+        self.idx = resume_at;
     }
 }

@@ -58,6 +58,7 @@ mod callbacks;
 mod picker;
 mod power;
 mod status;
+pub(crate) use status::save_position_now;
 mod touch_dispatch;
 mod touch_release;
 
@@ -83,6 +84,9 @@ const TAP_COOLDOWN_MS: u64 = 100;
 const SLEEP_PANEL_SETTLE_MS: u64 = 400;
 const PICKER_ENTER_DEBOUNCE_MS: u64 = 350;
 const PICKER_DOUBLE_TAP_MS: u64 = 450;
+/// Window for a second footer play-button tap to count as a double-click
+/// (bookmark) instead of a single play/pause toggle.
+const PLAY_BUTTON_DOUBLE_MS: u64 = 350;
 
 pub fn run_loop(st: &mut LoopState, ctx: &mut LoopContext) {
     let mut iter = 0u32;
@@ -152,6 +156,10 @@ pub fn run_loop(st: &mut LoopState, ctx: &mut LoopContext) {
         }
 
         let (ui_changed, page_changed) = callbacks::process_loop_callbacks(st, ctx);
+
+        // After the callbacks, so a page turn or a TTS sentence advance is
+        // already reflected in the cursor this reads.
+        status::autosave_position(st, ctx);
 
         let render_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             render_and_present(st, ctx, had_event, ui_changed, page_changed)

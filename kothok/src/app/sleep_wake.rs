@@ -24,6 +24,12 @@ use kobo_core::Capabilities;
 use super::*;
 
 pub fn enter_sleep(st: &mut LoopState, ctx: &LoopContext, from_picker: bool, bt_on: bool) -> u32 {
+    // Flush the reading position before the device goes down. Sleep is where a
+    // session usually ends -- the battery runs out or nickel is restored days
+    // later -- so waiting for the autosave rate limit here can lose real pages.
+    if !from_picker {
+        crate::loop_run::save_position_now(st, ctx.reader);
+    }
     let fb = ctx.fb;
     let buffer = &mut st.buffer;
     let prev_buffer = &mut st.prev_buffer;

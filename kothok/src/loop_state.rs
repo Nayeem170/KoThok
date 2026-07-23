@@ -118,6 +118,16 @@ pub struct LoopState {
     pub tap_xy: Option<(f32, f32)>,
     pub scrubbing: bool,
     pub pp_pressed: bool,
+    /// Release time of the last footer play-button tap, held for the
+    /// double-click window so a second tap can promote it to a bookmark
+    /// instead of toggling playback.
+    pub pp_pending_release: Option<Instant>,
+    /// Reading position as last written to disk, and when. Used to autosave on
+    /// cursor movement without writing the positions file on every TTS
+    /// sentence: the tuple detects real movement, the instant rate-limits the
+    /// write. `None` means nothing has been saved for this book yet.
+    pub saved_pos: Option<(usize, usize, usize)>,
+    pub saved_pos_at: Option<Instant>,
     pub lib_pressed: bool,
     pub menu_pressed: bool,
     pub mode_toggle_pressed: bool,
@@ -185,5 +195,6 @@ pub struct LoopContext<'a> {
     pub w: usize,
     pub h: usize,
     pub power_pressed: &'a Arc<AtomicBool>,
+    pub media_signals: &'a crate::device::media_keys::MediaSignals,
     pub fl_path: &'a Option<PathBuf>,
 }

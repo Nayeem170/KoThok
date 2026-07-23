@@ -46,6 +46,18 @@ pub(super) fn process_mode_toggle(
                 crate::audio::glue::best_effort_send(cmd_tx, Cmd::Seek(idx));
             }
             ViewMode::Reading => {
+                let off = reader.get_cur_start().max(0) as usize;
+                if let Some(page) = st.state.page_for_offset(off) {
+                    if page != st.current_page {
+                        info!(
+                            "mode-toggle: correcting page {} -> {} (off={})",
+                            st.current_page + 1,
+                            page + 1,
+                            off
+                        );
+                        st.current_page = page;
+                    }
+                }
                 info!(
                     "mode-toggle: switching to reading, re-applying page {}",
                     st.current_page + 1
@@ -57,7 +69,10 @@ pub(super) fn process_mode_toggle(
                     &st.chapter_offsets,
                     st.current_chapter,
                 );
-                crate::audio::glue::load_page_audio(st.current_page, &st.state, cmd_tx);
+                let page_utts = crate::audio::glue::page_utterances(st.current_page, &st.state);
+                let idx = crate::audio::glue::utterance_index_for_offset(&page_utts, off);
+                crate::audio::glue::best_effort_send(cmd_tx, Cmd::Reload(page_utts));
+                crate::audio::glue::best_effort_send(cmd_tx, Cmd::Seek(idx));
             }
         }
         st.text_dirty = true;

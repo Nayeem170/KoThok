@@ -15,12 +15,36 @@ pub(super) fn process_loop_callbacks(st: &mut LoopState, ctx: &mut LoopContext) 
     let cmd_tx = ctx.cmd_tx;
     let mut ui_changed = false;
     let mut page_changed = false;
+    // Translate one-shot AVRCP media-button signals from the BT monitor into the
+    // same cells the on-screen buttons use.
+    let sig = ctx.media_signals;
+    if sig.play.swap(false, std::sync::atomic::Ordering::SeqCst) {
+        cb.play_toggle_cell.set(true);
+    }
+    if sig.next.swap(false, std::sync::atomic::Ordering::SeqCst) {
+        cb.skip_forward_cell.set(true);
+    }
+    if sig.prev.swap(false, std::sync::atomic::Ordering::SeqCst) {
+        cb.skip_rewind_cell.set(true);
+    }
+
     if let Some(t) = st.pending_tap_at {
         if st.panel_open
             || st.picker_active
             || t.elapsed().as_millis() >= touch::DOUBLE_TAP_WINDOW_MS as u128
         {
             st.pending_tap_at = None;
+        }
+    }
+    // Resolve a deferred single footer play-button tap: once the double-click
+    // window elapses with no second tap, promote it to a real toggle. Opening
+    // the panel cancels it so no play/pause fires behind the overlay.
+    if let Some(t) = st.pp_pending_release {
+        if st.panel_open || t.elapsed().as_millis() >= PLAY_BUTTON_DOUBLE_MS as u128 {
+            st.pp_pending_release = None;
+            if !st.panel_open {
+                cb.play_toggle_cell.set(true);
+            }
         }
     }
     // Snapshot the page BEFORE both audio-driven and manual page changes.
@@ -214,6 +238,23 @@ pub(super) fn process_loop_callbacks(st: &mut LoopState, ctx: &mut LoopContext) 
                 &st.chapter_offsets,
                 st.current_chapter,
             );
+            if pt.pg != st.current_page {
+                info!(
+                    "play-start: correcting page {} -> {} (cursor off={})",
+                    st.current_page + 1,
+                    pt.pg + 1,
+                    pt.off
+                );
+                st.current_page = pt.pg;
+                apply_page(
+                    reader,
+                    &st.state,
+                    st.current_page,
+                    &st.chapter_offsets,
+                    st.current_chapter,
+                );
+                st.text_dirty = true;
+            }
             st.reading_ch = pt.ch;
             st.reading_pg = pt.pg;
             st.reading_off = pt.off;

@@ -30,8 +30,18 @@ pub(super) fn on_release(
     } else if st.pp_pressed {
         st.pp_pressed = false;
         if reader.get_play_enabled() {
-            cb.play_toggle_cell.set(true);
-            debug!("play-pause: footer tap");
+            let is_double = st
+                .pp_pending_release
+                .map(|t| now.duration_since(t).as_millis() < PLAY_BUTTON_DOUBLE_MS as u128)
+                .unwrap_or(false);
+            if is_double {
+                st.pp_pending_release = None;
+                cb.bookmark_set_cell.set(true);
+                debug!("play-button: double-click -> bookmark");
+            } else {
+                st.pp_pending_release = Some(now);
+                debug!("play-button: single tap deferred");
+            }
         }
     } else if st.lib_pressed {
         st.lib_pressed = false;
@@ -227,7 +237,19 @@ pub(super) fn on_release(
                     WAVE_GC16,
                 );
                 st.prev_buffer.copy_from_slice(&st.buffer);
-                load_page_audio(st.current_page, &st.state, &cmd_tx);
+                if matches!(st.view_mode, crate::ViewMode::Audio) {
+                    crate::audio::glue::load_chapter_audio(&st.state, &cmd_tx);
+                    let off = reader.get_cur_start().max(0) as usize;
+                    if off > 0 {
+                        let idx = crate::audio::glue::utterance_index_for_offset(
+                            &st.state.utterances,
+                            off,
+                        );
+                        crate::audio::glue::best_effort_send(&cmd_tx, Cmd::Seek(idx));
+                    }
+                } else {
+                    load_page_audio(st.current_page, &st.state, &cmd_tx);
+                }
                 debug!("cover: dismissed, showing page {}", st.current_page + 1);
                 debug!("gesture: branch=cover_dismissed");
             } else if !st.picker_active

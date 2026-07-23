@@ -27,7 +27,7 @@ screenshot = []
 [dependencies]
 slint = { version = "=1.8.0", default-features = false, features = ["std", "compat-1-2", "renderer-software", "libm"] }
 kobo-core = "0.3"
-kothok-edge-tts = "0.2.9"
+kothok-edge-tts = "0.2.10"
 tokio = { version = "1", features = ["rt", "time", "net", "io-util"] }
 libc = "0.2"
 log = "0.4"

@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Nayeem Bin Ahsan
 use std::sync::mpsc::Sender;
 
-use log::debug;
+use log::info;
 
 use slint::SharedString;
 
@@ -24,7 +24,7 @@ pub(super) fn handle_voice_cycle(
         return;
     }
     let voices = voices_for_lang(&cfg.tts_lang);
-    let current = cfg.tts_voice.as_str();
+    let current = cfg.tts_voice.clone();
     let idx = voices.iter().position(|v| v.id() == current).unwrap_or(0);
     let new_idx = if dir == 2 {
         if idx == 0 {
@@ -39,12 +39,13 @@ pub(super) fn handle_voice_cycle(
     cfg.tts_voice = new_voice.to_string();
     cfg.voices
         .insert(cfg.tts_lang.clone(), new_voice.to_string());
-    debug!(
-        "voice-cycle: lang={} dir={} new={} saved_map_size={}",
+    info!(
+        "voice-cycle: lang={} dir={} voices={} new={} old={}",
         cfg.tts_lang,
         if dir == 2 { "prev" } else { "next" },
+        voices.len(),
         new_voice,
-        cfg.voices.len()
+        current,
     );
     reader.set_tts_voice(SharedString::from(new_voice));
     reader.set_tts_voice_label(SharedString::from(voice_label(new_voice)));

@@ -124,6 +124,18 @@ pub struct ChapterState {
     pub style_runs: Vec<kobo_core::html_text::StyleRun>,
 }
 
+impl ChapterState {
+    /// Index of the page whose rows cover `offset`, if any.
+    pub fn page_for_offset(&self, offset: usize) -> Option<usize> {
+        self.pages.iter().position(|(s, e)| {
+            self.all_rows.get(*s..*e).is_some_and(|rows| {
+                rows.iter()
+                    .any(|r| r.start < r.end && offset >= r.start as usize && offset < r.end as usize)
+            })
+        })
+    }
+}
+
 #[cfg(test)]
 pub use kobo_core::rendering::text_render::style_at;
 

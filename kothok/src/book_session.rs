@@ -43,23 +43,43 @@ pub fn open_book_session(
         line_h,
         book_path,
     );
-    let current_page = pos.page.min(state.pages.len().saturating_sub(1));
-    let (reading_off, reading_end) = if pos.cur_start > 0 {
-        (pos.cur_start, pos.cur_end)
-    } else {
-        let (rs, re) = state.pages.get(current_page).copied().unwrap_or((0, 0));
-        let mut off = 0;
-        let mut end = 0;
-        if let Some(slice) = state.all_rows.get(rs..re) {
-            for row in slice {
-                if row.start < row.end {
-                    off = row.start as usize;
-                    end = row.end as usize;
-                    break;
+    let npages = state.pages.len();
+    let (current_page, reading_off, reading_end) = if pos.cur_start > 0 {
+        let page = state
+            .page_for_offset(pos.cur_start)
+            .unwrap_or_else(|| pos.page.min(npages.saturating_sub(1)));
+        let (mut off, mut end) = (pos.cur_start, pos.cur_end.max(pos.cur_start));
+        if let Some((rs, re)) = state.pages.get(page) {
+            if let Some(rows) = state.all_rows.get(*rs..*re) {
+                for row in rows {
+                    if row.start < row.end
+                        && pos.cur_start >= row.start as usize
+                        && pos.cur_start < row.end as usize
+                    {
+                        off = row.start as usize;
+                        end = row.end as usize;
+                        break;
+                    }
                 }
             }
         }
-        (off, end)
+        (page, off, end)
+    } else {
+        let page = pos.page.min(npages.saturating_sub(1));
+        let mut off = 0;
+        let mut end = 0;
+        if let Some((rs, re)) = state.pages.get(page).copied() {
+            if let Some(slice) = state.all_rows.get(rs..re) {
+                for row in slice {
+                    if row.start < row.end {
+                        off = row.start as usize;
+                        end = row.end as usize;
+                        break;
+                    }
+                }
+            }
+        }
+        (page, off, end)
     };
     BookSession {
         state,
@@ -70,7 +90,7 @@ pub fn open_book_session(
         reading_pg: current_page,
         reading_off,
         reading_end,
-        show_cover: pos.page == 0 && pos.cur_start == 0,
+        show_cover: pos.bookmark.is_none() && pos.cur_start == 0,
     }
 }
 

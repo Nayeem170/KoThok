@@ -110,11 +110,7 @@ pub fn classify_header_zone(dx: f32, dy: f32, w: f32) -> HeaderZone {
     HeaderZone::None
 }
 
-/// How long the screenshot hold must last. Well past any tap or swipe, so the
-/// gesture stays unambiguous.
-#[cfg(feature = "screenshot")]
-pub const SCREENSHOT_HOLD_MS: u128 = 2000;
-/// Finger drift tolerated over the hold. A swipe leaves this band immediately.
+/// Finger drift tolerated over the touch. A swipe leaves this band immediately.
 #[cfg(feature = "screenshot")]
 pub const SCREENSHOT_DRIFT_PX: f32 = 30.0;
 /// Side of the bottom-left corner square that arms a capture. The header is
@@ -130,25 +126,22 @@ pub fn is_in_screenshot_zone(dx: f32, dy: f32, _w: f32, h: f32) -> bool {
     dx < SCREENSHOT_CORNER && dy > h - SCREENSHOT_CORNER
 }
 
-/// Screenshot gesture: hold the bottom-left corner still for 2s.
+/// Screenshot gesture: a tap in the bottom-left corner.
 ///
-/// Tested while the finger is still down, not on release. The library grid acts
-/// on `tap_xy` at press time and audio mode forwards the press straight to
-/// Slint, so a release-time check would fire only after those screens had
-/// already moved on.
+/// The corner press is withheld from the normal tap path (see `touch_dispatch`),
+/// so there is nothing to disambiguate from - any still touch in the zone
+/// captures, tap or hold. A swipe leaves the drift band and is ignored. Checked
+/// while the finger is still down so the capture lands on the current screen.
 #[cfg(feature = "screenshot")]
 pub fn is_screenshot_hold(
     press_dx: f32,
     press_dy: f32,
     cur_dx: f32,
     cur_dy: f32,
-    dt_ms: u128,
+    _dt_ms: u128,
     w: f32,
     h: f32,
 ) -> bool {
-    if dt_ms < SCREENSHOT_HOLD_MS {
-        return false;
-    }
     if !is_in_screenshot_zone(press_dx, press_dy, w, h)
         || !is_in_screenshot_zone(cur_dx, cur_dy, w, h)
     {
