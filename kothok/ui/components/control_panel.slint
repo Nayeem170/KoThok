@@ -1,0 +1,396 @@
+import { ActionButton } from "button.slint";
+import { CompactSlider } from "slider.slint";
+import { SelectorRow } from "selector.slint";
+
+export component ControlPanel inherits Rectangle {
+    in property <bool> visible-flag: false;
+    in property <int> brightness-val: 50;
+    in property <int> tts-speed: 50;
+    in property <int> font-size-val: 36;
+    in property <int> volume-val: 100;
+    in property <string> tts-voice-label: "Emma (English)";
+    in property <bool> wifi-on: true;
+    in property <bool> bt-on: true;
+    in property <string> wifi-name: "";
+    in property <string> bt-name: "";
+    in property <string> wifi-connected-name: "";
+    in property <string> bt-connected-name: "";
+    in property <string> sleep-label: "Off";
+    in property <string> clock: "";
+    in property <int> battery-pct: 0;
+    in property <string> book-title: "";
+    in property <string> book-author: "";
+    in property <string> chapter-name: "";
+    in property <image> book-title-img;
+    in property <int> book-title-img-h: 0;
+    in property <image> book-author-img;
+    in property <int> book-author-img-h: 0;
+    in property <image> chapter-name-img;
+    in property <int> chapter-name-img-h: 0;
+    in property <image> book-cover-img;
+    in property <int> page: 0;
+    in property <int> page-count: 1;
+    in property <bool> audio-mode: false;
+    in property <bool> has-bookmark: false;
+    in property <color> brand-green: #006A4E;
+    in property <color> brand-red: #F42A41;
+    in property <color> text-primary: #111111;
+    in property <color> text-secondary: #666666;
+    in property <color> text-hint: #999999;
+    in property <color> bg-off: #1a1a1a;
+    in property <color> bg-pressed: #555555;
+    in property <color> separator: #999999;
+    in property <color> track-color: #d0d0d0;
+
+    callback quit();
+    callback jump-to-reading();
+    callback panel-close();
+    callback panel-frac(int, float);
+    callback panel-voice(string);
+    callback panel-wifi-toggle();
+    callback panel-bt-toggle();
+    callback panel-wifi-cycle(string);
+    callback panel-bt-cycle(string);
+    callback panel-sleep-cycle(string);
+
+    visible: root.visible-flag;
+    background: #ffffff;
+
+    // Full-screen touch backdrop: intercepts all touches while the panel is
+    // open so they cannot reach the underlying Content/AudioPlayer progress
+    // bar TouchArea. Without this, dragging on the lower screen area behind
+    // the panel accidentally scrubs the book position.
+    TouchArea {
+        width: root.width;
+        height: root.height;
+    }
+
+    // Shares the header geometry used by content.slint and audio_player.slint:
+    // 110px tall, 76px buttons, 23px edge padding.
+    Rectangle {
+        y: 0px; height: 110px; width: root.width;
+        background: #ffffff;
+
+        Rectangle { y: 0px; height: 4px; width: root.width; background: root.brand-green; }
+
+        ActionButton {
+            x: 23px; y: 17px;
+            width: 76px; height: 76px;
+            icon: @image-url("assets/back.svg");
+            bg: root.brand-red;
+            radius: 38px;
+            clicked => { root.panel-close(); }
+        }
+
+        Text {
+            text: "Settings";
+            color: root.text-secondary; font-size: 33px; font-weight: 700;
+            horizontal-alignment: center; vertical-alignment: center;
+            x: 119px; width: root.width - 238px; height: 110px;
+            overflow: elide;
+        }
+
+        Rectangle {
+            y: 107px; height: 3px; width: root.width;
+            background: root.track-color;
+        }
+    }
+
+    VerticalLayout {
+        padding-left: 24px; padding-right: 24px;
+        // Clears the 110px header + 14px gap.
+        padding-top: 124px; padding-bottom: 24px;
+        spacing: 14px;
+
+        HorizontalLayout {
+            height: 24px;
+            spacing: 10px;
+            Text {
+                text: "DISPLAY";
+                color: root.text-hint; font-size: 20px; font-weight: 700;
+                vertical-alignment: center;
+            }
+            Rectangle {
+                horizontal-stretch: 1;
+                height: 24px;
+                Rectangle {
+                    y: (parent.height - 2px) / 2;
+                    height: 2px; width: 100%;
+                    background: root.separator;
+                }
+            }
+        }
+
+        CompactSlider {
+            name: "Brightness";
+            text-primary: root.text-primary;
+            text-hint: root.text-hint;
+            track-color: root.track-color;
+            value-text: root.brightness-val + "%";
+            fill-frac: root.brightness-val / 100.0;
+            set-frac(f) => { root.panel-frac(0, f); }
+        }
+
+        CompactSlider {
+            name: "Font";
+            text-primary: root.text-primary;
+            text-hint: root.text-hint;
+            track-color: root.track-color;
+            value-text: root.font-size-val + "px";
+            fill-frac: (root.font-size-val - 20) / 40.0;
+            set-frac(f) => { root.panel-frac(2, f); }
+        }
+
+        SelectorRow {
+            label: "Sleep: " + root.sleep-label;
+            on-state: true;
+            connected: true;
+            center-toggle: false;
+            brand-green: root.brand-green;
+            brand-red: root.brand-red;
+            bg-off: root.bg-off;
+            bg-pressed: root.bg-pressed;
+            prev => { root.panel-sleep-cycle("prev"); }
+            next => { root.panel-sleep-cycle("next"); }
+        }
+
+        HorizontalLayout {
+            height: 24px;
+            spacing: 10px;
+            Text {
+                text: "AUDIO";
+                color: root.text-hint; font-size: 20px; font-weight: 700;
+                vertical-alignment: center;
+            }
+            Rectangle {
+                horizontal-stretch: 1;
+                height: 24px;
+                Rectangle {
+                    y: (parent.height - 2px) / 2;
+                    height: 2px; width: 100%;
+                    background: root.separator;
+                }
+            }
+        }
+
+        SelectorRow {
+            label: root.tts-voice-label;
+            on-state: true;
+            connected: true;
+            center-toggle: false;
+            brand-green: root.brand-green;
+            brand-red: root.brand-red;
+            bg-off: root.bg-off;
+            bg-pressed: root.bg-pressed;
+            prev => { root.panel-voice("prev"); }
+            next => { root.panel-voice("next"); }
+        }
+
+        CompactSlider {
+            name: "Speed";
+            text-primary: root.text-primary;
+            text-hint: root.text-hint;
+            track-color: root.track-color;
+            value-text: (root.tts-speed == 50 ? "1.0x" : (root.tts-speed > 50 ? "+" : "") + (root.tts-speed - 50) * 2 + "%");
+            fill-frac: root.tts-speed / 100.0;
+            set-frac(f) => { root.panel-frac(1, f); }
+        }
+
+        CompactSlider {
+            name: "Volume";
+            text-primary: root.text-primary;
+            text-hint: root.text-hint;
+            track-color: root.track-color;
+            value-text: root.volume-val + "%";
+            fill-frac: root.volume-val / 100.0;
+            set-frac(f) => { root.panel-frac(3, f); }
+        }
+
+        HorizontalLayout {
+            height: 24px;
+            spacing: 10px;
+            Text {
+                text: "NETWORK";
+                color: root.text-hint; font-size: 20px; font-weight: 700;
+                vertical-alignment: center;
+            }
+            Rectangle {
+                horizontal-stretch: 1;
+                height: 24px;
+                Rectangle {
+                    y: (parent.height - 2px) / 2;
+                    height: 2px; width: 100%;
+                    background: root.separator;
+                }
+            }
+        }
+
+        SelectorRow {
+            label: !root.wifi-on ? "WiFi Off"
+                : (root.wifi-name != "" && root.wifi-name == root.wifi-connected-name
+                   ? "connected to " + root.wifi-name
+                   : (root.wifi-name != "" ? "connecting to " + root.wifi-name : "WiFi connecting..."));
+            on-state: root.wifi-on;
+            connected: root.wifi-on && root.wifi-name != "" && root.wifi-name == root.wifi-connected-name;
+            center-toggle: true;
+            brand-green: root.brand-green;
+            brand-red: root.brand-red;
+            bg-off: root.bg-off;
+            bg-pressed: root.bg-pressed;
+            prev => { root.panel-wifi-cycle("prev"); }
+            next => { root.panel-wifi-cycle("next"); }
+            toggle => { root.panel-wifi-toggle(); }
+        }
+
+        SelectorRow {
+            label: !root.bt-on ? "BT Off"
+                : (root.bt-name != "" && root.bt-name == root.bt-connected-name
+                   ? "connected to " + root.bt-name
+                   : (root.bt-name != "" ? "connecting to " + root.bt-name : "BT connecting..."));
+            on-state: root.bt-on;
+            connected: root.bt-on && root.bt-name != "" && root.bt-name == root.bt-connected-name;
+            center-toggle: true;
+            brand-green: root.brand-green;
+            brand-red: root.brand-red;
+            bg-off: root.bg-off;
+            bg-pressed: root.bg-pressed;
+            prev => { root.panel-bt-cycle("prev"); }
+            next => { root.panel-bt-cycle("next"); }
+            toggle => { root.panel-bt-toggle(); }
+        }
+
+        Rectangle { vertical-stretch: 1; }
+
+        Rectangle {
+            height: 2px; background: root.separator;
+        }
+
+        HorizontalLayout {
+            spacing: 16px;
+
+            Image {
+                source: root.book-cover-img;
+                height: 168px;
+                width: root.book-cover-img.height > 0
+                    ? 168px * root.book-cover-img.width / root.book-cover-img.height
+                    : 112px;
+                image-fit: contain;
+                horizontal-alignment: center;
+                vertical-alignment: top;
+                visible: root.book-cover-img.width > 0;
+            }
+
+            VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: 8px;
+
+                HorizontalLayout {
+                    spacing: 12px;
+
+                    VerticalLayout {
+                        horizontal-stretch: 1;
+                        spacing: 2px;
+
+                        HorizontalLayout {
+                            alignment: start;
+                            Image {
+                                source: root.book-title-img;
+                                height: root.book-title-img-h * 1px;
+                                image-fit: contain;
+                                vertical-alignment: top;
+                                horizontal-stretch: 0;
+                                visible: root.book-title-img-h > 0;
+                            }
+                        }
+                        Text {
+                            text: root.book-title != "" ? root.book-title : "-";
+                            color: root.text-primary; font-size: 24px; font-weight: 700; wrap: word-wrap;
+                            horizontal-alignment: left;
+                            visible: root.book-title-img-h == 0;
+                        }
+                        HorizontalLayout {
+                            alignment: start;
+                            Image {
+                                source: root.book-author-img;
+                                height: root.book-author-img-h * 1px;
+                                image-fit: contain;
+                                vertical-alignment: top;
+                                horizontal-stretch: 0;
+                                visible: root.book-author-img-h > 0;
+                            }
+                        }
+                        Text {
+                            text: root.book-author != "" ? root.book-author : "";
+                            color: root.text-secondary; font-size: 19px; wrap: word-wrap;
+                            horizontal-alignment: left;
+                            visible: root.book-author != "" && root.book-author-img-h == 0;
+                        }
+                    }
+
+                    Rectangle {
+                        width: 160px; height: 40px;
+                        border-radius: 8px;
+                        border-width: 1px;
+                        border-color: root.separator;
+                        background: #f2f2f2;
+                        Text {
+                            text: "Page " + (root.page + 1) + " / " + root.page-count;
+                            color: root.text-primary; font-size: 18px;
+                            horizontal-alignment: center; vertical-alignment: center;
+                            overflow: elide;
+                        }
+                    }
+                }
+
+                Rectangle {
+                    height: 14px;
+                    background: root.track-color;
+                    border-radius: 7px;
+                    border-width: 2px;
+                    border-color: root.text-hint;
+                    Rectangle {
+                        x: 0px;
+                        width: parent.width * (root.page-count > 0
+                            ? clamp((root.page + 1) * 1.0 / root.page-count, 0.0, 1.0)
+                            : 0.0);
+                        height: 100%;
+                        background: root.text-primary;
+                        border-radius: 7px;
+                    }
+                }
+
+                HorizontalLayout {
+                    alignment: start;
+                    Image {
+                        source: root.chapter-name-img;
+                        height: root.chapter-name-img-h * 1px;
+                        image-fit: contain;
+                        vertical-alignment: top;
+                        horizontal-stretch: 0;
+                        visible: root.chapter-name-img-h > 0;
+                    }
+                }
+                // `wrap` is not decoration here. A Text without it is no-wrap,
+                // and a no-wrap Text reports its *entire* string as its minimum
+                // width -- so a long chapter title ("Interpretable Features and
+                // Sparse Autoencoders") widened this column past the panel and
+                // cropped the page badge and progress bar above it. That is the
+                // same breakage a too-wide title raster caused, arriving by a
+                // different route, which is why it hit English books too.
+                Text {
+                    text: (root.chapter-name != "" ? root.chapter-name : "-");
+                    color: root.text-secondary; font-size: 19px;
+                    horizontal-alignment: left;
+                    wrap: word-wrap;
+                    visible: root.chapter-name-img-h == 0;
+                }
+            }
+        }
+
+        Text {
+            text: "swipe: pages - swipe down: menu - double-tap: play";
+            color: root.text-secondary; font-size: 18px; wrap: word-wrap;
+            horizontal-alignment: left;
+        }
+    }
+}

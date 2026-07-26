@@ -1,0 +1,282 @@
+import { Row } from "types.slint";
+import { ContentArea } from "components/content.slint";
+import { AudioPlayer } from "components/audio_player.slint";
+import { ControlPanel } from "components/control_panel.slint";
+import { ChapterOverlay } from "components/chapter_overlay.slint";
+import { LoadingOverlay } from "components/loading_overlay.slint";
+
+export component Reader inherits Window {
+    preferred-width: 1072px;
+    preferred-height: 1448px;
+    background: #ffffff;
+
+    property <color> brand-green: #006A4E;
+    property <color> brand-red: #F42A41;
+    property <color> brand-gray: #8a8a8a;
+    property <color> text-primary: #111111;
+    property <color> text-secondary: #666666;
+    property <color> text-hint: #999999;
+    property <color> bg-off: #1a1a1a;
+    property <color> bg-pressed: #555555;
+    property <color> separator: #999999;
+    property <color> track-color: #d0d0d0;
+    in-out property <[Row]> rows;
+    in-out property <int> cur-start;
+    in-out property <int> cur-end;
+    in-out property <bool> playing: false;
+    in-out property <bool> paused: false;
+    in-out property <bool> play-enabled: false;
+    callback play-pause-toggle();
+    in-out property <bool> nav-recent: false;
+    // Sticky once the reader has turned a page. The footer hint is there to
+    // teach the swipe gesture, so it stops earning its place the moment you
+    // have used it -- after that the page number is the useful thing.
+    in-out property <bool> has-navigated: false;
+    in-out property <int> taps: 0;
+    in-out property <string> status: "";
+    in-out property <int> page;
+    in-out property <int> page-count;
+    in-out property <int> chapter-page: 1;
+    in-out property <int> chapter-page-count: 1;
+    in-out property <int> saved-page: 0;
+
+    callback quit;
+
+    in-out property <bool> picker-active: false;
+
+    in-out property <bool> panel-open: false;
+    in-out property <bool> header-visible: true;
+    in-out property <string> current-sentence: "";
+    in-out property <int> battery-pct: 0;
+    in-out property <string> clock: "";
+    in-out property <int> brightness-val: 50;
+    in-out property <int> font-size-val: 36;
+    in-out property <string> tts-lang: "auto";
+    in-out property <string> tts-voice: "en-US-EmmaMultilingualNeural";
+    in-out property <string> tts-voice-label: "Emma (English)";
+    in-out property <int> tts-speed: 50;
+    in-out property <int> volume-val: 100;
+    in-out property <bool> wifi-on: true;
+    in-out property <bool> bt-on: true;
+    in-out property <string> wifi-name: "";
+    in-out property <string> bt-name: "";
+    in-out property <string> wifi-connected-name: "";
+    in-out property <string> bt-connected-name: "";
+    in-out property <string> sleep-label: "Off";
+    in-out property <bool> chapter-overlay-open: false;
+    in-out property <int> current-chapter-idx: 0;
+    in-out property <int> chapter-count: 1;
+    // Flattened chapter-overlay row count (issue 11) -- a nested TOC can have
+    // more (or fewer) entries than the spine has chapters, so a tapped row's
+    // index has to be bounds-checked against this, not chapter-count.
+    in-out property <int> toc-row-count: 1;
+    in-out property <string> chapter-name: "";
+    in-out property <string> book-title: "";
+    in-out property <string> book-author: "";
+    in-out property <image> book-title-img;
+    in-out property <int> book-title-img-h: 0;
+    in-out property <image> book-author-img;
+    in-out property <int> book-author-img-h: 0;
+    in-out property <image> chapter-name-img;
+    in-out property <int> chapter-name-img-h: 0;
+    // Same name, rendered for the audio screen's much larger caption.
+    in-out property <image> chapter-name-hero-img;
+    in-out property <int> chapter-name-hero-img-h: 0;
+    in-out property <image> book-cover-img;
+    in-out property <image> audio-disk-img;
+    in-out property <int> chapter-preview-idx: -1;
+    in-out property <int> chapter-pending: -1;
+    in-out property <bool> loading-visible: false;
+    in-out property <int> loading-pct: 0;
+
+    callback panel-voice(string);
+    callback panel-wifi-toggle();
+    callback panel-bt-toggle();
+    callback panel-wifi-cycle(string);
+    callback panel-bt-cycle(string);
+    callback panel-sleep-cycle(string);
+    callback panel-chapters();
+    callback progress-tap(float);
+    callback panel-frac(int, float);
+    callback panel-close();
+    callback chapter-selected(int);
+    callback jump-to-reading();
+
+    in-out property <bool> audio-mode: false;
+    in-out property <float> chapter-progress: 0.0;
+    in-out property <float> book-progress: 0.0;
+    in-out property <bool> has-bookmark: false;
+    in-out property <float> bookmark-frac: -1.0;
+    in-out property <bool> audio-locked: false;
+    in-out property <bool> title-overflow: false;
+
+    callback mode-toggle();
+    callback bookmark-set();
+    callback bookmark-jump();
+    callback lock-tap();
+    callback skip-forward();
+    callback skip-rewind();
+    callback settings-tap();
+
+    content-area := ContentArea {
+        x: 0px;
+        y: 0px;
+        width: root.width;
+        height: root.height;
+        visible: !root.audio-mode;
+        rows: root.rows;
+        page: root.page;
+        page-count: root.page-count;
+        saved-page: root.saved-page;
+        playing: root.playing;
+        play-enabled: root.play-enabled;
+        status: root.status;
+        header-title: root.book-title;
+        book-title-img: root.book-title-img;
+        book-title-img-h: root.book-title-img-h;
+        header-visible: root.header-visible;
+        nav-recent: root.nav-recent;
+        has-navigated: root.has-navigated;
+        picker-active: root.picker-active;
+        bookmark-frac: root.bookmark-frac;
+        brand-green: root.brand-green;
+        brand-red: root.brand-red;
+        brand-gray: root.brand-gray;
+        text-primary: root.text-primary;
+        text-secondary: root.text-secondary;
+        text-hint: root.text-hint;
+        track-color: root.track-color;
+        title-overflow: root.title_overflow;
+        play-pause-toggle => { root.play-pause-toggle(); }
+        progress-tap(f) => { root.progress-tap(f); }
+        chapters-tap => { root.panel-chapters(); }
+    }
+
+    audio-player := AudioPlayer {
+        x: 0px;
+        y: 0px;
+        width: root.width;
+        height: root.height;
+        // The library is drawn by Rust over the whole screen; keep the player out
+        // of the compositor entirely while it is up.
+        visible: root.audio-mode && !root.picker-active;
+        header-title: root.book-title;
+        book-title-img: root.book-title-img;
+        book-title-img-h: root.book-title-img-h;
+        disk-img: root.audio-disk-img;
+        chapter-name: root.chapter-name;
+        chapter-name-img: root.chapter-name-hero-img;
+        chapter-name-img-h: root.chapter-name-hero-img-h;
+        page: root.page;
+        page-count: root.page-count;
+        chapter-page: root.chapter-page;
+        chapter-page-count: root.chapter-page-count;
+        chapter-index: root.current-chapter-idx;
+        chapter-count: root.chapter-count;
+        playing: root.playing;
+        play-enabled: root.play-enabled;
+        has-bookmark: root.has-bookmark;
+        bookmark-frac: root.bookmark-frac;
+        bar-progress: root.book-progress;
+        header-visible: root.header-visible;
+        locked: root.audio-locked;
+        title-overflow: root.title_overflow;
+        brand-green: root.brand-green;
+        brand-red: root.brand-red;
+        mode-toggle => { root.mode-toggle(); }
+        bookmark-set => { root.bookmark-set(); }
+        bookmark-jump => { root.bookmark-jump(); }
+        lock => { root.lock-tap(); }
+        play-pause-toggle => { root.play-pause-toggle(); }
+        progress-tap(f) => { root.progress-tap(f); }
+        skip-forward => { root.skip-forward(); }
+        skip-rewind => { root.skip-rewind(); }
+        library => { root.quit(); }
+        settings => { root.settings-tap(); }
+        chapters => { root.panel-chapters(); }
+    }
+
+    control-panel := ControlPanel {
+        x: 0px;
+        y: 0px;
+        width: root.width;
+        height: root.height;
+        visible-flag: root.panel-open;
+        brightness-val: root.brightness-val;
+        tts-speed: root.tts-speed;
+        font-size-val: root.font-size-val;
+        volume-val: root.volume-val;
+        tts-voice-label: root.tts-voice-label;
+        wifi-on: root.wifi-on;
+        bt-on: root.bt-on;
+        wifi-name: root.wifi-name;
+        bt-name: root.bt-name;
+        wifi-connected-name: root.wifi-connected-name;
+        bt-connected-name: root.bt-connected-name;
+        sleep-label: root.sleep-label;
+        clock: root.clock;
+        battery-pct: root.battery-pct;
+        book-title: root.book-title;
+        book-author: root.book-author;
+        chapter-name: root.chapter-name;
+        book-title-img: root.book-title-img;
+        book-title-img-h: root.book-title-img-h;
+        book-author-img: root.book-author-img;
+        book-author-img-h: root.book-author-img-h;
+        chapter-name-img: root.chapter-name-img;
+        chapter-name-img-h: root.chapter-name-img-h;
+        book-cover-img: root.book-cover-img;
+        page: root.page;
+        page-count: root.page-count;
+        audio-mode: root.audio-mode;
+        has-bookmark: root.has-bookmark;
+        brand-green: root.brand-green;
+        text-primary: root.text-primary;
+        text-secondary: root.text-secondary;
+        text-hint: root.text-hint;
+        bg-off: root.bg-off;
+        bg-pressed: root.bg-pressed;
+        separator: root.separator;
+        track-color: root.track-color;
+        quit => { root.quit(); }
+        jump-to-reading => { root.jump-to-reading(); }
+        panel-close => { root.panel-close(); }
+        panel-frac(i, f) => { root.panel-frac(i, f); }
+        panel-voice(s) => { root.panel-voice(s); }
+        panel-wifi-toggle => { root.panel-wifi-toggle(); }
+        panel-bt-toggle => { root.panel-bt-toggle(); }
+        panel-wifi-cycle(s) => { root.panel-wifi-cycle(s); }
+        panel-bt-cycle(s) => { root.panel-bt-cycle(s); }
+        panel-sleep-cycle(s) => { root.panel-sleep-cycle(s); }
+    }
+
+    chapter-overlay := ChapterOverlay {
+        x: 0px;
+        y: 0px;
+        width: root.width;
+        height: root.height;
+        visible-flag <=> root.chapter-overlay-open;
+        chapter-preview-idx <=> root.chapter-preview-idx;
+        chapter-pending <=> root.chapter-pending;
+        current-chapter-idx: root.current-chapter-idx;
+        text-primary: root.text-primary;
+        text-secondary: root.text-secondary;
+        brand-red: root.brand-red;
+        track-color: root.track-color;
+        chapter-selected(i) => { root.chapter-selected(i); }
+        close-to-book => {
+            root.chapter-overlay-open = false;
+            root.panel-close();
+        }
+    }
+
+    loading-overlay := LoadingOverlay {
+        x: 0px;
+        y: root.height - 92px;
+        width: root.width;
+        visible-flag: root.loading-visible;
+        loading-pct: root.loading-pct;
+        text-primary: root.text-primary;
+        track-color: root.track-color;
+    }
+}

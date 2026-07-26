@@ -1,0 +1,47 @@
+export component CompactSlider inherits VerticalLayout {
+    in property <string> name;
+    in property <string> value-text;
+    in property <float> fill-frac;
+    in property <color> text-primary: #111111;
+    in property <color> text-hint: #999999;
+    in property <color> track-color: #d0d0d0;
+    callback set-frac(float);
+
+    spacing: 4px;
+
+    HorizontalLayout {
+        height: 28px;
+        spacing: 10px;
+        Text {
+            text: root.name; color: root.text-primary; font-size: 22px;
+            vertical-alignment: center;
+        }
+        Text {
+            text: root.value-text; color: root.text-primary; font-size: 22px;
+            horizontal-stretch: 1; horizontal-alignment: right; vertical-alignment: center;
+        }
+    }
+
+    cs-track := Rectangle {
+        height: 44px;
+        background: root.track-color;
+        border-radius: 12px;
+        border-width: 2px;
+        border-color: root.text-hint;
+        Rectangle {
+            x: 0px;
+            width: parent.width * root.fill-frac;
+            height: 100%;
+            background: root.text-primary;
+            border-radius: 12px;
+        }
+        TouchArea {
+            mouse-cursor: none;
+            pointer-event(e) => {
+                if (e.kind == PointerEventKind.down || e.kind == PointerEventKind.move) {
+                    root.set-frac(clamp(self.mouse-x / self.width, 0, 1));
+                }
+            }
+        }
+    }
+}

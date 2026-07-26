@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="28" height="28">
+  <!-- Set-bookmark: the classic ribbon (rectangle notched at the bottom),
+       matching the pennant used in jump.svg so the pair reads as a set. -->
+  <path d="M7 3 H17 V21 L12 16.5 L7 21 Z" fill="none" stroke="white" stroke-width="2" stroke-linejoin="round"/>
+</svg>

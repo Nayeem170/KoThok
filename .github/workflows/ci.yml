@@ -1,0 +1,69 @@
+name: ci
+
+on:
+  pull_request:
+    paths:
+      - "kothok/src/**"
+      - "kothok/Cargo.toml"
+      - "kothok/Cargo.lock"
+      - ".github/workflows/ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "kothok/src/**"
+      - "kothok/Cargo.toml"
+      - "kothok/Cargo.lock"
+      - ".github/workflows/ci.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: kothok
+    steps:
+      - uses: actions/checkout@v4
+      - name: Clone local-patch dependencies
+        run: |
+          git clone https://github.com/Nayeem170/kobo-core kobo-core
+          git clone https://github.com/Nayeem170/kothok-edge-tts ../../kothok-edge-tts
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: kothok
+      - name: fmt
+        run: cargo fmt --all -- --check
+      - name: clippy
+        run: cargo clippy -p kothok-app
+      - name: test
+        run: cargo test -p kothok-app
+
+  cross-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Clone local-patch dependencies
+        run: |
+          git clone https://github.com/Nayeem170/kobo-core kothok/kobo-core
+          git clone https://github.com/Nayeem170/kothok-edge-tts ../kothok-edge-tts
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: armv7-unknown-linux-musleabihf
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: kothok
+      - name: Install cross
+        run: cargo install cross --git https://github.com/cross-rs/cross --locked
+      - name: cross build
+        working-directory: kothok
+        run: cross build --target armv7-unknown-linux-musleabihf --release -p kothok-app
+
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: rustsec/audit-check@v2.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}

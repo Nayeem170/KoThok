@@ -1,0 +1,207 @@
+# KoThok
+
+![platform](https://img.shields.io/badge/platform-Kobo%20e--ink-blue)
+![Rust](https://img.shields.io/badge/Rust-stable-orange)
+![license](https://img.shields.io/badge/license-PolyForm--NC-green)
+
+[![Watch the KoThok demo](https://img.youtube.com/vi/NJBg5JZHOFY/maxresdefault.jpg)](https://www.youtube.com/watch?v=NJBg5JZHOFY)
+
+**Reads your book out loud — in your language.** A custom e-reader for
+**Kobo devices** (Clara Colour, Libra Colour, and all MTK/NXP models),
+written in Rust. [▶ Watch the demo](https://www.youtube.com/watch?v=NJBg5JZHOFY)
+
+Reading works offline. **Read-aloud needs WiFi** - the voices are synthesized
+by Microsoft Edge's TTS service over the internet. Bluetooth A2DP speaker
+required for audio output.
+
+## Install
+
+**3 steps, no build tools needed:**
+
+1. **Download** `install.bat` (Windows) or `install.sh` (Linux/macOS) from this repo
+2. **Plug in** your Kobo via USB
+3. **Double-click** the installer
+
+The installer downloads the latest binary from GitHub releases, copies it to
+your Kobo, and verifies the transfer. First install sets up NickelMenu
+automatically; every update is just step 3 again.
+
+| OS | Download | Run |
+|---|---|---|
+| Windows | `install.bat` | Double-click |
+| macOS | `install.command` | Double-click in Finder |
+| Linux | `install.sh` | `./install.sh` |
+
+**Requirements:** internet connection, PowerShell 7 (`pwsh`).
+
+Don't want to install PowerShell 7 or run a script? See
+[installer/README.md](installer/README.md#no-script-manual-install) for a
+drag-and-drop alternative - no script, unzip and copy one file.
+
+KoThok is launched from a NickelMenu entry; it stops the stock "nickel" UI on
+entry and reboots back to nickel on exit.
+
+## Architecture
+
+KoThok separates the **reader app** from two **reusable libraries**. One for
+Kobo hardware, one for text-to-speech. Each layer evolves independently and
+can be reused in other projects.
+
+```mermaid
+flowchart TD
+    APP["<b>kothok-app</b><br/>Reader UI | audio | books"]
+    CORE["<b>kobo-core</b><br/>Device SDK | A2DP | e-ink"]
+    TTS["<b>kothok-edge-tts</b><br/>Edge TTS | 300+ voices"]
+
+    APP ==>|"depends on"| CORE
+    CORE -->|"uses"| TTS
+
+    style APP fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e293b
+    style CORE fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#1e293b
+    style TTS fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#1e293b
+```
+
+| Repo | Role |
+|---|---|
+| [**KoThok**](https://github.com/Nayeem170/KoThok) (this) | Reader app: Slint UI, main loop, audio driver, book picker, control panel |
+| [**kobo-core**](https://github.com/Nayeem170/kobo-core) ([crates.io](https://crates.io/crates/kobo-core)) | Device SDK: framebuffer, touch, frontlight, fonts, EPUB, A2DP audio |
+| [**kothok-edge-tts**](https://github.com/Nayeem170/kothok-edge-tts) ([crates.io](https://crates.io/crates/kothok-edge-tts)) | Edge TTS client: WebSocket protocol, 300+ voices, MP3 + word boundaries |
+| [**kothok-site**](https://github.com/Nayeem170/kothok-site) | Marketing site and 3D demo |
+
+## What's new
+
+- Nested table of contents with depth-based indentation and anchor jumps
+- Double-tap 2x magnifier for small text
+- In-text link navigation (footnotes, cross-references)
+- Symbol-density classifier: dense code blocks get a TTS placeholder instead of reading punctuation
+- Configurable auto-sleep (Off / 5 min / 15 min)
+- PCM audio cache (no re-synthesis for already-heard pages)
+
+See [CHANGELOG.md](CHANGELOG.md) for the full release history.
+
+## Read-aloud audio pipeline
+
+```mermaid
+sequenceDiagram
+    participant UI as Main loop
+    participant DRV as Audio driver
+    participant TTS as Edge TTS (kobo-core)
+    participant BT as A2DP speaker
+
+    UI->>DRV: Cmd::Play
+    DRV->>BT: Open A2DP sink
+    DRV->>TTS: synthesize_prepared() (retry x3)
+    TTS-->>DRV: Prepared PCM + word bounds
+    DRV->>BT: Write PCM chunks (paced by lead)
+    Note over DRV: Word boundary crosses page -> Event::PageBreak
+    DRV->>UI: Event::PageBreak
+    UI->>UI: Advance visual page
+    UI->>DRV: Cmd::Append(next page utterances)
+    Note over DRV: Audio continues without gap
+    DRV->>BT: Next sentence PCM (no gap)
+```
+
+## Install flow
+
+```mermaid
+flowchart TD
+    START["Download install.bat"] --> DL["Download binary from GitHub releases"]
+    DL --> FIND["Find Kobo USB drive"]
+    FIND -->|not found| WAIT["Wait 30s for device"]
+    WAIT -->|timeout| FAIL["Error: connect Kobo"]
+    FIND -->|found| CHECK{".adds/kothok exists?"}
+    CHECK -->|No| FIRST["Download KoboRoot.tgz<br/>Copy to USB root"]
+    FIRST --> DONE1["Eject > Reboot > Done"]
+    CHECK -->|Yes| UPDATE["Copy binary to .adds/kothok"]
+    UPDATE --> MD5["Verify MD5"]
+    MD5 --> DONE2["Eject > Launch KoThok"]
+```
+
+The installer (`install.ps1`) fetches the latest binary from GitHub releases.
+For developers building from source, use `kothok/scripts/deploy.ps1`.
+
+Device target: `/mnt/onboard/.adds/kothok`
+Logs: `/mnt/onboard/.adds/kothok.log`
+
+## E-ink rendering strategy
+
+```mermaid
+graph LR
+    subgraph "Waveform selection"
+        TRANS["Panel/overlay transition<br/>-> GC16 (full clear)"]
+        CONTENT["Text page update<br/>-> GL16 (partial)"]
+        ANIM["Spinner / disk<br/>-> A2 (monochrome)"]
+    end
+    TRANS --> EPD["Kaleido 3 EPD"]
+    CONTENT --> EPD
+    ANIM --> EPD
+```
+
+| Scenario | Waveform | Update | Why |
+|---|---|---|---|
+| Panel/overlay open/close | GC16 / GL16 | Full | GC16 for audio mode (colored), GL16 for reading/chapter overlay |
+| Chapter overlay scroll | GC16 | Partial | Colored border cards need full-quality refresh |
+| Page turn (swipe/TTS) | GL16 | Partial | Less ghosting, preserves color |
+| Spinner / disk animation | A2 | Partial | Fastest monochrome |
+
+GC16 produces a brief flash on Kaleido 3. Chapter overlay cards use a white
+fill (border-only state) to minimize grey-area ghosting, so overlay open/close
+can use GL16 like the reading panel.
+
+## Repository layout
+
+```
+KoThok/
+├─ installer/                     install scripts (download from website)
+│  ├─ install.bat                 Windows launcher
+│  ├─ install.command             macOS launcher
+│  ├─ install.sh                  Linux launcher
+│  └─ install.ps1                 downloads binary from GitHub releases
+├─ CHANGELOG.md                  release history
+├─ kothok/                       Rust workspace (single crate)
+│  ├─ src/                       Rust source (main loop, audio, rendering, panel)
+│  ├─ ui/                        Slint UI components
+│  ├─ scripts/deploy.ps1         build + deploy (for developers)
+│  ├─ package/                   NickelMenu config + assets
+│  ├─ run.sh                     device launcher (kills nickel, reboots on exit)
+│  ├─ Cargo.toml                 workspace + package config
+│  └─ Cross.toml                 cross-build config
+└─ README.md                     this file
+```
+
+## For developers
+
+**Build from source:**
+
+```bash
+# Prerequisites: Rust, Docker, cross
+cross build --target armv7-unknown-linux-musleabihf --release -p kothok-app
+
+# Run tests
+cross test -p kothok-app --target armv7-unknown-linux-musleabihf
+```
+
+**Deploy to device (build + copy + verify):**
+
+```bash
+pwsh kothok/scripts/deploy.ps1
+```
+
+**Create release:**
+
+1. Update version in `kothok/Cargo.toml`
+2. Update `CHANGELOG.md` with what's new
+3. Build, then copy binary to `release/` folder with version suffix:
+   ```bash
+   cp kothok/target/armv7-unknown-linux-musleabihf/release/kothok release/kothok-0.1.0
+   ```
+4. Upload `release/kothok-0.1.0`, `release/KoboRoot.tgz`,
+   `kothok-fonts.zip`, `en-sample.epub`, and
+   `KoThok-<version>-manual-install.zip` to GitHub releases
+5. Tag the release: `git tag v0.1.0`
+
+## License
+
+KoThok app: **PolyForm-Noncommercial-1.0.0** (source-available, non-commercial).
+[kobo-core](https://github.com/Nayeem170/kobo-core) and
+[kothok-edge-tts](https://github.com/Nayeem170/kothok-edge-tts): **MIT**.

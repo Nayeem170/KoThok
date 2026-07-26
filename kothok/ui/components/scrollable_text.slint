@@ -1,0 +1,46 @@
+export component ScrollableText inherits Rectangle {
+    in property <string> txt: "";
+    in property <color> txt-color: #666666;
+    in property <length> font-size: 33px;
+    in property <bool> bold: true;
+    in property <bool> overflow: false;
+
+    clip: true;
+    background: transparent;
+
+    property <bool> at-start: true;
+    property <length> scroll-x: 0px;
+
+    animate scroll-x { duration: 800ms; easing: ease-in-out; }
+
+    scroll_timer := Timer {
+        interval: 3s;
+        running: root.overflow && root.txt != "";
+        triggered => {
+            if (root.overflow && root.txt != "") {
+                if (root.at-start) {
+                    root.scroll-x = -(root.width + 20px);
+                    root.at-start = false;
+                } else {
+                    root.scroll-x = 0px;
+                    root.at-start = true;
+                }
+            }
+        }
+    }
+
+    Text {
+        text: root.txt != "" ? root.txt : "-";
+        color: root.txt-color;
+        font-size: root.font-size;
+        font-weight: root.bold ? 700 : 400;
+        horizontal-alignment: left;
+        vertical-alignment: center;
+        wrap: no-wrap;
+        overflow: root.overflow ? clip : elide;
+        width: root.width;
+        x: root.scroll-x;
+        y: 0px;
+        height: root.height;
+    }
+}

@@ -1,0 +1,395 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Nayeem Bin Ahsan
+use slint::{ModelRc, VecModel};
+
+use crate::audio::glue::{best_effort_send, utterance_index_for_offset};
+use crate::audio::Cmd;
+use crate::rendering::layout::{build_state, ChapterState};
+
+use crate::Reader;
+use crate::Row;
+
+pub use kobo_core::rendering::layout::clamp_page;
+
+/// The first text-bearing row (start < end) within `[s, e)`, as a
+/// `(start, end)` byte-offset pair. Shared by `compute_page_view` (cursor
+/// placement) and `switch_chapter` (audio-seek target).
+pub fn first_text_row(state: &ChapterState, s: usize, e: usize) -> Option<(i32, i32)> {
+    state
+        .all_rows
+        .get(s..e)?
+        .iter()
+        .find(|r| r.start < r.end)
+        .map(|r| (r.start, r.end))
+}
+
+/// Pure: the on-page reading cursor `(cur_start, cur_end)` for the page whose
+/// row range is `[s, e)`. If the first row is a heading/gap (start == end),
+/// falls back to the first real text row on the page; if none exists, (0, 0).
+#[cfg(test)]
+fn page_cursor(state: &ChapterState, s: usize, e: usize) -> (i32, i32) {
+    match state.all_rows.get(s) {
+        Some(first) if first.start < first.end => (first.start, first.end),
+        Some(_) => first_text_row(state, s, e).unwrap_or((0, 0)),
+        None => (0, 0),
+    }
+}
+
+/// Pure, testable view of what `apply_page` would set on the Slint `Reader`.
+/// Computing this separately means every branch (page clamping, absolute-page
+/// math, cursor placement, heading/gap fallback) is unit-testable without a
+/// Slint runtime.
+pub struct PageView {
+    /// Rows visible on this page.
+    pub rows: Vec<Row>,
+    /// Absolute page number across the whole book.
+    pub absolute_page: i32,
+    /// Total pages in the book (for the progress bar).
+    pub page_count: i32,
+    /// Reading cursor to place on the page. `None` when audio is not playing
+    /// (the cursor is left untouched so a manual turn drops no marker).
+    pub cursor: Option<(i32, i32)>,
+}
+
+pub fn compute_page_view(
+    state: &ChapterState,
+    page: usize,
+    chapter_offsets: &[usize],
+    current_chapter: usize,
+    _playing: bool,
+) -> PageView {
+    let idx = clamp_page(page, state.pages.len());
+    let (s, e) = state.pages.get(idx).copied().unwrap_or((0, 0));
+    let rows = state.all_rows.get(s..e).unwrap_or(&[]).to_vec();
+    PageView {
+        rows,
+        absolute_page: (chapter_offsets.get(current_chapter).copied().unwrap_or(0) + idx) as i32,
+        page_count: *chapter_offsets.last().unwrap_or(&1) as i32,
+        cursor: None,
+    }
+}
+
+pub fn apply_page(
+    reader: &Reader,
+    state: &ChapterState,
+    page: usize,
+    chapter_offsets: &[usize],
+    current_chapter: usize,
+) {
+    let v = compute_page_view(
+        state,
+        page,
+        chapter_offsets,
+        current_chapter,
+        reader.get_playing(),
+    );
+    reader.set_rows(ModelRc::new(VecModel::from(v.rows)));
+    reader.set_page(v.absolute_page);
+    reader.set_page_count(v.page_count);
+    // Chapter-local position, shown under the audio disk. The bottom bar keeps
+    // book-global page/page-count; showing the same numbers in both spots was
+    // redundant, so the disk caption is scoped to the current chapter.
+    reader.set_chapter_page((page + 1) as i32);
+    reader.set_chapter_page_count(state.pages.len().max(1) as i32);
+    reader.set_current_chapter_idx(current_chapter as i32);
+    if let Some((cs, ce)) = v.cursor {
+        reader.set_cur_start(cs);
+        reader.set_cur_end(ce);
+    }
+}
+
+pub struct ChapterSwitchOpts {
+    pub to_last_page: bool,
+    pub update_cursor: bool,
+    pub load_audio: bool,
+}
+
+pub fn switch_chapter(
+    st: &mut crate::loop_state::LoopState,
+    reader: &Reader,
+    cmd_tx: &std::sync::mpsc::Sender<Cmd>,
+    nc: usize,
+    opts: ChapterSwitchOpts,
+) {
+    let body_px = st.body_px;
+    let head_px = st.head_px;
+    let line_h = st.line_h;
+    st.current_chapter = nc;
+    // A stale magnifier crop makes no sense on new content.
+    st.zoom_active = false;
+    let Some(chapter) = st.chapters.get_mut(nc) else {
+        return;
+    };
+    st.state = build_state(chapter, body_px, head_px, line_h);
+    st.current_page = if opts.to_last_page {
+        st.state.pages.len().saturating_sub(1)
+    } else {
+        0
+    };
+    let cc = st.current_chapter;
+    let cp = st.current_page;
+    apply_page(reader, &st.state, cp, &st.chapter_offsets, cc);
+    let Some(chapter) = st.chapters.get(nc) else {
+        return;
+    };
+    let cn = crate::data::library::chapter_display_title(chapter, nc);
+    crate::set_chapter_name(reader, &cn);
+    if opts.load_audio {
+        best_effort_send(cmd_tx, Cmd::Reload(st.state.utterances.clone()));
+    }
+    if opts.update_cursor {
+        if let Some(&(s, e)) = st.state.pages.get(cp) {
+            if let Some((row_start, row_end)) = first_text_row(&st.state, s, e) {
+                reader.set_cur_start(row_start);
+                reader.set_cur_end(row_end);
+                if opts.load_audio {
+                    let utt_idx =
+                        utterance_index_for_offset(&st.state.utterances, row_start as usize);
+                    best_effort_send(cmd_tx, Cmd::Seek(utt_idx));
+                }
+            }
+        }
+    }
+}
+
+/// Nearest page when an anchor's exact offset has no row of its own: the
+/// first page whose rows start at or past it, else the chapter top. An anchor
+/// can land between rows (a heading id with no text of its own, an empty
+/// element) where `page_for_offset` finds nothing exact.
+///
+/// Pure over `ChapterState` rather than the whole `LoopState` -- it is the
+/// only part of the jump this codebase can unit-test without a live `Reader`:
+/// `switch_chapter`/`apply_page` take a real Slint `Reader`, which nothing in
+/// this crate's tests constructs headless, so the chapter-switch half of
+/// `jump_to_link_target` is covered only by the kobo-core-level resolution
+/// tests (`resolve_link`, `anchor_offset`, `build_toc_tree`'s anchor capture).
+fn page_for_anchor_fallback(state: &ChapterState, offset: usize) -> usize {
+    state
+        .pages
+        .iter()
+        .position(|(s, _)| {
+            state
+                .all_rows
+                .get(*s)
+                .is_some_and(|r| r.start as usize >= offset)
+        })
+        .unwrap_or(0)
+}
+
+/// Switch to `target.chapter` if not already there, then land on the page
+/// containing `target.anchor` (the chapter top if it has none). Shared by
+/// in-text link taps (`loop_run::link_nav`) and the chapter-overlay TOC
+/// (`panel::callbacks::chapters`) -- both resolve a `(chapter, Option<anchor>)`
+/// pair to a page the identical way, and previously duplicated the sequence.
+///
+/// `load_audio` is left to the caller: a footnote-style in-text link and an
+/// explicit "open this chapter" action have different expectations for
+/// whether the audio queue should reload.
+pub fn jump_to_link_target(
+    st: &mut crate::loop_state::LoopState,
+    reader: &Reader,
+    cmd_tx: &std::sync::mpsc::Sender<Cmd>,
+    target: &kobo_core::formats::epub::LinkTarget,
+    load_audio: bool,
+) {
+    if target.chapter != st.current_chapter {
+        switch_chapter(
+            st,
+            reader,
+            cmd_tx,
+            target.chapter,
+            ChapterSwitchOpts {
+                to_last_page: false,
+                update_cursor: false,
+                load_audio,
+            },
+        );
+    }
+    // The anchor is a chapter-text offset; rows are keyed by `body` offsets and
+    // the two differ wherever a block contributes no text (an image) or extra
+    // text (a list marker). Seeking by page keeps the jump on a real boundary
+    // rather than trusting the two to coincide.
+    let dest_offset = kobo_core::formats::epub::anchor_offset(&st.chapters, target);
+    st.current_page = st
+        .state
+        .page_for_offset(dest_offset)
+        .unwrap_or_else(|| page_for_anchor_fallback(&st.state, dest_offset));
+    apply_page(
+        reader,
+        &st.state,
+        st.current_page,
+        &st.chapter_offsets,
+        st.current_chapter,
+    );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::rendering::layout::ChapterState;
+    use std::collections::HashMap;
+
+    fn row(start: i32, end: i32) -> Row {
+        Row {
+            text: format!("[{start},{end})").into(),
+            start,
+            end,
+            kind: 0,
+            tag: 0,
+        }
+    }
+
+    // A heading/gap row carries no text offset (start == end).
+    fn gap() -> Row {
+        Row {
+            text: "".into(),
+            start: 5,
+            end: 5,
+            kind: 0,
+            tag: 0,
+        }
+    }
+
+    fn state_with(rows: Vec<Row>, pages: Vec<(usize, usize)>) -> ChapterState {
+        let n = rows.len();
+        ChapterState {
+            all_rows: rows,
+            row_heights: vec![40; n],
+            pages,
+            utterances: vec![],
+            decoded_images: HashMap::new(),
+            style_runs: Vec::new(),
+            links: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn clamp_page_within_bounds() {
+        assert_eq!(clamp_page(0, 10), 0);
+        assert_eq!(clamp_page(5, 10), 5);
+        assert_eq!(clamp_page(9, 10), 9);
+        assert_eq!(clamp_page(20, 10), 9, "over-range clamps to last page");
+    }
+
+    #[test]
+    fn clamp_page_zero_pages_safe() {
+        assert_eq!(clamp_page(0, 0), 0);
+        assert_eq!(
+            clamp_page(100, 0),
+            0,
+            "empty chapter never indexes out of range"
+        );
+    }
+
+    #[test]
+    fn compute_page_view_clamps_over_range_page() {
+        let st = state_with(vec![row(0, 10), row(10, 20)], vec![(0, 2)]);
+        let v = compute_page_view(&st, 99, &[0, 2], 0, false);
+        assert_eq!(v.rows.len(), 2, "over-range page clamps to the only page");
+        assert_eq!(v.absolute_page, 0);
+    }
+
+    #[test]
+    fn compute_page_view_absolute_page_sums_offset_and_idx() {
+        // chapter_offsets[1] = 4, page idx 2 within chapter -> absolute page 6.
+        let st = state_with(vec![row(0, 10)], vec![(0, 1)]);
+        let v = compute_page_view(&st, 0, &[0, 4, 9], 1, false);
+        assert_eq!(v.absolute_page, 4, "absolute page = chapter base + idx");
+        assert_eq!(v.page_count, 9, "page count = chapter_offsets.last()");
+    }
+
+    #[test]
+    fn compute_page_view_cursor_none_when_not_playing() {
+        let st = state_with(vec![row(0, 10)], vec![(0, 1)]);
+        let v = compute_page_view(&st, 0, &[0, 1], 0, false);
+        assert!(v.cursor.is_none(), "no cursor placed by apply_page");
+    }
+
+    #[test]
+    fn compute_page_view_cursor_none_when_playing() {
+        let st = state_with(vec![row(0, 10), row(10, 20)], vec![(0, 2)]);
+        let v = compute_page_view(&st, 0, &[0, 2], 0, true);
+        assert!(
+            v.cursor.is_none(),
+            "cursor is set only by Event::Sentence, not apply_page"
+        );
+    }
+
+    #[test]
+    fn compute_page_view_cursor_none_with_heading() {
+        let st = state_with(vec![gap(), row(20, 35)], vec![(0, 2)]);
+        let v = compute_page_view(&st, 0, &[0, 2], 0, true);
+        assert!(v.cursor.is_none());
+    }
+
+    #[test]
+    fn compute_page_view_cursor_none_no_text() {
+        let st = state_with(vec![gap(), gap()], vec![(0, 2)]);
+        let v = compute_page_view(&st, 0, &[0, 2], 0, true);
+        assert!(v.cursor.is_none());
+    }
+
+    #[test]
+    fn compute_page_view_empty_chapter_safe() {
+        let st = state_with(vec![], vec![]);
+        let v = compute_page_view(&st, 0, &[0, 0], 0, true);
+        assert!(v.rows.is_empty());
+        assert!(v.cursor.is_none());
+    }
+
+    #[test]
+    fn first_text_row_skips_gaps() {
+        let st = state_with(vec![gap(), gap(), row(40, 55), row(55, 70)], vec![(0, 4)]);
+        assert_eq!(first_text_row(&st, 0, 4), Some((40, 55)));
+    }
+
+    #[test]
+    fn first_text_row_none_when_all_gaps() {
+        let st = state_with(vec![gap(), gap()], vec![(0, 2)]);
+        assert_eq!(first_text_row(&st, 0, 2), None);
+    }
+
+    #[test]
+    fn first_text_row_none_for_empty_range() {
+        let st = state_with(vec![row(0, 10)], vec![(0, 0)]);
+        assert_eq!(first_text_row(&st, 0, 0), None, "empty row slice -> None");
+    }
+
+    #[test]
+    fn page_cursor_uses_first_row_when_text() {
+        let st = state_with(vec![row(7, 19), row(19, 30)], vec![(0, 2)]);
+        assert_eq!(page_cursor(&st, 0, 2), (7, 19));
+    }
+
+    #[test]
+    fn page_cursor_falls_back_past_leading_gap() {
+        let st = state_with(vec![gap(), row(30, 44)], vec![(0, 2)]);
+        assert_eq!(page_cursor(&st, 0, 2), (30, 44));
+    }
+
+    /// The fallback `jump_to_link_target` uses when an anchor's own offset
+    /// (a heading id, an image with no text) falls between rows rather than
+    /// inside one -- the case `page_for_offset` cannot answer directly.
+    #[test]
+    fn page_for_anchor_fallback_finds_first_page_at_or_past_the_offset() {
+        let st = state_with(
+            vec![row(0, 10), row(10, 20), row(20, 30)],
+            vec![(0, 1), (1, 2), (2, 3)],
+        );
+        // Offset 15 has no row of its own; the second page's row starts at 10
+        // (before it) but the third page's row starts at 20 (past it).
+        assert_eq!(page_for_anchor_fallback(&st, 15), 2);
+    }
+
+    #[test]
+    fn page_for_anchor_fallback_matches_an_exact_row_start() {
+        let st = state_with(vec![row(0, 10), row(10, 20)], vec![(0, 1), (1, 2)]);
+        assert_eq!(page_for_anchor_fallback(&st, 10), 1);
+    }
+
+    #[test]
+    fn page_for_anchor_fallback_defaults_to_the_top_past_every_row() {
+        let st = state_with(vec![row(0, 10), row(10, 20)], vec![(0, 1), (1, 2)]);
+        assert_eq!(page_for_anchor_fallback(&st, 999), 0);
+    }
+}
