@@ -293,14 +293,11 @@ if ($isFirstInstall) {
     Write-Host ""
     Write-Host "  1. Eject the Kobo (system tray -> Safely Remove -> KOBOeReader)" -ForegroundColor White
     Write-Host "  2. Unplug USB cable" -ForegroundColor White
-    Write-Host "  3. Hold power button 30s until screen goes blank (full power off)" -ForegroundColor White
-    Write-Host "  4. Wait 10s, then press power once to boot" -ForegroundColor White
-    Write-Host "  5. Watch for 'Updating...' screen (~30s) - this installs NickelMenu" -ForegroundColor White
-    Write-Host "  6. Wait for nickel home screen to appear" -ForegroundColor White
-    Write-Host "  7. Tap the hamburger menu (bottom-right) -> tap 'KoThok'" -ForegroundColor White
-    Write-Host ""
-    Write-Host "  NOTE: If no 'Updating...' screen appears, the power-off did not" -ForegroundColor DarkGray
-    Write-Host "  work. Hold power 30s again (not 15s - that only sleeps)." -ForegroundColor DarkGray
+    Write-Host "  3. Reboot the Kobo (power it off and back on)" -ForegroundColor White
+    Write-Host "  4. Watch for 'Updating...' screen (~30s) - this installs NickelMenu" -ForegroundColor White
+    Write-Host "     and KoThok, then it restarts itself" -ForegroundColor White
+    Write-Host "  5. Wait for nickel home screen to appear" -ForegroundColor White
+    Write-Host "  6. Tap the hamburger menu (bottom-right) -> tap 'KoThok'" -ForegroundColor White
     Write-Host ""
 }
 else {

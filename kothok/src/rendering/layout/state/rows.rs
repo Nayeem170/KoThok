@@ -49,7 +49,10 @@ pub(super) fn push_figure_rows(
         });
         row_heights.push(PARA_GAP);
     }
-    let raw_bytes = seg.src.as_deref().and_then(|src| chapter_images.get(src).copied());
+    let raw_bytes = seg
+        .src
+        .as_deref()
+        .and_then(|src| chapter_images.get(src).copied());
     let decoded = raw_bytes.and_then(|b| {
         text_render::decode_image(b, text_w(), (content_h() as usize).saturating_sub(20))
     });
@@ -475,7 +478,14 @@ mod tests {
         let mut all_rows = Vec::new();
         let mut row_heights = Vec::new();
         let mut body = String::from("preceding text. ");
-        push_pre_rows(&mut all_rows, &mut row_heights, &mut body, &long_json, 36.0, 48);
+        push_pre_rows(
+            &mut all_rows,
+            &mut row_heights,
+            &mut body,
+            &long_json,
+            36.0,
+            48,
+        );
         // Real chapter content keeps appending after this block, the same way
         // `build_state` would for a later segment -- if a row's range leaked
         // past the placeholder, this is what it would incorrectly point into.
@@ -530,7 +540,14 @@ mod tests {
         let mut all_rows = Vec::new();
         let mut row_heights = Vec::new();
         let mut body = String::new();
-        push_pre_rows(&mut all_rows, &mut row_heights, &mut body, transcript, 36.0, 48);
+        push_pre_rows(
+            &mut all_rows,
+            &mut row_heights,
+            &mut body,
+            transcript,
+            36.0,
+            48,
+        );
 
         let mono_rows: Vec<_> = all_rows
             .iter()

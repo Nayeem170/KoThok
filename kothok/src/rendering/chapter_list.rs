@@ -227,7 +227,11 @@ mod tests {
             row("Ch2 s1", 0, Some(1)),
             row("Ch2 s2", 1, Some(1)),
         ];
-        assert_eq!(current_toc_row(&rows, 1), Some(1), "the first, not the second");
+        assert_eq!(
+            current_toc_row(&rows, 1),
+            Some(1),
+            "the first, not the second"
+        );
     }
 
     #[test]
@@ -284,11 +288,17 @@ mod tests {
         let list_bottom = h as i32 - CH_LIST_BOTTOM_PAD;
         let sent = Rgb565Pixel(0x1111);
         let mut buf = vec![sent; w * h];
-        let rows: Vec<_> = (0..30).map(|i| row(&format!("Chapter {i}"), 0, Some(i))).collect();
+        let rows: Vec<_> = (0..30)
+            .map(|i| row(&format!("Chapter {i}"), 0, Some(i)))
+            .collect();
         paint_chapter_list(&mut buf, &rows, 0, -1, -1);
         for y in list_bottom..h as i32 {
             for x in 0..w {
-                assert_eq!(buf[(y as usize) * w + x], sent, "Open-button strip painted over at y={y} x={x}");
+                assert_eq!(
+                    buf[(y as usize) * w + x],
+                    sent,
+                    "Open-button strip painted over at y={y} x={x}"
+                );
             }
         }
     }
@@ -302,11 +312,17 @@ mod tests {
         let h = crate::h();
         let sent = Rgb565Pixel(0x1111);
         let mut buf = vec![sent; w * h];
-        let rows: Vec<_> = (0..30).map(|i| row(&format!("Chapter {i}"), 0, Some(i))).collect();
+        let rows: Vec<_> = (0..30)
+            .map(|i| row(&format!("Chapter {i}"), 0, Some(i)))
+            .collect();
         paint_chapter_list(&mut buf, &rows, 30, -1, -1);
         for y in 0..CH_LIST_TOP {
             for x in 0..w {
-                assert_eq!(buf[(y as usize) * w + x], sent, "header gap painted over at y={y} x={x}");
+                assert_eq!(
+                    buf[(y as usize) * w + x],
+                    sent,
+                    "header gap painted over at y={y} x={x}"
+                );
             }
         }
     }

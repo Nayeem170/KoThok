@@ -106,7 +106,13 @@ pub(super) fn init_book(
     let (loaded_chapters, book_lang, toc_tree) = initial_path
         .as_ref()
         .and_then(|p| library::open_book(p))
-        .unwrap_or_else(|| (vec![Chapter::from_xhtml(0, None, SAMPLE_CHAPTER)], None, Vec::new()));
+        .unwrap_or_else(|| {
+            (
+                vec![Chapter::from_xhtml(0, None, SAMPLE_CHAPTER)],
+                None,
+                Vec::new(),
+            )
+        });
 
     let chapters = loaded_chapters;
     let toc_rows = library::toc_rows(&toc_tree, &chapters);

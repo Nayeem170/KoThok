@@ -19,7 +19,7 @@
   - Release binary built:
       cross build --target armv7-unknown-linux-musleabihf --release -p kothok-app
   - NickelMenu hook at .\assets\libnm.so  (see assets\README.md)
-  - WSL available (used only to set Unix exec modes + build the tarball)
+  - tar on PATH (bsdtar or GNU tar; exec modes are fixed by run.sh, not WSL)
 #>
 
 [CmdletBinding()]
@@ -29,16 +29,6 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $PackageDir = $PSScriptRoot
-
-function Convert-ToWslPath([string]$win) {
-    # D:\foo\bar -> /mnt/d/foo/bar
-    if ($win -match '^([A-Za-z]):[\\/](.*)$') {
-        $drive = $matches[1].ToLower()
-        $rest  = $matches[2] -replace '\\','/'
-        return "/mnt/$drive/$rest"
-    }
-    return $win -replace '\\','/'
-}
 
 function Read-CargoVersion {
     $toml = Get-Content (Join-Path $PackageDir '..\Cargo.toml') -Raw
@@ -130,26 +120,21 @@ foreach ($s in @('mnt\onboard\.adds\run.sh')) {
     }
 }
 
-# --- build tarball via WSL (correct Unix exec modes + LF-safe) --------------
-$wslStage = Convert-ToWslPath $stage
-$wslDist  = Convert-ToWslPath $dist
-$outName  = "KoThok-$Version.KoboRoot.tgz"
+# --- build tarball ------------------------------------------------------------
+# Plain tar (bsdtar) on Windows stores 0666 - no exec bit. run.sh chmods the
+# binary to 0755 before launching it, so the extracted file runs no matter how
+# the tarball was built. Keeps packaging off WSL.
+$outName = "KoThok-$Version.KoboRoot.tgz"
+$tgz     = Join-Path $dist $outName
 
 Write-Host "Packing $outName ..."
-$tarCmd = @"
-set -e
-cd '$wslStage'
-chmod 0755 mnt/onboard/.adds/kothok mnt/onboard/.adds/run.sh
-mkdir -p '$wslDist'
-tar czf '$wslDist/$outName' .
-echo TARBUILT
-"@
-$result = wsl.exe -e bash -lc $tarCmd
-if ($LASTEXITCODE -ne 0 -or ($result -notcontains 'TARBUILT')) {
-    throw "WSL tar failed:`n$result"
-}
+Push-Location $stage
+try {
+    tar czf $tgz .
+    if ($LASTEXITCODE -ne 0) { throw "tar failed with exit code $LASTEXITCODE" }
+} finally { Pop-Location }
 
-$tgz = Join-Path $dist $outName
+if (-not (Test-Path -LiteralPath $tgz)) { throw "tar did not produce $tgz" }
 
 # --- font archive ------------------------------------------------------------
 # The tarball covers a first install, but an update only replaces the binary -
@@ -172,6 +157,14 @@ if (Test-Path -LiteralPath $sampleSrc) {
         [math]::Round((Get-Item -LiteralPath $sampleDst).Length / 1KB))
 }
 
+# --- raw binary asset ---------------------------------------------------------
+# install.ps1 downloads this (matches its 'kothok-*' asset pattern) for both
+# the first install and the no-reboot update path. The tgz carries the same
+# binary for the KoboRoot reboot flow.
+$rawBin = Join-Path $dist "kothok-$Version"
+Copy-Item -LiteralPath $binary -Destination $rawBin -Force
+Write-Host ("Binary: {0} ({1} MB)" -f $rawBin, [math]::Round((Get-Item -LiteralPath $rawBin).Length/1MB,2))
+
 # --- manual-install zip -------------------------------------------------------
 # The tgz above is already a complete, self-sufficient first-install package -
 # binary, run.sh, NickelMenu hook, fonts, sample book. Anyone who'd rather not
@@ -193,12 +186,11 @@ KoThok $Version - manual install (no script needed)
    (it's next to a folder called ".adds" - both are hidden folders, so make
    sure your file browser is set to show hidden files).
 3. Eject / safely remove the Kobo, then unplug the USB cable.
-4. Hold the power button for about 30 seconds, until the screen goes
-   completely blank.
-5. Wait 10 seconds, then press the power button once to turn it back on.
-6. Watch for an "Updating..." screen for about 30 seconds - this is normal,
-   it's installing KoThok's menu button. Do not unplug or power off here.
-7. Once the device finishes booting, tap the menu button (bottom-right),
+4. Reboot the Kobo (turn it off and back on).
+5. Watch for an "Updating..." screen for about 30 seconds - this is normal,
+   it's installing KoThok's menu button, then it restarts itself. Do not
+   unplug or power off here.
+6. Once the device finishes booting, tap the menu button (bottom-right),
    then tap "KoThok" to open it.
 
 Fonts for every supported script and a sample book are already included -
@@ -224,4 +216,4 @@ Write-Host "Built: $tgz"
 Write-Host "Size:  $size MB"
 Write-Host "MD5:   $hash"
 Write-Host ""
-Write-Host "Next: copy $outName to the Kobo .kobo folder over USB (rename to KoboRoot.tgz), eject, hold power 30s to reboot."
+Write-Host "Next: copy $outName to the Kobo .kobo folder over USB (rename to KoboRoot.tgz), eject, and reboot."

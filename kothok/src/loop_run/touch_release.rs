@@ -315,7 +315,8 @@ pub(super) fn on_release(
                         st.zoom_active = !st.zoom_active;
                         if st.zoom_active {
                             let content_end = (PAD_TOP + ctx.content_h as usize).min(ctx.h);
-                            st.zoom_center = zoom_center_for_tap(dx, dy, ctx.w, PAD_TOP, content_end);
+                            st.zoom_center =
+                                zoom_center_for_tap(dx, dy, ctx.w, PAD_TOP, content_end);
                         }
                         st.text_dirty = true;
                     } else {
@@ -353,8 +354,7 @@ pub(super) fn zoom_center_for_tap(
     let cx = dx.round().clamp(0.0, w as f32 - 1.0) as usize;
     let cy = dy
         .round()
-        .clamp(content_top as f32, content_end.saturating_sub(1) as f32)
-        as usize;
+        .clamp(content_top as f32, content_end.saturating_sub(1) as f32) as usize;
     (cx, cy)
 }
 
@@ -379,7 +379,10 @@ mod tests {
 
     #[test]
     fn tap_past_right_edge_clamps_to_last_column() {
-        assert_eq!(zoom_center_for_tap(10_000.0, 150.0, W, TOP, END), (399, 150));
+        assert_eq!(
+            zoom_center_for_tap(10_000.0, 150.0, W, TOP, END),
+            (399, 150)
+        );
     }
 
     #[test]

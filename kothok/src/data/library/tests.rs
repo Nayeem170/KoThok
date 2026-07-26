@@ -184,7 +184,12 @@ fn scan_epubs_finds_and_lists_books() {
 
 // --- toc_rows (issue 11) ----------------------------------------------------
 
-fn toc_entry(label: &str, depth: usize, chapter: Option<usize>, children: Vec<TocEntry>) -> TocEntry {
+fn toc_entry(
+    label: &str,
+    depth: usize,
+    chapter: Option<usize>,
+    children: Vec<TocEntry>,
+) -> TocEntry {
     TocEntry {
         label: label.to_string(),
         depth,
@@ -221,7 +226,10 @@ fn toc_rows_flattens_a_nested_tree_in_document_order() {
     let rows = toc_rows(&tree, &[ch0, ch1]);
     assert_eq!(rows.len(), 3, "{rows:?}");
     assert_eq!(rows[0].label, "Part One");
-    assert_eq!(rows[0].chapter, None, "divider row is shown but not navigable");
+    assert_eq!(
+        rows[0].chapter, None,
+        "divider row is shown but not navigable"
+    );
     assert_eq!(rows[1].label, "Chapter One");
     assert_eq!(rows[1].depth, 1);
     assert_eq!(rows[2].label, "Chapter Two");

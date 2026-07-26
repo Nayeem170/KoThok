@@ -1,0 +1,20 @@
+KoThok 0.2.0 - manual install (no script needed)
+
+1. Plug your Kobo into your computer with a USB cable.
+2. Copy KoboRoot.tgz (in this zip) onto the Kobo, into the ".kobo" folder
+   (it's next to a folder called ".adds" - both are hidden folders, so make
+   sure your file browser is set to show hidden files).
+3. Eject / safely remove the Kobo, then unplug the USB cable.
+4. Reboot the Kobo (turn it off and back on).
+5. Watch for an "Updating..." screen for about 30 seconds - this is normal,
+   it's installing KoThok's menu button, then it restarts itself. Do not
+   unplug or power off here.
+6. Once the device finishes booting, tap the menu button (bottom-right),
+   then tap "KoThok" to open it.
+
+Fonts for every supported script and a sample book are already included -
+nothing else to copy.
+
+Updating later: repeat these same steps with the new version's KoboRoot.tgz.
+Unlike the script installer, this manual method always needs the reboot in
+step 4 - there's no lightweight in-place update without one.

@@ -39,10 +39,10 @@ Download `KoThok-<version>-manual-install.zip` from
 3. Copy `KoboRoot.tgz` into the Kobo's `.kobo` folder (a hidden folder next to
    `.adds` - turn on "show hidden files" in your file browser if you don't see
    it).
-4. Eject, unplug, then hold the power button ~30s until the screen goes
-   blank, wait 10s, and press it once to boot.
+4. Eject, unplug, then reboot the Kobo (power it off and back on).
 5. Watch for an "Updating..." screen (~30s) - this installs NickelMenu and
-   KoThok in one step. Don't unplug or power off during it.
+   KoThok in one step, then it restarts itself. Don't unplug or power off
+   during it.
 6. Once booted, open the hamburger menu and tap **KoThok**.
 
 Fonts and a sample book are bundled in, same as the scripted install.
@@ -55,7 +55,8 @@ Updates do not need a reboot. Just copy the new binary over the old one:
    [Release](https://github.com/Nayeem170/KoThok/releases).
 2. Plug in your Kobo via USB.
 3. Open the `.adds` folder on the Kobo USB drive.
-4. Copy the `kothok` binary into `.adds/kothok/` (overwrite the old file).
+4. Copy the `kothok` binary into `.adds/`, overwriting the existing `kothok`
+   file (it sits directly in `.adds/`, not in a subfolder).
 5. Eject, unplug, and launch KoThok from the hamburger menu.
 
 That's it - the next launch runs the new version.
@@ -68,7 +69,7 @@ That's it - the next launch runs the new version.
 2. Plug in your Kobo via USB
 3. Double-click `uninstall.bat`
 4. Type `yes` to confirm
-5. Eject, unplug, and reboot the Kobo (hold power 30s until blank, wait 10s, press once)
+5. Eject, unplug, and reboot the Kobo (power it off and back on)
 
 ### macOS
 
@@ -76,7 +77,7 @@ That's it - the next launch runs the new version.
 2. Plug in your Kobo via USB
 3. Double-click `uninstall.command` in Finder
 4. Type `yes` to confirm
-5. Eject, unplug, and reboot the Kobo (hold power 30s until blank, wait 10s, press once)
+5. Eject, unplug, and reboot the Kobo (power it off and back on)
 
 ### Linux
 
@@ -84,7 +85,7 @@ That's it - the next launch runs the new version.
 2. Plug in your Kobo via USB
 3. Run: `chmod +x uninstall.sh && ./uninstall.sh`
 4. Type `yes` to confirm
-5. Eject, unplug, and reboot the Kobo (hold power 30s until blank, wait 10s, press once)
+5. Eject, unplug, and reboot the Kobo (power it off and back on)
 
 After the reboot the "KoThok" button is gone from the device menu.
 

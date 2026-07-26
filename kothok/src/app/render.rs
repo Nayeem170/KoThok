@@ -118,11 +118,9 @@ pub fn render_and_present(
                 st.buffer[strip_start..ctx.h * ctx.w].fill(Rgb565Pixel(0xFFFF));
             }
         } else if chapter_overlay {
-            let current_row = crate::rendering::render::current_toc_row(
-                &st.toc_rows,
-                st.current_chapter,
-            )
-            .unwrap_or(0) as i32;
+            let current_row =
+                crate::rendering::render::current_toc_row(&st.toc_rows, st.current_chapter)
+                    .unwrap_or(0) as i32;
             crate::rendering::render::paint_chapter_list(
                 &mut st.buffer,
                 &st.toc_rows,

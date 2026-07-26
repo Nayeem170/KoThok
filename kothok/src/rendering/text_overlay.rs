@@ -741,7 +741,11 @@ mod zoom_tests {
                 let sr = crop_y + row_rel / 2;
                 let sc = crop_x + c / 2;
                 let expected = Rgb565Pixel(((sr as u16) << 8) | (sc as u16 & 0xff));
-                assert_eq!(buf[r * w + c], expected, "dest ({c},{r}) sampled wrong source");
+                assert_eq!(
+                    buf[r * w + c],
+                    expected,
+                    "dest ({c},{r}) sampled wrong source"
+                );
             }
         }
     }
@@ -758,7 +762,10 @@ mod zoom_tests {
                     let v = buf[r * w + c].0;
                     let sr = (v >> 8) as usize;
                     let sc = (v & 0xff) as usize;
-                    assert!(sr >= top && sr < top + ch, "center {center:?}: oob src row {sr}");
+                    assert!(
+                        sr >= top && sr < top + ch,
+                        "center {center:?}: oob src row {sr}"
+                    );
                     assert!(sc < w, "center {center:?}: oob src col {sc}");
                 }
             }
@@ -770,6 +777,10 @@ mod zoom_tests {
         let mut buf = vec![Rgb565Pixel(7); 100];
         apply_zoom(&mut buf, 0, 0, 10, (0, 0));
         apply_zoom(&mut buf, 10, 0, 0, (0, 0));
-        assert_eq!(buf[0], Rgb565Pixel(7), "zero-area calls must not touch the buffer");
+        assert_eq!(
+            buf[0],
+            Rgb565Pixel(7),
+            "zero-area calls must not touch the buffer"
+        );
     }
 }

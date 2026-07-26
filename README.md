@@ -64,9 +64,9 @@ flowchart TD
 | Repo | Role |
 |---|---|
 | [**KoThok**](https://github.com/Nayeem170/KoThok) (this) | Reader app: Slint UI, main loop, audio driver, book picker, control panel |
-| [**kobo-core**](https://github.com/Nayeem170/kobo-core) ([crates.io](https://crates.io/crates/kobo-core)) | Device SDK: framebuffer, touch, frontlight, fonts, EPUB, A2DP audio |
-| [**kothok-edge-tts**](https://github.com/Nayeem170/kothok-edge-tts) ([crates.io](https://crates.io/crates/kothok-edge-tts)) | Edge TTS client: WebSocket protocol, 300+ voices, MP3 + word boundaries |
-| [**kothok-site**](https://github.com/Nayeem170/kothok-site) | Marketing site and 3D demo |
+| [**kobo-core**](https://github.com/Nayeem170/kobo-core) ([crates.io](https://crates.io/crates/kobo-core)) ([Wiki](https://github.com/Nayeem170/kobo-core/wiki)) | Device SDK: framebuffer, touch, frontlight, fonts, EPUB, A2DP audio |
+| [**kothok-edge-tts**](https://github.com/Nayeem170/kothok-edge-tts) ([crates.io](https://crates.io/crates/kothok-edge-tts)) ([Wiki](https://github.com/Nayeem170/kothok-edge-tts/wiki)) | Edge TTS client: WebSocket protocol, 300+ voices, MP3 + word boundaries |
+| [**kothok-site**](https://github.com/Nayeem170/kothok-site) ([Wiki](https://github.com/Nayeem170/kothok-site/wiki)) | Marketing site and 3D demo |
 
 ## What's new
 

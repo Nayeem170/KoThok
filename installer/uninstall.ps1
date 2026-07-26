@@ -78,13 +78,14 @@ if (-not (Test-Path -LiteralPath $addsDir)) {
 Step "Scanning for KoThok files..."
 
 $targets = @(
-    @{ Path = (Join-Path $addsDir 'kothok');         Type = 'dir';  Label = 'binary' },
+    @{ Path = (Join-Path $addsDir 'kothok');         Type = 'file'; Label = 'binary' },
     @{ Path = (Join-Path $addsDir 'run.sh');         Type = 'file'; Label = 'launcher' },
-    @{ Path = (Join-Path $addsDir 'nm/config');      Type = 'file'; Label = 'KoThok menu entry' },
     @{ Path = (Join-Path $addsDir 'kothok-version'); Type = 'file'; Label = 'version marker' },
     @{ Path = (Join-Path $addsDir 'cache');          Type = 'dir';  Label = 'app cache' },
     @{ Path = (Join-Path $addsDir 'bookcache');      Type = 'dir';  Label = 'book cache' },
+    @{ Path = (Join-Path $addsDir 'config');         Type = 'file'; Label = 'settings' },
     @{ Path = (Join-Path $addsDir 'kothok.log');     Type = 'file'; Label = 'log' },
+    @{ Path = (Join-Path $addsDir 'crash.log');      Type = 'file'; Label = 'crash log' },
     @{ Path = (Join-Path $addsDir 'kothok.err');     Type = 'file'; Label = 'error log' }
 )
 
@@ -130,6 +131,25 @@ foreach ($t in $found) {
     }
 }
 
+# NickelMenu keeps every mod's menu item in one shared file (.adds/nm/config).
+# Deleting it outright would take out KOReader/Plato buttons too, so strip only
+# KoThok's line and leave the rest. If nothing remains, remove the empty file.
+$nmConfig = Join-Path $addsDir 'nm\config'
+if (Test-Path -LiteralPath $nmConfig) {
+    $kept = @(Get-Content -LiteralPath $nmConfig | Where-Object {
+        $_ -notmatch 'KoThok' -and $_ -notmatch '\.adds/run\.sh'
+    })
+    if ($kept.Count -gt 0) {
+        $kept | Set-Content -LiteralPath $nmConfig
+        Ok "stripped KoThok from nm/config (kept $($kept.Count) other line(s))"
+    } else {
+        Remove-Item -LiteralPath $nmConfig -Force
+        Ok "removed nm/config (was KoThok-only)"
+    }
+} else {
+    Info "nm/config absent - menu entry already gone"
+}
+
 # --- 5. Summary --------------------------------------------------------------
 Write-Host ""
 Write-Host "  ============================" -ForegroundColor Green
@@ -144,7 +164,7 @@ Write-Host "  DONE! Follow these steps:" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "  1. Eject the Kobo (system tray -> Safely Remove -> KOBOeReader)" -ForegroundColor White
 Write-Host "  2. Unplug USB cable" -ForegroundColor White
-    Write-Host "  3. Hold power button 30s until screen goes blank, wait 10s, press once" -ForegroundColor White
+    Write-Host "  3. Reboot the Kobo (power it off and back on)" -ForegroundColor White
 Write-Host ""
 Write-Host "  After reboot the 'KoThok' entry is gone from nickel's menu." -ForegroundColor DarkGray
 Write-Host ""

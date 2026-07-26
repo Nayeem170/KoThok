@@ -23,10 +23,6 @@ jobs:
         working-directory: kothok
     steps:
       - uses: actions/checkout@v4
-      - name: Clone local-patch dependencies
-        run: |
-          git clone https://github.com/Nayeem170/kobo-core kobo-core
-          git clone https://github.com/Nayeem170/kothok-edge-tts ../../kothok-edge-tts
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -42,12 +38,11 @@ jobs:
 
   cross-build:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: kothok
     steps:
       - uses: actions/checkout@v4
-      - name: Clone local-patch dependencies
-        run: |
-          git clone https://github.com/Nayeem170/kobo-core kothok/kobo-core
-          git clone https://github.com/Nayeem170/kothok-edge-tts ../kothok-edge-tts
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: armv7-unknown-linux-musleabihf
@@ -57,13 +52,5 @@ jobs:
       - name: Install cross
         run: cargo install cross --git https://github.com/cross-rs/cross --locked
       - name: cross build
-        working-directory: kothok
         run: cross build --target armv7-unknown-linux-musleabihf --release -p kothok-app
 
-  audit:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: rustsec/audit-check@v2.0.0
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}

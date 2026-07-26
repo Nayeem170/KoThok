@@ -9,6 +9,7 @@ killall -q -TERM $NICKEL_STACK 2>/dev/null
 sleep 0.3
 killall -q -KILL $NICKEL_STACK 2>/dev/null
 echo "run.sh: launching reader..."
+chmod 0755 "$BIN" 2>/dev/null
 "$BIN" "$@" 2>/mnt/onboard/.adds/kothok.err
 RC=$?
 echo "run.sh: reader exited rc=$RC"

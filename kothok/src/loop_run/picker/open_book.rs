@@ -36,7 +36,13 @@ pub(super) fn open_book_from_picker(
     let t0 = std::time::Instant::now();
     let (loaded_chapters, book_lang, toc_tree) = open_book(&book_path)
         .filter(|(c, _, _)| !c.is_empty())
-        .unwrap_or_else(|| (vec![Chapter::from_xhtml(0, None, SAMPLE_CHAPTER)], None, Vec::new()));
+        .unwrap_or_else(|| {
+            (
+                vec![Chapter::from_xhtml(0, None, SAMPLE_CHAPTER)],
+                None,
+                Vec::new(),
+            )
+        });
     log::info!("perf: open_book {}ms", t0.elapsed().as_millis());
     st.chapters = loaded_chapters;
     st.toc_rows = crate::data::library::toc_rows(&toc_tree, &st.chapters);
