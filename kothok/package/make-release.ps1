@@ -106,10 +106,11 @@ $sampleSrc = Join-Path $PackageDir '..\samples'
 if (Test-Path -LiteralPath $sampleSrc) {
     $sampleDir = Join-Path $stage 'mnt\onboard\books'
     New-Item -ItemType Directory -Force -Path $sampleDir | Out-Null
-    foreach ($epub in (Get-ChildItem -LiteralPath $sampleSrc -Filter '*.epub')) {
-        Copy-Item -LiteralPath $epub.FullName -Destination $sampleDir
+    $enSample = Join-Path $sampleSrc 'en-sample.epub'
+    if (Test-Path -LiteralPath $enSample) {
+        Copy-Item -LiteralPath $enSample -Destination $sampleDir
+        Write-Host "  samples: bundled en-sample.epub for fresh-install fallback"
     }
-    Write-Host "  samples: bundled for fresh-install fallback"
 }
 
 # --- verify line endings on shell scripts (LF mandatory) --------------------
