@@ -24,6 +24,10 @@ use kobo_core::Capabilities;
 use super::*;
 
 pub fn enter_sleep(st: &mut LoopState, ctx: &LoopContext, from_picker: bool) -> u32 {
+    crate::debug_log::log(&format!(
+        "enter_sleep: from_picker={} wifi_user={} bt_user={}",
+        from_picker, st.wifi_user_on, st.bt_user_on
+    ));
     if !from_picker {
         crate::loop_run::save_position_now(st, ctx.reader);
     }
@@ -67,6 +71,7 @@ pub fn enter_sleep(st: &mut LoopState, ctx: &LoopContext, from_picker: bool) -> 
 }
 
 pub fn wake_from_sleep(st: &mut LoopState, ctx: &LoopContext) {
+    crate::debug_log::log("wake_from_sleep: entering");
     st.about_open = false;
     st.picker_last_tap_idx = None;
     st.exit_armed = false;

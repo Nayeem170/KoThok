@@ -46,6 +46,7 @@ pub(super) fn on_release(
     } else if st.menu_pressed {
         st.menu_pressed = false;
         st.panel_open = true;
+        crate::debug_log::log("panel: swipe-up opened panel");
         cb.panel_open_cell.set(true);
         reader.set_panel_open(true);
         st.text_dirty = true;
