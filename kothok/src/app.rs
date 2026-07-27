@@ -68,7 +68,7 @@ pub fn toggle_playback(
         };
     }
     let cur = reader.get_cur_start().max(0) as usize;
-    let page = state.page_for_offset(cur).unwrap_or(current_page);
+    let page = current_page;
     let page_utts = page_utterances(page, state);
     let target = resolve_start_target(cur, &page_utts);
     if target == 0
