@@ -125,17 +125,11 @@ fn inline_svg_figure_renders_a_picture_and_a_caption() {
     );
 }
 
-/// A dense (JSON-like) `<pre>` block speaks a placeholder instead of the
-/// literal markup (issue 17b); this only checks the placeholder actually
-/// reaches read-aloud and the chapter keeps flowing afterward. The precise
-/// byte-range invariants (`push_pre_rows`'s only-one-readable-row rule) are
-/// unit-tested directly against `body` in `state/rows.rs`, which has access
-/// to it -- `ChapterState` does not retain the raw `body` string.
+/// A dense (JSON-like) `<pre>` block is read aloud in full -- every mono row
+/// carries a real byte range into `body`, and the chapter keeps flowing
+/// afterward.
 #[test]
-fn dense_pre_block_speaks_a_placeholder_and_chapter_still_flows() {
-    // Repeated `"k":1,` pairs, not one long alphanumeric run -- a repeated
-    // letter doesn't count toward symbol density and would leave this block
-    // below the dense threshold despite being long enough to wrap.
+fn dense_pre_block_read_aloud_and_chapter_still_flows() {
     let long_json = format!("{{{}}}", "\"k\":1,".repeat(40));
     let xhtml = format!("<pre>{long_json}</pre><p>Real prose after the code block.</p>");
     let mut ch = chapter_with(&xhtml);
@@ -151,8 +145,8 @@ fn dense_pre_block_speaks_a_placeholder_and_chapter_still_flows() {
         "long dense line must wrap to more than one row on screen: {mono_rows}"
     );
     assert!(
-        st.utterances.iter().any(|u| u.text.contains("Code block.")),
-        "the placeholder must reach read-aloud: {:?}",
+        st.utterances.iter().any(|u| u.text.contains("\"k\":1")),
+        "the code text must reach read-aloud: {:?}",
         st.utterances.iter().map(|u| &u.text).collect::<Vec<_>>()
     );
     assert!(
@@ -419,14 +413,10 @@ fn prose_still_wraps_by_word() {
     );
 }
 
-/// A dense `<pre>` (JSON) that wraps to several display rows must expose exactly
-/// one TTS-readable row -- the spoken placeholder -- with the placeholder's byte
-/// length, and every other mono row in the block must be `start == end` (the
-/// existing "not readable" convention). The earlier bug let wrapped continuation
-/// rows of the first physical line inherit offsets into the real (long) source
-/// line, pointing past the short placeholder in `body` and into later prose.
+/// A dense `<pre>` (JSON) that wraps to several display rows must keep every
+/// mono row readable with real byte ranges into `body` -- no placeholder.
 #[test]
-fn dense_pre_block_emits_one_readable_row_with_placeholder_range() {
+fn dense_pre_block_keeps_real_ranges_per_row() {
     let long_json = r#"{"key1":"value1","key2":"value2","key3":"value3","key4":"value4","key5":"value5","key6":"value6","key7":"value7","key8":"value8","key9":"value9","key10":"value10","key11":"value11","key12":"value12"}"#;
     let xhtml = format!("<pre>{long_json}</pre>");
     let mut ch = Chapter::from_xhtml(0, None, &xhtml);
@@ -441,24 +431,15 @@ fn dense_pre_block_emits_one_readable_row_with_placeholder_range() {
         "dense JSON should wrap to multiple rows, got {}",
         mono_rows.len()
     );
-    let readable: Vec<_> = mono_rows.iter().filter(|r| r.start < r.end).collect();
-    assert_eq!(
-        readable.len(),
-        1,
-        "exactly one row should be TTS-readable, got {}",
-        readable.len()
-    );
-    assert_eq!(
-        (readable[0].end - readable[0].start) as usize,
-        "Code block.".len(),
-        "the readable row must span exactly the placeholder"
-    );
-    let unreadable = mono_rows.iter().filter(|r| r.start >= r.end).count();
-    assert_eq!(
-        unreadable,
-        mono_rows.len() - 1,
-        "every other mono row must be start == end"
-    );
+    for r in &mono_rows {
+        if r.text.is_empty() {
+            continue;
+        }
+        assert!(
+            r.start < r.end,
+            "every non-empty mono row must be readable: {r:?}"
+        );
+    }
 }
 
 /// A low-density `<pre>` (a transcript) is not classified as a code block, so
