@@ -15,6 +15,91 @@ fn utt(start: usize, end: usize) -> Utterance {
     }
 }
 
+/// An utterance whose text really is the body bytes `[start, end)`, so the
+/// cursor-offset arithmetic in `queue_from_cursor` can be checked against it.
+fn text_utt(start: usize, text: &str) -> Utterance {
+    Utterance {
+        text: text.to_string(),
+        start,
+        end: start + text.len(),
+        para_end: false,
+        page_break: None,
+    }
+}
+
+#[test]
+fn queue_from_cursor_drops_utterances_before_the_cursor() {
+    let utts = vec![
+        text_utt(0, "one. "),
+        text_utt(5, "two. "),
+        text_utt(10, "three."),
+    ];
+    let q = queue_from_cursor(10, utts);
+    assert_eq!(q.len(), 1, "utterances above the cursor are dropped");
+    assert_eq!(q[0].text, "three.");
+}
+
+#[test]
+fn queue_from_cursor_trims_head_to_the_cursor() {
+    // Cursor sits 4 bytes into the second utterance.
+    let utts = vec![text_utt(0, "one. "), text_utt(5, "hello world")];
+    let q = queue_from_cursor(9, utts);
+    assert_eq!(q.len(), 1);
+    assert_eq!(q[0].text, "o world", "head starts at the cursor");
+    assert_eq!(q[0].start, 9, "start moves with the trimmed text");
+    assert_eq!(q[0].end, 16, "end is unchanged");
+}
+
+#[test]
+fn queue_from_cursor_at_utterance_start_does_not_trim() {
+    let utts = vec![text_utt(0, "one. "), text_utt(5, "two words")];
+    let q = queue_from_cursor(5, utts);
+    assert_eq!(
+        q[0].text, "two words",
+        "cursor on the boundary reads it whole"
+    );
+    assert_eq!(q[0].start, 5);
+}
+
+#[test]
+fn queue_from_cursor_shifts_page_break_by_the_trim() {
+    let mut u = text_utt(5, "hello world");
+    // The page ends 8 bytes into this utterance.
+    u.page_break = Some(8);
+    let q = queue_from_cursor(9, vec![u]);
+    assert_eq!(
+        q[0].page_break,
+        Some(4),
+        "page break is relative to the trimmed start"
+    );
+}
+
+#[test]
+fn queue_from_cursor_ignores_a_cursor_from_another_page() {
+    // A cursor left behind on a later page is past everything here; trimming by
+    // that difference would cut the first sentence at a meaningless byte.
+    let utts = vec![text_utt(0, "one. "), text_utt(5, "two words")];
+    let q = queue_from_cursor(9_999, utts);
+    assert_eq!(q.len(), 2, "no utterance dropped");
+    assert_eq!(q[0].text, "one. ", "head untouched");
+    assert_eq!(q[0].start, 0);
+}
+
+#[test]
+fn queue_from_cursor_never_splits_a_multibyte_char() {
+    // "Bangla" text: every char is 3 bytes, so a cursor 1 byte in is not a
+    // char boundary and the head must be left whole rather than panicking.
+    let utts = vec![text_utt(0, "\u{0986}\u{09AE}\u{09BF}")];
+    let q = queue_from_cursor(1, utts);
+    assert_eq!(q[0].text, "\u{0986}\u{09AE}\u{09BF}");
+    assert_eq!(q[0].start, 0);
+}
+
+#[test]
+fn queue_from_cursor_empty_page_stays_empty() {
+    assert!(queue_from_cursor(42, Vec::new()).is_empty());
+}
+
 #[test]
 fn resolve_start_target_finds_containing_utterance() {
     let utts = [utt(0, 10), utt(10, 20), utt(20, 30)];
