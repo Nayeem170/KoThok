@@ -46,7 +46,11 @@ pub fn enter_sleep(st: &mut LoopState, ctx: &LoopContext, from_picker: bool) -> 
     let plan = sleep_plan(fl_path, st.wifi_user_on, st.bt_user_on);
     let status = if !from_picker && !st.current_book_path.is_empty() {
         let title = ctx.reader.get_book_title().to_string();
-        let abs_page = st.chapter_offsets.get(st.current_chapter).copied().unwrap_or(0)
+        let abs_page = st
+            .chapter_offsets
+            .get(st.current_chapter)
+            .copied()
+            .unwrap_or(0)
             + st.current_page;
         let total = st.chapter_offsets.last().copied().unwrap_or(1).max(1);
         let pct = (abs_page * 100 / total).min(100);
