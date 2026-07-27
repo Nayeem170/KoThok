@@ -24,10 +24,6 @@ pub struct AudioFlags {
     pub text_dirty: bool,
 }
 
-// Let the sleep-cover waveform finish before dimming the frontlight, so the
-// cover isn't captured mid-refresh.
-const SLEEP_COVER_SETTLE_MS: u64 = 400;
-
 /// Updated reading cursor after a play/pause toggle (so "Reading" can return
 /// to the line that resumed).
 pub struct PlayToggle {
@@ -133,8 +129,6 @@ fn friendly_error(m: &str) -> String {
 /// without a framebuffer or live radios. `wifi_on`/`bt_on` are user-intent
 /// flags, not live connection status.
 pub struct SleepPlan {
-    /// `true` = show the book cover; `false` = the KoThok splash (library lock).
-    pub show_cover: bool,
     /// Power the frontlight off on sleep.
     pub frontlight_off: bool,
     /// Power wifi off on sleep (only when the user had it on).
@@ -145,14 +139,8 @@ pub struct SleepPlan {
     pub bt_off: bool,
 }
 
-pub fn sleep_plan(
-    from_picker: bool,
-    fl_path: &Option<std::path::PathBuf>,
-    wifi_on: bool,
-    bt_on: bool,
-) -> SleepPlan {
+pub fn sleep_plan(fl_path: &Option<std::path::PathBuf>, wifi_on: bool, bt_on: bool) -> SleepPlan {
     SleepPlan {
-        show_cover: !from_picker,
         frontlight_off: fl_path.is_some(),
         wifi_off: wifi_on,
         bt_off: bt_on,

@@ -50,7 +50,7 @@ fn resolve_start_target_empty_returns_zero() {
 fn sleep_plan_nevers_powers_bt_when_off() {
     // BT off (or no adapter) MUST keep bt_off=false - the dbus call hangs
     // on BT-less devices, which previously stalled enter_sleep entirely.
-    let plan = sleep_plan(false, &None, false, false);
+    let plan = sleep_plan(&None, false, false);
     assert!(!plan.bt_off, "bt off -> must not call bt_toggle");
 }
 
@@ -172,14 +172,8 @@ fn friendly_error_unknown_falls_back_to_generic() {
 }
 
 #[test]
-fn sleep_plan_from_book_shows_cover_and_powers_down() {
-    let plan = sleep_plan(
-        false,
-        &Some(std::path::PathBuf::from("/sys/bl")),
-        true,
-        true,
-    );
-    assert!(plan.show_cover, "locking from a book shows its cover");
+fn sleep_plan_from_book_powers_down() {
+    let plan = sleep_plan(&Some(std::path::PathBuf::from("/sys/bl")), true, true);
     assert!(
         plan.frontlight_off,
         "frontlight powers off when a path exists"
@@ -189,17 +183,8 @@ fn sleep_plan_from_book_shows_cover_and_powers_down() {
 }
 
 #[test]
-fn sleep_plan_from_picker_shows_splash() {
-    let plan = sleep_plan(true, &Some(std::path::PathBuf::from("/sys/bl")), true, true);
-    assert!(
-        !plan.show_cover,
-        "locking from the library shows the KoThok splash, not a cover"
-    );
-}
-
-#[test]
 fn sleep_plan_keeps_frontlight_when_no_path() {
-    let plan = sleep_plan(false, &None, false, false);
+    let plan = sleep_plan(&None, false, false);
     assert!(
         !plan.frontlight_off,
         "no frontlight path -> leave the frontlight alone"
@@ -208,6 +193,6 @@ fn sleep_plan_keeps_frontlight_when_no_path() {
 
 #[test]
 fn sleep_plan_leaves_wifi_when_already_off() {
-    let plan = sleep_plan(false, &None, false, false);
+    let plan = sleep_plan(&None, false, false);
     assert!(!plan.wifi_off, "wifi already off -> no redundant toggle");
 }
