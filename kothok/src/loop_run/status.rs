@@ -183,8 +183,27 @@ pub(super) fn refresh_status(st: &mut LoopState, ctx: &LoopContext) {
     if st.last_status_refresh.elapsed().as_millis() as u64 >= STATUS_REFRESH_MS {
         st.last_status_refresh = std::time::Instant::now();
         let wifi = ctx.caps.network_available();
+        let prev_wifi = ctx.reader.get_wifi_on();
         crate::crash_report::try_upload_if_wifi();
+        crate::debug_log::try_upload_if_wifi();
         let bt = ctx.caps.audio_sink_available();
+        let prev_bt = ctx.reader.get_bt_on();
+        if wifi != prev_wifi {
+            crate::debug_log::log(&format!(
+                "wifi: status changed {} -> {} (toggle_age={}ms)",
+                prev_wifi,
+                wifi,
+                crate::device::wifi_toggle_age_ms()
+            ));
+        }
+        if bt != prev_bt {
+            crate::debug_log::log(&format!(
+                "bt: status changed {} -> {} (reconnect_busy={})",
+                prev_bt,
+                bt,
+                crate::device::bt_reconnect_busy()
+            ));
+        }
         if crate::device::wifi_toggle_age_ms() >= WIFI_TOGGLE_GRACE_MS {
             ctx.reader.set_wifi_on(wifi);
         }

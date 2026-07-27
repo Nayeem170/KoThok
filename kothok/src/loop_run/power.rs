@@ -151,6 +151,10 @@ pub(super) fn handle_power_button(st: &mut LoopState, ctx: &mut LoopContext) -> 
     let power_pressed = ctx.power_pressed;
     let fl_path = ctx.fl_path;
     if power_pressed.swap(false, std::sync::atomic::Ordering::SeqCst) {
+        crate::debug_log::log(&format!(
+            "power: button pressed, state={:?}",
+            st.system_state
+        ));
         match st.system_state {
             SystemState::Awake => {
                 if st.view_mode == crate::ViewMode::Audio {
@@ -278,7 +282,6 @@ pub(super) fn auto_sleep(st: &mut LoopState, ctx: &mut LoopContext) -> LoopFlow 
     let reader = ctx.reader;
     let cb = ctx.cb;
 
-    // Keep inactivity clock fresh during TTS so auto-sleep doesn't fire mid-listen.
     if reader.get_playing() {
         st.last_activity = std::time::Instant::now();
     }
@@ -286,10 +289,11 @@ pub(super) fn auto_sleep(st: &mut LoopState, ctx: &mut LoopContext) -> LoopFlow 
     if st.system_state == SystemState::Locked {
         if let Some(lock_time) = st.lock_time {
             if lock_time.elapsed().as_secs() > LOCK_SLEEP_SECS {
-                // The lock already dimmed the frontlight and stashed the real
-                // level in `saved_brightness`; `enter_sleep` would read the
-                // current (zero) level back and lose it, so keep ours.
                 let locked_brightness = st.saved_brightness;
+                crate::debug_log::log(&format!(
+                    "sleep: LOCK->Asleep after {}s locked, picker={}",
+                    LOCK_SLEEP_SECS, st.picker_active
+                ));
                 enter_sleep(st, ctx, st.picker_active);
                 st.saved_brightness = locked_brightness;
                 st.system_state = SystemState::Asleep {
@@ -321,6 +325,12 @@ pub(super) fn auto_sleep(st: &mut LoopState, ctx: &mut LoopContext) -> LoopFlow 
         && sleep_threshold > 0
         && st.last_activity.elapsed().as_secs() > sleep_threshold
     {
+        crate::debug_log::log(&format!(
+            "sleep: auto threshold={}s elapsed={}s mode={:?}",
+            sleep_threshold,
+            st.last_activity.elapsed().as_secs(),
+            st.view_mode
+        ));
         if audio_mode {
             st.system_state = SystemState::Locked;
             st.lock_time = Some(std::time::Instant::now());

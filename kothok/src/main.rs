@@ -11,6 +11,7 @@ mod callbacks;
 mod capabilities;
 mod crash_report;
 mod data;
+mod debug_log;
 mod device;
 mod gesture;
 mod logger;
@@ -72,7 +73,7 @@ pub enum ViewMode {
     Audio,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SystemState {
     Awake,
     Asleep { from_picker: bool },

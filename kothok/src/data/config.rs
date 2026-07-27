@@ -6,7 +6,7 @@ use std::fs;
 use log::warn;
 
 pub use kobo_core::device::paths::{
-    CONFIG_FILE, CRASH_LOG, POWER_DEV, PPM_DEBUG, PPM_DEPLOY, TOUCH_DEV,
+    CONFIG_FILE, CRASH_LOG, DEBUG_LOG, POWER_DEV, PPM_DEBUG, PPM_DEPLOY, TOUCH_DEV,
 };
 
 pub const BOOK_DIR: &str = "/mnt/onboard";

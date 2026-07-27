@@ -56,6 +56,11 @@ pub fn run() -> Option<InitResult> {
     let (initial_path, all_books) = scan_and_resolve(&fb, w, h, &cli_path);
 
     crate::crash_report::check_on_startup(hw_cfg.model);
+    crate::debug_log::check_on_startup(hw_cfg.model);
+    crate::debug_log::log(&format!(
+        "startup: device={} w={} h={} touch_dev={} power_dev={}",
+        hw_cfg.model, w, h, input_devs.touch_dev, input_devs.power_dev
+    ));
 
     let mut setup = init_reader_and_config(w, &hw_cfg);
 
