@@ -228,24 +228,54 @@ pub fn render_and_present(
         // problem and reverted (commit b72a323) for the same reason. With
         // the large grey fill gone, the chapter list is content-wise the same
         // shape as every other quiet screen, so it uses the same waveform.
-        let heavy_swap = mode_transition || matches!(st.view_mode, crate::ViewMode::Audio);
+        // The settings panel bleeds book text through on reading-mode opens, but
+        // NOT on audio-mode opens -- and the only difference between those two
+        // paths was the waveform: audio took GC16, reading took GL16. GL16 runs
+        // no clearing pass at all, so the dark glyph pixels are never driven to
+        // white and survive as residue under the panel. Give every panel
+        // transition the waveform already proven to clear on this panel.
+        // `panel_transition` subsumes `mode_transition`.
+        let heavy_swap = panel_transition || matches!(st.view_mode, crate::ViewMode::Audio);
         let trans_wf = if heavy_swap {
             WAVE_GC16
         } else {
             waveform_for(RenderScenario::Transition)
         };
         let content_wf = waveform_for(RenderScenario::Content);
-        // GL16 runs no clearing pass, and a PARTIAL update (update_mode=0) only
-        // re-drives pixels whose grey value changed -- so GL16+PARTIAL cannot
-        // clear anything. That is why book text stayed visible under the white
-        // settings panel: the buffer was correct, the panel just never drove the
-        // glyph pixels to white. Pair GL16 with a FULL update, which re-drives
-        // every pixel in the region and deghosts. GL16 has no inversion, so this
-        // is still flash-free; the dark blink is GC16+FULL, which stays reserved
-        // for sleep/wake/boot. The GC16 paths above already clear on their own
-        // and must keep PARTIAL, or they gain that blink.
+        // GC16 clears by itself and must stay PARTIAL (update_mode=0), or it
+        // gains the dark inversion blink reserved for sleep/wake/boot. GL16 --
+        // now only the chapter overlay -- gets a FULL update instead: with no
+        // clearing pass of its own, re-driving every pixel is the only
+        // deghosting available to it, and it stays flash-free.
         let full_transition = !heavy_swap;
         if panel_transition || overlay_transition {
+            // Settles software-vs-hardware in one deploy. If the panel still
+            // bleeds, this says which half to look at: `nonwhite` counts pixels
+            // the buffer actually holds, and the PPM is the exact image handed
+            // to the framebuffer. Clean white panel in the PPM => the residue is
+            // on the glass, not in the buffer. Remove once the bug is closed.
+            if panel_transition {
+                let nonwhite = st.buffer.iter().filter(|p| p.0 != 0xFFFF).count();
+                let cs = PAD_TOP * ctx.w;
+                let ce = content_end * ctx.w;
+                let content_nw = st.buffer[cs..ce].iter().filter(|p| p.0 != 0xFFFF).count();
+                crate::debug_log::log(&format!(
+                    "panel present: open={} wf={} um={} nonwhite={}/{} content_nw={}/{}",
+                    st.panel_open,
+                    trans_wf,
+                    u8::from(full_transition),
+                    nonwhite,
+                    ctx.w * ctx.h,
+                    content_nw,
+                    ce - cs,
+                ));
+                crate::rendering::fb::dump_ppm(
+                    crate::data::config::PPM_DEPLOY,
+                    rgb565_as_bytes_ref(&st.buffer),
+                    ctx.w,
+                    ctx.h,
+                );
+            }
             ctx.fb.present(
                 rgb565_as_bytes_ref(&st.buffer),
                 ctx.w,
