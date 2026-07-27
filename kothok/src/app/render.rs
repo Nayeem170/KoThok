@@ -235,12 +235,22 @@ pub fn render_and_present(
             waveform_for(RenderScenario::Transition)
         };
         let content_wf = waveform_for(RenderScenario::Content);
+        // GL16 runs no clearing pass, and a PARTIAL update (update_mode=0) only
+        // re-drives pixels whose grey value changed -- so GL16+PARTIAL cannot
+        // clear anything. That is why book text stayed visible under the white
+        // settings panel: the buffer was correct, the panel just never drove the
+        // glyph pixels to white. Pair GL16 with a FULL update, which re-drives
+        // every pixel in the region and deghosts. GL16 has no inversion, so this
+        // is still flash-free; the dark blink is GC16+FULL, which stays reserved
+        // for sleep/wake/boot. The GC16 paths above already clear on their own
+        // and must keep PARTIAL, or they gain that blink.
+        let full_transition = !heavy_swap;
         if panel_transition || overlay_transition {
             ctx.fb.present(
                 rgb565_as_bytes_ref(&st.buffer),
                 ctx.w,
                 ctx.h,
-                false,
+                full_transition,
                 0,
                 ctx.h,
                 trans_wf,
