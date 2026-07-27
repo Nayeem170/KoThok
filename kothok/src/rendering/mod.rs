@@ -12,6 +12,7 @@ pub mod render;
 pub mod screenshot;
 pub mod splash;
 pub mod text_overlay;
+pub mod transition;
 pub mod vinyl;
 
 pub use kobo_core::rendering::{density, draw, text_render};

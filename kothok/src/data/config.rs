@@ -5,6 +5,8 @@ use std::fs;
 
 use log::warn;
 
+use crate::rendering::transition::PanelTransition;
+
 pub use kobo_core::device::paths::{
     CONFIG_FILE, CRASH_LOG, DEBUG_LOG, POWER_DEV, PPM_DEBUG, PPM_DEPLOY, TOUCH_DEV,
 };
@@ -29,6 +31,7 @@ const KEY_BRIGHTNESS: &str = "brightness";
 const KEY_NATURAL_SCROLL: &str = "natural_scroll";
 const KEY_READING_AUTO_SLEEP: &str = "reading_auto_sleep";
 const KEY_CHECK_UPDATES: &str = "check_updates";
+const KEY_PANEL_TRANSITION: &str = "panel_transition";
 const KEY_VOICE_PREFIX: &str = "voice.";
 
 const TTS_RATE_DEFAULT: i32 = 60;
@@ -54,6 +57,11 @@ pub struct AppConfig {
     /// The only outbound request the reader makes on its own, so it is a
     /// setting rather than a hardcoded behaviour.
     pub check_updates: bool,
+    /// Waveform + update mode for whole-screen transition presents. Which one
+    /// clears the Kaleido 3 colour filter without blinking is a panel/driver
+    /// property that can only be settled on the device, so it is settable
+    /// without a rebuild. See [`PanelTransition`].
+    pub panel_transition: PanelTransition,
 }
 
 impl Default for AppConfig {
@@ -69,6 +77,7 @@ impl Default for AppConfig {
             natural_scroll: true,
             reading_auto_sleep_secs: 0,
             check_updates: true,
+            panel_transition: PanelTransition::default(),
         }
     }
 }
@@ -115,6 +124,7 @@ pub fn load_config_from_base(path: &str, base_font: i32) -> AppConfig {
                     cfg.reading_auto_sleep_secs = val.parse::<u32>().unwrap_or(0).min(3600)
                 }
                 KEY_CHECK_UPDATES => cfg.check_updates = val == "1" || val == "true",
+                KEY_PANEL_TRANSITION => cfg.panel_transition = PanelTransition::from_key(val),
                 _ if key.starts_with(KEY_VOICE_PREFIX) => {
                     let lang = key.trim_start_matches(KEY_VOICE_PREFIX).to_string();
                     if !lang.is_empty() {
@@ -129,12 +139,17 @@ pub fn load_config_from_base(path: &str, base_font: i32) -> AppConfig {
 }
 
 pub fn save_config_to(cfg: &AppConfig, path: &str) {
+    // Every key the loader understands is written back. A key that is parsed
+    // but not saved is silently erased by the next settings change - which for
+    // `panel_transition` would revert an on-device waveform trial the moment
+    // the user touched the brightness slider.
     let mut data = format!(
-        "{KEY_FONT_SIZE}={}\n{KEY_TTS_LANG}={}\n{KEY_TTS_VOICE}={}\n{KEY_TTS_RATE}={}\n{KEY_VOLUME}={}\n{KEY_BRIGHTNESS}={}\n{KEY_NATURAL_SCROLL}={}\n{KEY_READING_AUTO_SLEEP}={}\n{KEY_CHECK_UPDATES}={}\n",
+        "{KEY_FONT_SIZE}={}\n{KEY_TTS_LANG}={}\n{KEY_TTS_VOICE}={}\n{KEY_TTS_RATE}={}\n{KEY_VOLUME}={}\n{KEY_BRIGHTNESS}={}\n{KEY_NATURAL_SCROLL}={}\n{KEY_READING_AUTO_SLEEP}={}\n{KEY_CHECK_UPDATES}={}\n{KEY_PANEL_TRANSITION}={}\n",
         cfg.font_size, cfg.tts_lang, cfg.tts_voice, cfg.tts_rate, cfg.volume, cfg.brightness,
         if cfg.natural_scroll { 1 } else { 0 },
         cfg.reading_auto_sleep_secs,
-        if cfg.check_updates { 1 } else { 0 }
+        if cfg.check_updates { 1 } else { 0 },
+        cfg.panel_transition.as_key()
     );
     for (lang, voice) in &cfg.voices {
         data.push_str(&format!("{KEY_VOICE_PREFIX}{lang}={voice}\n"));

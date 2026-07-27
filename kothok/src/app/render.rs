@@ -224,67 +224,18 @@ pub fn render_and_present(
         // chapter_list.rs). Chasing that with waveform swaps (GC16 -> GL16 ->
         // A2, none of which fixed the ghosting because none of them address
         // the actual amount of grey being refreshed) is why this kept
-        // recurring; REAGL was tried project-wide for the same class of
-        // problem and reverted (commit b72a323) for the same reason. With
-        // the large grey fill gone, the chapter list is content-wise the same
-        // shape as every other quiet screen, so it uses the same waveform.
-        // The settings panel bleeds book text through on reading-mode opens, but
-        // NOT on audio-mode opens -- and the only difference between those two
-        // paths was the waveform: audio took GC16, reading took GL16. GL16 runs
-        // no clearing pass at all, so the dark glyph pixels are never driven to
-        // white and survive as residue under the panel. Give every panel
-        // transition the waveform already proven to clear on this panel.
-        // `panel_transition` subsumes `mode_transition`.
-        let heavy_swap = panel_transition || matches!(st.view_mode, crate::ViewMode::Audio);
-        let trans_wf = if heavy_swap {
-            WAVE_GC16
-        } else {
-            waveform_for(RenderScenario::Transition)
-        };
+        // recurring. With the large grey fill gone, the chapter list is
+        // content-wise the same shape as every other quiet screen, so every
+        // transition present now goes through the same policy
+        // (`PanelTransition`) instead of a per-case waveform guess.
+        //
+        // The PPM/nonwhite diagnostic that used to run here has served its
+        // purpose: the buffer is white-filled and clean, so the residue is on
+        // the glass. What is left to settle is the waveform, which the policy
+        // logs below.
         let content_wf = waveform_for(RenderScenario::Content);
-        // GC16+PARTIAL does not fully clear the Kaleido 3 color filter state:
-        // green buttons and the disk color ring leave residue. GC16+FULL forces
-        // a complete panel clear at the cost of a brief dark blink. This is the
-        // only waveform/update combination that physically cannot ghost.
-        let full_transition = true;
         if panel_transition || overlay_transition {
-            // Settles software-vs-hardware in one deploy. If the panel still
-            // bleeds, this says which half to look at: `nonwhite` counts pixels
-            // the buffer actually holds, and the PPM is the exact image handed
-            // to the framebuffer. Clean white panel in the PPM => the residue is
-            // on the glass, not in the buffer. Remove once the bug is closed.
-            if panel_transition {
-                let nonwhite = st.buffer.iter().filter(|p| p.0 != 0xFFFF).count();
-                let cs = PAD_TOP * ctx.w;
-                let ce = content_end * ctx.w;
-                let content_nw = st.buffer[cs..ce].iter().filter(|p| p.0 != 0xFFFF).count();
-                crate::debug_log::log(&format!(
-                    "panel present: open={} wf={} um={} nonwhite={}/{} content_nw={}/{}",
-                    st.panel_open,
-                    trans_wf,
-                    u8::from(full_transition),
-                    nonwhite,
-                    ctx.w * ctx.h,
-                    content_nw,
-                    ce - cs,
-                ));
-                crate::rendering::fb::dump_ppm(
-                    crate::data::config::PPM_DEPLOY,
-                    rgb565_as_bytes_ref(&st.buffer),
-                    ctx.w,
-                    ctx.h,
-                );
-            }
-            ctx.fb.present(
-                rgb565_as_bytes_ref(&st.buffer),
-                ctx.w,
-                ctx.h,
-                full_transition,
-                0,
-                ctx.h,
-                trans_wf,
-            );
-            st.prev_buffer.copy_from_slice(&st.buffer);
+            present_transition(st, ctx);
         } else if let Some((top, rh)) = diff_rows(
             rgb565_as_bytes_ref(&st.prev_buffer),
             rgb565_as_bytes_ref(&st.buffer),
@@ -332,4 +283,48 @@ pub fn render_and_present(
     } else {
         false
     }
+}
+
+/// Present a whole-screen transition (panel open/close, mode switch, chapter
+/// overlay) under the configured waveform policy.
+///
+/// The white clearing pass reuses `prev_buffer` rather than allocating one:
+/// it is overwritten with the new frame immediately afterwards, and a
+/// full-screen RGB565 buffer is ~4 MB to allocate on a transition.
+fn present_transition(st: &mut LoopState, ctx: &LoopContext) {
+    let mode = ctx.cfg.panel_transition;
+    let wf = mode.waveform();
+    let full = mode.full();
+    info!(
+        "transition: mode={} wf={} um={} panel_open={}",
+        mode.as_key(),
+        wf,
+        u8::from(full),
+        st.panel_open
+    );
+    if mode.needs_white_pass() {
+        st.prev_buffer.fill(Rgb565Pixel(0xFFFF));
+        ctx.fb.present(
+            rgb565_as_bytes_ref(&st.prev_buffer),
+            ctx.w,
+            ctx.h,
+            false,
+            0,
+            ctx.h,
+            wf,
+        );
+        // The second pass must not be merged with the white one by the
+        // driver's update queue, or the clear never reaches the glass.
+        ctx.fb.wait_for_update_complete();
+    }
+    ctx.fb.present(
+        rgb565_as_bytes_ref(&st.buffer),
+        ctx.w,
+        ctx.h,
+        full,
+        0,
+        ctx.h,
+        wf,
+    );
+    st.prev_buffer.copy_from_slice(&st.buffer);
 }
