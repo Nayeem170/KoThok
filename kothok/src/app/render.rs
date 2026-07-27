@@ -191,8 +191,8 @@ pub fn render_and_present(
                         w: rw,
                         h: rh,
                     },
-                    // One 16-level pass once the disk stops, to clear A2's ghosting.
                     if settle { WAVE_GC16 } else { WAVE_A2 },
+                    false,
                 );
                 for row in ry..(ry + rh).min(ctx.h) {
                     let s = row * ctx.w + rx;
@@ -242,12 +242,11 @@ pub fn render_and_present(
             waveform_for(RenderScenario::Transition)
         };
         let content_wf = waveform_for(RenderScenario::Content);
-        // GC16 clears by itself and must stay PARTIAL (update_mode=0), or it
-        // gains the dark inversion blink reserved for sleep/wake/boot. GL16 --
-        // now only the chapter overlay -- gets a FULL update instead: with no
-        // clearing pass of its own, re-driving every pixel is the only
-        // deghosting available to it, and it stays flash-free.
-        let full_transition = !heavy_swap;
+        // GC16+PARTIAL does not fully clear the Kaleido 3 color filter state:
+        // green buttons and the disk color ring leave residue. GC16+FULL forces
+        // a complete panel clear at the cost of a brief dark blink. This is the
+        // only waveform/update combination that physically cannot ghost.
+        let full_transition = true;
         if panel_transition || overlay_transition {
             // Settles software-vs-hardware in one deploy. If the panel still
             // bleeds, this says which half to look at: `nonwhite` counts pixels
