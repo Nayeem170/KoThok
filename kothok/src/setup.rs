@@ -146,6 +146,7 @@ fn advance_splash(fb: &Fb, splash: &mut [Rgb565Pixel], w: usize, h: usize, stage
             h,
             &kobo_core::device::fb::UpdateRegion { x, y, w: rw, h: rh },
             wave,
+            false,
         );
         fb.wait_for_update_complete();
     };
