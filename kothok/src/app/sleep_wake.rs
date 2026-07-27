@@ -18,7 +18,8 @@ use crate::reader::apply_page;
 use crate::rendering::common::rgb565_as_bytes_ref;
 use crate::rendering::fb::{Fb, WAVE_GC16};
 use crate::rendering::layout::PAD_TOP;
-use crate::rendering::render::{composite_text, refresh_text_cache, render_book_cover_scaled};
+use crate::rendering::render::{composite_text, refresh_text_cache};
+
 use kobo_core::Capabilities;
 
 use super::*;
@@ -34,7 +35,6 @@ pub fn enter_sleep(st: &mut LoopState, ctx: &LoopContext, from_picker: bool) -> 
     let fb = ctx.fb;
     let buffer = &mut st.buffer;
     let prev_buffer = &mut st.prev_buffer;
-    let book_path = &st.current_book_path;
     let fl_path = ctx.fl_path;
     let cmd_tx = ctx.cmd_tx;
     let brightness = fl_path
@@ -43,17 +43,26 @@ pub fn enter_sleep(st: &mut LoopState, ctx: &LoopContext, from_picker: bool) -> 
         .unwrap_or(ctx.reader.get_brightness_val() as u32);
     let w = ctx.w;
     let h = ctx.h;
-    let plan = sleep_plan(from_picker, fl_path, st.wifi_user_on, st.bt_user_on);
-    // Present cover while lit, then dim -- dimming first made it pop in later.
-    if plan.show_cover {
-        let _ = render_book_cover_scaled(book_path, buffer);
+    let plan = sleep_plan(fl_path, st.wifi_user_on, st.bt_user_on);
+    let status = if !from_picker && !st.current_book_path.is_empty() {
+        let title = ctx.reader.get_book_title().to_string();
+        let abs_page = st.chapter_offsets.get(st.current_chapter).copied().unwrap_or(0)
+            + st.current_page;
+        let total = st.chapter_offsets.last().copied().unwrap_or(1).max(1);
+        let pct = (abs_page * 100 / total).min(100);
+        format!("{} - {}%", title, pct)
     } else {
-        crate::rendering::render::paint_kothok_splash(buffer);
-    }
+        String::new()
+    };
+    crate::rendering::render::paint_splash(
+        buffer,
+        crate::rendering::render::SPLASH_STAGES,
+        &status,
+    );
     fb.present(rgb565_as_bytes_ref(buffer), w, h, false, 0, h, WAVE_GC16);
     prev_buffer.copy_from_slice(buffer);
-    // Hold lit through the refresh, then dim.
-    std::thread::sleep(std::time::Duration::from_millis(SLEEP_COVER_SETTLE_MS));
+    // Hold lit through the refresh, then dim -- dimming first made it pop in later.
+    fb.wait_for_update_complete();
     if plan.frontlight_off {
         if let Some(path) = fl_path {
             frontlight_set(path, 0);
@@ -157,8 +166,7 @@ pub fn wake_from_sleep(st: &mut LoopState, ctx: &LoopContext) {
     buffer[strip_start..h * w].fill(Rgb565Pixel(0xFFFF));
     fb.present(rgb565_as_bytes_ref(buffer), w, h, false, 0, h, WAVE_GC16);
     // Wait for GC16 to finish before raising light (avoids mid-refresh flicker).
-    // mxcfb WAIT_FOR_UPDATE_COMPLETE ioctl is kernel-version-specific; fixed settle.
-    std::thread::sleep(std::time::Duration::from_millis(SLEEP_COVER_SETTLE_MS));
+    fb.wait_for_update_complete();
     prev_buffer.copy_from_slice(buffer);
     // Do NOT toggle fb0/bl_power - that controls the EPD panel and blanks the
     // screen. The frontlight (lm3630a_led/brightness) is a separate path.
@@ -273,7 +281,7 @@ fn wake_from_sleep_picker(st: &mut LoopState, ctx: &LoopContext) {
     );
     st.prev_buffer.copy_from_slice(&st.buffer);
 
-    std::thread::sleep(std::time::Duration::from_millis(SLEEP_COVER_SETTLE_MS));
+    ctx.fb.wait_for_update_complete();
 
     if let Some(ref path) = fl_path {
         crate::device::power::restore_frontlight(path, saved_brightness);

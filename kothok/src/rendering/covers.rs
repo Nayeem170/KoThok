@@ -57,36 +57,32 @@ pub(crate) fn paint_cover_cached(
 }
 
 pub fn render_book_cover_scaled(book_path: &str, buffer: &mut [Rgb565Pixel]) -> bool {
-    let raw = match EpubBook::cover_bytes(book_path) {
-        Some(b) => b,
-        None => {
-            paint_kothok_splash(buffer);
-            return false;
-        }
+    let Some(raw) = EpubBook::cover_bytes(book_path) else {
+        paint_kothok_splash(buffer);
+        return false;
     };
-    let decoded = match text_render::decode_image(&raw, crate::w(), crate::h() * 2) {
-        Some(d) => d,
-        None => {
-            paint_kothok_splash(buffer);
-            return false;
-        }
+    let Some(decoded) = text_render::decode_image(&raw, crate::w(), crate::h() * 2) else {
+        paint_kothok_splash(buffer);
+        return false;
     };
-    let (rgb, iw, ih) = (decoded.rgb, decoded.width, decoded.height);
-    buffer.fill(Rgb565Pixel(0xFFFF));
-    let buf_bytes = rgb565_as_bytes(buffer);
-    let ox = (crate::w() - iw) / 2;
-    let oy = (((crate::h() as i64) - (ih as i64)) / 2).max(0) as usize;
+    let w = crate::w();
+    let h = crate::h();
+    let mut tmp = vec![Rgb565Pixel(0xFFFF); w * h];
+    let buf_bytes = rgb565_as_bytes(&mut tmp);
+    let ox = (w - decoded.width) / 2;
+    let oy = (((h as i64) - (decoded.height as i64)) / 2).max(0) as usize;
     text_render::blit_rgb565_image(
         buf_bytes,
-        crate::w(),
-        &rgb,
-        iw,
-        ih,
+        w,
+        &decoded.rgb,
+        decoded.width,
+        decoded.height,
         ox,
         oy,
-        crate::w(),
-        crate::h(),
+        w,
+        h,
     );
+    buffer[..tmp.len()].copy_from_slice(&tmp);
     true
 }
 
