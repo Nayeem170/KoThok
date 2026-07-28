@@ -2,9 +2,11 @@
 // Copyright (c) 2026 Nayeem Bin Ahsan
 mod book_init;
 mod loop_init;
+mod startup;
 
 use book_init::{init_book, init_picker, BookInit, PickerInit, ReaderSetup, ScreenCtx};
 use loop_init::build_loop_state;
+use startup::{startup_target, StartupTarget};
 use std::sync::atomic::Ordering;
 
 use kobo_core::{Capabilities, Chapter};
@@ -64,6 +66,24 @@ pub fn run() -> Option<InitResult> {
 
     let mut setup = init_reader_and_config(w, &hw_cfg);
 
+    let guide_exists = std::path::Path::new(config::GUIDE_PATH).exists();
+    let target = startup_target(
+        &cli_path,
+        all_books.len(),
+        &setup.cfg.onboarding_version,
+        BUILD_TAG,
+        guide_exists,
+    );
+    let (initial_path, reset_position) = match target {
+        StartupTarget::Onboarding => {
+            setup.cfg.onboarding_version = BUILD_TAG.to_string();
+            config::save_config(&setup.cfg);
+            info!("onboarding: opening guide at {BUILD_TAG}");
+            (Some(config::GUIDE_PATH.to_string()), true)
+        }
+        _ => (initial_path, false),
+    };
+
     let (book, picker) = init_book_or_picker(
         &mut setup,
         &fb,
@@ -71,8 +91,9 @@ pub fn run() -> Option<InitResult> {
         w,
         h,
         &all_books,
-        &cli_path,
+        &target,
         &initial_path,
+        reset_position,
     );
 
     let st = build_loop_state(
@@ -271,14 +292,16 @@ fn init_book_or_picker(
     w: usize,
     h: usize,
     all_books: &[EpubEntry],
-    cli_path: &Option<String>,
+    target: &StartupTarget,
     initial_path: &Option<String>,
+    reset_position: bool,
 ) -> (BookInit, PickerInit) {
     let screen = ScreenCtx { fb, window, w, h };
-    let (book_state, picker_state) = if cli_path.is_none() && all_books.len() >= 2 {
-        (None, init_picker(setup, &screen, all_books))
-    } else {
-        init_book(setup, &screen, all_books, initial_path)
+    let (book_state, picker_state) = match target {
+        StartupTarget::Picker => (None, init_picker(setup, &screen, all_books)),
+        StartupTarget::Book | StartupTarget::Onboarding => {
+            init_book(setup, &screen, all_books, initial_path, reset_position)
+        }
     };
     let book = book_state.unwrap_or_else(|| {
         let st = layout::build_state(

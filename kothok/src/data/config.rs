@@ -13,6 +13,9 @@ pub use kobo_core::device::paths::{
 
 pub const BOOK_DIR: &str = "/mnt/onboard";
 pub const DEVICE_BOOK: &str = "/mnt/onboard/.adds/book.epub";
+/// The onboarding guide epub. Visible in the library (not under .adds, which
+/// the scanner skips) so the reader can reopen it any time from the picker.
+pub const GUIDE_PATH: &str = "/mnt/onboard/books/KoThok - Getting Started.epub";
 pub const BOOK_CACHE_DIR: &str = "/mnt/onboard/.adds/bookcache";
 pub const POSITIONS_FILE: &str = "/mnt/onboard/.adds/positions";
 pub const CACHE_DIR: &str = "/mnt/onboard/.adds/cache";
@@ -32,6 +35,7 @@ const KEY_NATURAL_SCROLL: &str = "natural_scroll";
 const KEY_READING_AUTO_SLEEP: &str = "reading_auto_sleep";
 const KEY_CHECK_UPDATES: &str = "check_updates";
 const KEY_PANEL_TRANSITION: &str = "panel_transition";
+const KEY_ONBOARDING_VERSION: &str = "onboarding_version";
 const KEY_VOICE_PREFIX: &str = "voice.";
 
 const TTS_RATE_DEFAULT: i32 = 60;
@@ -62,6 +66,10 @@ pub struct AppConfig {
     /// property that can only be settled on the device, so it is settable
     /// without a rebuild. See [`PanelTransition`].
     pub panel_transition: PanelTransition,
+    /// The BUILD_TAG whose onboarding notes the reader has already seen.
+    /// Compared against BUILD_TAG via string inequality - a different value
+    /// (upgrade or downgrade) opens the guide. Empty on first install.
+    pub onboarding_version: String,
 }
 
 impl Default for AppConfig {
@@ -78,6 +86,7 @@ impl Default for AppConfig {
             reading_auto_sleep_secs: 0,
             check_updates: true,
             panel_transition: PanelTransition::default(),
+            onboarding_version: String::new(),
         }
     }
 }
@@ -125,6 +134,7 @@ pub fn load_config_from_base(path: &str, base_font: i32) -> AppConfig {
                 }
                 KEY_CHECK_UPDATES => cfg.check_updates = val == "1" || val == "true",
                 KEY_PANEL_TRANSITION => cfg.panel_transition = PanelTransition::from_key(val),
+                KEY_ONBOARDING_VERSION => cfg.onboarding_version = val.into(),
                 _ if key.starts_with(KEY_VOICE_PREFIX) => {
                     let lang = key.trim_start_matches(KEY_VOICE_PREFIX).to_string();
                     if !lang.is_empty() {
@@ -144,12 +154,13 @@ pub fn save_config_to(cfg: &AppConfig, path: &str) {
     // `panel_transition` would revert an on-device waveform trial the moment
     // the user touched the brightness slider.
     let mut data = format!(
-        "{KEY_FONT_SIZE}={}\n{KEY_TTS_LANG}={}\n{KEY_TTS_VOICE}={}\n{KEY_TTS_RATE}={}\n{KEY_VOLUME}={}\n{KEY_BRIGHTNESS}={}\n{KEY_NATURAL_SCROLL}={}\n{KEY_READING_AUTO_SLEEP}={}\n{KEY_CHECK_UPDATES}={}\n{KEY_PANEL_TRANSITION}={}\n",
+        "{KEY_FONT_SIZE}={}\n{KEY_TTS_LANG}={}\n{KEY_TTS_VOICE}={}\n{KEY_TTS_RATE}={}\n{KEY_VOLUME}={}\n{KEY_BRIGHTNESS}={}\n{KEY_NATURAL_SCROLL}={}\n{KEY_READING_AUTO_SLEEP}={}\n{KEY_CHECK_UPDATES}={}\n{KEY_PANEL_TRANSITION}={}\n{KEY_ONBOARDING_VERSION}={}\n",
         cfg.font_size, cfg.tts_lang, cfg.tts_voice, cfg.tts_rate, cfg.volume, cfg.brightness,
         if cfg.natural_scroll { 1 } else { 0 },
         cfg.reading_auto_sleep_secs,
         if cfg.check_updates { 1 } else { 0 },
-        cfg.panel_transition.as_key()
+        cfg.panel_transition.as_key(),
+        cfg.onboarding_version
     );
     for (lang, voice) in &cfg.voices {
         data.push_str(&format!("{KEY_VOICE_PREFIX}{lang}={voice}\n"));
@@ -316,5 +327,21 @@ mod tests {
         let loaded = load_config_from_base(&p, 36);
         assert_eq!(loaded, AppConfig::default());
         let _ = std::fs::remove_file(&p);
+    }
+
+    #[test]
+    fn onboarding_version_roundtrip() {
+        let p = tmp_path("onboarding");
+        let mut cfg = AppConfig::default();
+        cfg.onboarding_version = "v0.2.0".into();
+        save_config_to(&cfg, &p);
+        let loaded = load_config_from_base(&p, 36);
+        assert_eq!(loaded.onboarding_version, "v0.2.0");
+        let _ = std::fs::remove_file(&p);
+    }
+
+    #[test]
+    fn onboarding_version_defaults_empty() {
+        assert_eq!(AppConfig::default().onboarding_version, "");
     }
 }

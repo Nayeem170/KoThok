@@ -102,15 +102,30 @@ Write-Host ("  fonts: {0} face(s), {1} MB" -f $fontFiles.Count,
 $verFile = Join-Path $stage 'mnt\onboard\.adds\kothok-version'
 "KoThok $Version ($BuildTag)`r`nbuild: $BuildTag`r`nbuilt: $(Get-Date -Format o)" | Set-Content -LiteralPath $verFile -NoNewline:$false
 
+# --- onboarding guide --------------------------------------------------------
+$tutorialScript = Join-Path $PackageDir 'make-tutorial.ps1'
+if (Test-Path -LiteralPath $tutorialScript) {
+    & $tutorialScript
+    if ($LASTEXITCODE -ne 0) { throw "make-tutorial.ps1 failed" }
+} else {
+    throw "make-tutorial.ps1 not found at $tutorialScript - onboarding guide is a release requirement."
+}
+
 $sampleSrc = Join-Path $PackageDir '..\samples'
-if (Test-Path -LiteralPath $sampleSrc) {
-    $sampleDir = Join-Path $stage 'mnt\onboard\books'
-    New-Item -ItemType Directory -Force -Path $sampleDir | Out-Null
-    $enSample = Join-Path $sampleSrc 'en-sample.epub'
-    if (Test-Path -LiteralPath $enSample) {
-        Copy-Item -LiteralPath $enSample -Destination $sampleDir
-        Write-Host "  samples: bundled en-sample.epub for fresh-install fallback"
-    }
+$sampleDir = Join-Path $stage 'mnt\onboard\books'
+New-Item -ItemType Directory -Force -Path $sampleDir | Out-Null
+
+$guideEpub = Join-Path $sampleSrc 'welcome.epub'
+if (-not (Test-Path -LiteralPath $guideEpub)) {
+    throw "Onboarding guide not found: $guideEpub"
+}
+Copy-Item -LiteralPath $guideEpub -Destination (Join-Path $sampleDir 'KoThok - Getting Started.epub')
+Write-Host "  guide: staged KoThok - Getting Started.epub"
+
+$enSample = Join-Path $sampleSrc 'en-sample.epub'
+if (Test-Path -LiteralPath $enSample) {
+    Copy-Item -LiteralPath $enSample -Destination $sampleDir
+    Write-Host "  samples: bundled en-sample.epub"
 }
 
 # --- verify line endings on shell scripts (LF mandatory) --------------------

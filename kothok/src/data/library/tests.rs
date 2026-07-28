@@ -280,3 +280,17 @@ fn toc_rows_clamps_pathological_depth() {
     let rows = toc_rows(&tree, &[ch0]);
     assert_eq!(rows[0].depth, MAX_TOC_DEPTH);
 }
+
+#[test]
+fn welcome_epub_opens_and_has_expected_chapters() {
+    let epub = format!("{}/samples/welcome.epub", env!("CARGO_MANIFEST_DIR"));
+    if !std::path::Path::new(&epub).exists() {
+        eprintln!("welcome.epub not found at {epub} - run package/make-tutorial.ps1");
+        return;
+    }
+    let (chapters, lang, toc) =
+        open_book(&epub).expect("welcome.epub must open via open_book");
+    assert_eq!(chapters.len(), 10, "guide must have 10 chapters");
+    assert_eq!(lang.as_deref(), Some("en"));
+    assert!(!toc.is_empty(), "guide must have a TOC tree");
+}

@@ -38,6 +38,7 @@ All notable changes to KoThok are documented here.
 - Progress bar and swipe navigation seek within the chapter instead of reloading page audio.
 
 ### Library
+- Onboarding guide: first launch opens a built-in guide book ("KoThok - Getting Started") instead of the library grid. Updates open the guide at a "What's New" chapter generated from this changelog. The guide lives in the library like any other book, so it can be reopened any time.
 - Book content cache now stores the TOC tree alongside chapters (`CACHE_FORMAT` bumped 2 -> 3).
 - EPUB scanner skips hidden directories (.adds, .kobo, etc.). Test books and extracted content no longer pollute the library.
 
