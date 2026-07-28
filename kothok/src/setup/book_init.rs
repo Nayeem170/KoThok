@@ -100,6 +100,7 @@ pub(super) fn init_book(
     screen: &ScreenCtx,
     all_books: &[EpubEntry],
     initial_path: &Option<String>,
+    reset_position: bool,
 ) -> (Option<BookInit>, Option<PickerInit>) {
     let reader = &setup.reader;
     let book_path = initial_path.clone().unwrap_or_default();
@@ -144,9 +145,8 @@ pub(super) fn init_book(
         WAVE_GC16,
     );
 
-    let pos = persistence::load_position(std::path::Path::new(POSITIONS_FILE), &book_path)
-        .filter(|p| p.chapter < chapter_count)
-        .unwrap_or(persistence::ReadingPosition {
+    let pos = if reset_position {
+        persistence::ReadingPosition {
             chapter: 0,
             page: 0,
             cur_start: 0,
@@ -154,7 +154,20 @@ pub(super) fn init_book(
             view_mode: crate::ViewMode::Reading,
             bookmark: None,
             progress: 0.0,
-        });
+        }
+    } else {
+        persistence::load_position(std::path::Path::new(POSITIONS_FILE), &book_path)
+            .filter(|p| p.chapter < chapter_count)
+            .unwrap_or(persistence::ReadingPosition {
+                chapter: 0,
+                page: 0,
+                cur_start: 0,
+                cur_end: 0,
+                view_mode: crate::ViewMode::Reading,
+                bookmark: None,
+                progress: 0.0,
+            })
+    };
     let current_chapter = pos.chapter;
     let initial_view_mode = pos.view_mode;
     let initial_bookmark = pos.bookmark;
