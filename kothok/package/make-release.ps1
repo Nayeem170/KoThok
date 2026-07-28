@@ -122,12 +122,6 @@ if (-not (Test-Path -LiteralPath $guideEpub)) {
 Copy-Item -LiteralPath $guideEpub -Destination (Join-Path $sampleDir 'KoThok - Getting Started.epub')
 Write-Host "  guide: staged KoThok - Getting Started.epub"
 
-$enSample = Join-Path $sampleSrc 'en-sample.epub'
-if (Test-Path -LiteralPath $enSample) {
-    Copy-Item -LiteralPath $enSample -Destination $sampleDir
-    Write-Host "  samples: bundled en-sample.epub"
-}
-
 # --- verify line endings on shell scripts (LF mandatory) --------------------
 foreach ($s in @('mnt\onboard\.adds\run.sh')) {
     $bytes = [IO.File]::ReadAllBytes((Join-Path $stage $s))
@@ -162,17 +156,6 @@ Compress-Archive -Path (Join-Path $fontSrc '*.ttf') -DestinationPath $fontZip
 Write-Host ("Fonts: {0} ({1} MB)" -f $fontZip,
     [math]::Round((Get-Item -LiteralPath $fontZip).Length / 1MB, 2))
 
-# --- sample book -------------------------------------------------------------
-# Uploaded as a separate release asset so the installer can drop it on a device
-# that has no books yet. Also bundled inside the tgz for first-install.
-$sampleSrc = Join-Path $PackageDir '..\samples\en-sample.epub'
-if (Test-Path -LiteralPath $sampleSrc) {
-    $sampleDst = Join-Path $dist 'en-sample.epub'
-    Copy-Item -LiteralPath $sampleSrc -Destination $sampleDst -Force
-    Write-Host ("Sample: {0} ({1} KB)" -f $sampleDst,
-        [math]::Round((Get-Item -LiteralPath $sampleDst).Length / 1KB))
-}
-
 # --- raw binary asset ---------------------------------------------------------
 # install.ps1 downloads this (matches its 'kothok-*' asset pattern) for both
 # the first install and the no-reboot update path. The tgz carries the same
@@ -183,7 +166,7 @@ Write-Host ("Binary: {0} ({1} MB)" -f $rawBin, [math]::Round((Get-Item -LiteralP
 
 # --- manual-install zip -------------------------------------------------------
 # The tgz above is already a complete, self-sufficient first-install package -
-# binary, run.sh, NickelMenu hook, fonts, sample book. Anyone who'd rather not
+# binary, run.sh, NickelMenu hook, fonts, onboarding guide. Anyone who'd rather not
 # run install.ps1 (no PowerShell 7, or just doesn't want to run a script) can
 # drag it onto the device by hand instead. Pre-renaming it here removes the
 # most common way that goes wrong: Windows hides file extensions by default,
@@ -209,8 +192,8 @@ KoThok $Version - manual install (no script needed)
 6. Once the device finishes booting, tap the menu button (bottom-right),
    then tap "KoThok" to open it.
 
-Fonts for every supported script and a sample book are already included -
-nothing else to copy.
+Fonts for every supported script and a getting-started guide are already
+included - nothing else to copy.
 
 Updating later: repeat these same steps with the new version's KoboRoot.tgz.
 Unlike the script installer, this manual method always needs the reboot in

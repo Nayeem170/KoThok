@@ -138,32 +138,6 @@ function Install-Fonts($release, $addsDir, $tempDir) {
     Ok "Fonts: $total installed ($copied updated)"
 }
 
-# --- 2c. Sample book ---------------------------------------------------------
-# A fresh device with no books shows an empty library. Drop a sample so the
-# reader has something to open immediately after install.
-function Ensure-SampleBook($release, $koboRoot, $tempDir) {
-    $existing = Get-ChildItem -Path $koboRoot -Filter '*.epub' -Recurse -ErrorAction SilentlyContinue |
-        Where-Object { $_.FullName -notlike '*\.adds\*' -and $_.FullName -notlike '*\.kobo\*' }
-    if ($existing) {
-        Info "Books already on device ($($existing.Count) found) - skipping sample"
-        return
-    }
-
-    $asset = $release.assets | Where-Object { $_.name -eq 'en-sample.epub' } | Select-Object -First 1
-    if (-not $asset) {
-        Warn "No en-sample.epub in this release - skipping sample book."
-        return
-    }
-
-    $booksDir = Join-Path $koboRoot 'books'
-    New-Item -ItemType Directory -Force -Path $booksDir | Out-Null
-    $dest = Join-Path $booksDir 'en-sample.epub'
-
-    Step "Installing sample book..."
-    Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $dest -UseBasicParsing -TimeoutSec 60
-    Ok "Sample book installed (books/en-sample.epub)"
-}
-
 # --- 3. First install or update ----------------------------------------------
 $isFirstInstall = -not (Test-Path -LiteralPath $binaryOnDevice)
 
@@ -187,7 +161,6 @@ Copy it to the Kobo .kobo folder as KoboRoot.tgz, eject, and reboot.
     # from kothok-fonts.zip now too, so every face is in .adds/fonts the moment
     # the install finishes - even if a tgz ever shipped without them.
     Install-Fonts $release $addsDir $TempDir
-    Ensure-SampleBook $release $koboRoot $TempDir
 
     Write-Host ""
     Write-Host "  ============================" -ForegroundColor Green

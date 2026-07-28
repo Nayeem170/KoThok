@@ -45,7 +45,7 @@ Download `KoThok-<version>-manual-install.zip` from
    during it.
 6. Once booted, open the hamburger menu and tap **KoThok**.
 
-Fonts and a sample book are bundled in, same as the scripted install.
+Fonts and a getting-started guide are bundled in, same as the scripted install.
 
 ### Update (every time after that)
 
