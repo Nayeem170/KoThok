@@ -67,8 +67,8 @@ pub fn render_book_cover_scaled(book_path: &str, buffer: &mut [Rgb565Pixel]) -> 
     };
     let w = crate::w();
     let h = crate::h();
-    let mut tmp = vec![Rgb565Pixel(0xFFFF); w * h];
-    let buf_bytes = rgb565_as_bytes(&mut tmp);
+    buffer.fill(Rgb565Pixel(0xFFFF));
+    let buf_bytes = rgb565_as_bytes(buffer);
     let ox = (w - decoded.width) / 2;
     let oy = (((h as i64) - (decoded.height as i64)) / 2).max(0) as usize;
     text_render::blit_rgb565_image(
@@ -82,7 +82,6 @@ pub fn render_book_cover_scaled(book_path: &str, buffer: &mut [Rgb565Pixel]) -> 
         w,
         h,
     );
-    buffer[..tmp.len()].copy_from_slice(&tmp);
     true
 }
 
