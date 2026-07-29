@@ -37,11 +37,18 @@ kothok/dist/fonts/
 kothok/crates/kobo/measure-baseline.sh
 graphify-out/
 
+# Agentic pipeline - committed as audit trail (task history + config)
+# .agentic-tasks/ holds per-task artifacts for traceability
+# .agentic/ holds pipeline config (portable across projects)
+# docs/AGENTIC_PIPELINE.md is local-only (ignored with docs/)
+# docs/REVIEW_RULES.md is tracked (negated below) - carries learnings across clones
+
 # AGENTS.md (project config, not repo code)
 AGENTS.md
 
 # Local-only docs (kept for dev, not committed)
-docs/
+docs/*
+!docs/REVIEW_RULES.md
 mockups/
 
 # Release binaries (built locally, downloaded from GitHub releases by users)
