@@ -47,11 +47,11 @@ pub const MONO_SCALE: f32 = 0.8;
 /// came to be wrapped for one size and drawn at another.
 pub fn heading_scale(level: u32) -> f32 {
     match level.clamp(1, 6) {
-        1 => 1.60,
-        2 => 1.42,
-        3 => 1.26,
-        4 => 1.14,
-        5 => 1.06,
+        1 => 1.80,
+        2 => 1.25,
+        3 => 1.12,
+        4 => 1.06,
+        5 => 1.03,
         _ => 1.00,
     }
 }

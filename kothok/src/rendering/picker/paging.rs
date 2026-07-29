@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Nayeem Bin Ahsan
 use crate::data::library::EpubEntry;
 use crate::rendering::fb::WAVE_GC16;
-use crate::rendering::fb::WAVE_GL16;
+use crate::rendering::fb::WAVE_REAGL_MTK;
 
 use super::filter::{filtered_indices, LibraryFilter};
 use super::layout::{card_layout, grid_cols, CardLayout, GRID_ROWS};
@@ -11,20 +11,21 @@ use super::layout::{card_layout, grid_cols, CardLayout, GRID_ROWS};
 pub enum PickerRefresh {
     /// Whole screen, FULL + GC16 (flashing). Sleep wake / boot only.
     Full,
-    /// Whole screen, PARTIAL + GC16. No dark inversion. For interactive
-    /// arrivals at the library (closing a book, leaving About).
+    /// Whole screen, PARTIAL + REAGL. No dark inversion. For interactive
+    /// arrivals at the library (closing a book, leaving About). REAGL
+    /// clears cover-thumbnail ghosting that GL16 left behind.
     FullQuiet,
     BelowHeader,
     Grid,
 }
 
 impl PickerRefresh {
-    pub(super) fn band(self, l: &CardLayout) -> (usize, u32) {
+    pub(super) fn band(self, l: &CardLayout) -> (usize, u32, bool) {
         match self {
-            PickerRefresh::Full => (0, WAVE_GC16),
-            PickerRefresh::FullQuiet => (0, WAVE_GL16),
-            PickerRefresh::BelowHeader => (l.pills_y.max(0) as usize, WAVE_GL16),
-            PickerRefresh::Grid => (l.grid_y.max(0) as usize, WAVE_GL16),
+            PickerRefresh::Full => (0, WAVE_GC16, true),
+            PickerRefresh::FullQuiet => (0, WAVE_REAGL_MTK, false),
+            PickerRefresh::BelowHeader => (l.pills_y.max(0) as usize, WAVE_GC16, false),
+            PickerRefresh::Grid => (l.grid_y.max(0) as usize, WAVE_GC16, false),
         }
     }
 }

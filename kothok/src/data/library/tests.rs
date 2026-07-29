@@ -290,7 +290,7 @@ fn welcome_epub_opens_and_has_expected_chapters() {
     }
     let (chapters, lang, toc) =
         open_book(&epub).expect("welcome.epub must open via open_book");
-    assert_eq!(chapters.len(), 10, "guide must have 10 chapters");
+    assert_eq!(chapters.len(), 16, "guide must have 16 chapters");
     assert_eq!(lang.as_deref(), Some("en"));
     assert!(!toc.is_empty(), "guide must have a TOC tree");
 }
