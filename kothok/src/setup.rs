@@ -242,7 +242,7 @@ fn init_platform(w: usize, h: usize) -> std::rc::Rc<MinimalSoftwareWindow> {
 
 fn init_reader_and_config(w: usize, hw_cfg: &hw::DeviceConfig) -> ReaderSetup {
     let reader = crate::Reader::new().expect("Reader::new");
-    let device_default_font = (w as i32 / 30).clamp(20, 60);
+    let device_default_font = (w as i32 / 38).clamp(20, 60);
     let cfg = config::load_config_from_base(config::CONFIG_FILE, device_default_font);
     let body_px: f32 = cfg.font_size as f32;
     let head_px: f32 = cfg.font_size as f32 * layout::HEADING_SCALE;

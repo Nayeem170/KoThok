@@ -103,7 +103,7 @@ $verFile = Join-Path $stage 'mnt\onboard\.adds\kothok-version'
 "KoThok $Version ($BuildTag)`r`nbuild: $BuildTag`r`nbuilt: $(Get-Date -Format o)" | Set-Content -LiteralPath $verFile -NoNewline:$false
 
 # --- onboarding guide --------------------------------------------------------
-$tutorialScript = Join-Path $PackageDir 'make-tutorial.ps1'
+$tutorialScript = Join-Path $PackageDir '..\..\kothok-media\make-tutorial.ps1'
 if (Test-Path -LiteralPath $tutorialScript) {
     & $tutorialScript
     if ($LASTEXITCODE -ne 0) { throw "make-tutorial.ps1 failed" }

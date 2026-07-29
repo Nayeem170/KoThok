@@ -131,12 +131,12 @@ pub fn show_book_picker(
             crate::data::config::PPM_DEPLOY,
         );
     }
-    let (top, waveform) = refresh.band(&l);
+    let (top, waveform, full) = refresh.band(&l);
     fb.present(
         rgb565_as_bytes_ref(buffer),
         crate::w(),
         crate::h(),
-        false,
+        full,
         top,
         crate::h().saturating_sub(top),
         waveform,
