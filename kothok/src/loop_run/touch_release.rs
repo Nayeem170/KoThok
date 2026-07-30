@@ -24,6 +24,13 @@ pub(super) fn on_release(
         return;
     }
 
+    if st.sb_dragging {
+        st.sb_dragging = false;
+        st.text_dirty = true;
+        ctx.window.request_redraw();
+        return;
+    }
+
     if st.scrubbing {
         st.scrubbing = false;
     } else if st.pp_pressed {

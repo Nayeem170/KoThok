@@ -49,6 +49,8 @@ pub(super) fn handle_search_release(
         gesture::TabBarAction::ChaptersTab => {
             st.chapter_tab = ChapterTab::Chapters;
             st.chapter_scroll = 0;
+            st.search_word_selected = false;
+            reader.set_chapter_overlay_active_tab(0);
             st.text_dirty = true;
             ctx.window.request_redraw();
             return true;
@@ -56,12 +58,14 @@ pub(super) fn handle_search_release(
         gesture::TabBarAction::WordsTab => {
             st.chapter_tab = ChapterTab::Words;
             st.search_scroll = 0;
+            reader.set_chapter_overlay_active_tab(1);
             st.text_dirty = true;
             ctx.window.request_redraw();
             return true;
         }
         gesture::TabBarAction::Close => {
             reader.set_chapter_overlay_open(false);
+            st.search_word_selected = false;
             st.text_dirty = true;
             return true;
         }
@@ -78,8 +82,7 @@ pub(super) fn handle_search_release(
             word_list_hit_test(dy as i32, st.search_scroll, st.word_index.words.len())
         {
             st.search_selected_word = idx;
-            st.search_results_active = true;
-            st.search_results_scroll = 0;
+            st.search_word_selected = true;
             st.text_dirty = true;
             ctx.window.request_redraw();
             return true;

@@ -28,6 +28,70 @@ pub const SB_THUMB_W: usize = 6;
 pub const SB_TRACK_PAD: usize = 10;
 pub const SB_TRACK_COLOR: u16 = 0xD6BA;
 pub const SB_THUMB_COLOR: u16 = 0x94B2;
+pub const SB_THUMB_DRAG_COLOR: u16 = 0x7A8E;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScrollbarZone {
+    Rail(i32),
+    Thumb(i32),
+}
+
+pub fn scrollbar_hit_test(
+    screen_w: usize,
+    list_top: i32,
+    list_bottom: i32,
+    tap_x: i32,
+    tap_y: i32,
+    item_count: usize,
+) -> Option<ScrollbarZone> {
+    if item_count <= 1 || tap_y < list_top || tap_y >= list_bottom {
+        return None;
+    }
+    let track_x = (screen_w as i32 - SB_TRACK_PAD as i32 - SB_TRACK_W as i32).max(0);
+    if tap_x < track_x {
+        return None;
+    }
+    let track_h = list_bottom - list_top;
+    if track_h < (SB_THUMB_W * 2) as i32 {
+        return None;
+    }
+    let total_h = item_count as i32 * CH_ROW_PITCH;
+    let visible_h = track_h;
+    let frac = (visible_h as f32 / total_h as f32).min(1.0);
+    let thumb_h = (frac * track_h as f32).ceil() as i32;
+    let max_travel = track_h.saturating_sub(thumb_h);
+    let thumb_top = list_top + (thumb_h / 2);
+    let thumb_bottom = list_top + max_travel + thumb_h / 2;
+    if tap_y >= thumb_top && tap_y <= thumb_bottom {
+        Some(ScrollbarZone::Thumb(tap_y))
+    } else {
+        Some(ScrollbarZone::Rail(tap_y))
+    }
+}
+
+pub fn scrollbar_y_to_scroll(
+    finger_y: i32,
+    list_top: i32,
+    list_bottom: i32,
+    item_count: usize,
+) -> i32 {
+    if item_count <= 1 {
+        return 0;
+    }
+    let track_h = list_bottom - list_top;
+    let total_h = item_count as i32 * CH_ROW_PITCH;
+    let visible_h = track_h;
+    let frac = (visible_h as f32 / total_h as f32).min(1.0);
+    let thumb_h = (frac * track_h as f32).ceil() as i32;
+    let max_travel = track_h.saturating_sub(thumb_h);
+    if max_travel <= 0 {
+        return 0;
+    }
+    let scroll_max = total_h - visible_h + CH_ROW_H;
+    let finger_offset = finger_y - list_top - thumb_h / 2;
+    let fraction = (finger_offset as f32 / max_travel as f32).clamp(0.0, 1.0);
+    (fraction * scroll_max as f32).round() as i32
+}
 
 pub fn paint_scrollbar(
     buf_bytes: &mut [u8],
@@ -35,6 +99,7 @@ pub fn paint_scrollbar(
     screen_h: usize,
     item_count: usize,
     scroll: i32,
+    dragging: bool,
 ) {
     if item_count <= 1 {
         return;
@@ -59,11 +124,16 @@ pub fn paint_scrollbar(
     let thumb_top = list_top + (scroll_frac * max_travel as f32).round() as usize;
     let thumb_top = thumb_top.clamp(list_top, list_top + max_travel);
     let thumb_start = thumb_top - list_top;
+    let thumb_color = if dragging {
+        SB_THUMB_DRAG_COLOR
+    } else {
+        SB_THUMB_COLOR
+    };
     for dy in 0..track_h {
         let py = list_top + dy;
         let in_thumb = dy >= thumb_start && dy < thumb_start + thumb_h;
         let v = if in_thumb {
-            SB_THUMB_COLOR
+            thumb_color
         } else {
             SB_TRACK_COLOR
         };
@@ -377,5 +447,48 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn scrollbar_hit_test_returns_none_for_zero_items() {
+        let w = crate::w();
+        assert!(scrollbar_hit_test(w, CH_LIST_TOP, 1000, w as i32, CH_LIST_TOP + 50, 0).is_none());
+    }
+
+    #[test]
+    fn scrollbar_hit_test_returns_none_outside_list() {
+        let w = crate::w();
+        assert!(scrollbar_hit_test(w, CH_LIST_TOP, 1000, w as i32, CH_LIST_TOP - 1, 10).is_none());
+    }
+
+    #[test]
+    fn scrollbar_hit_test_returns_none_left_of_track() {
+        let w = crate::w();
+        assert!(scrollbar_hit_test(w, CH_LIST_TOP, 1000, 0, CH_LIST_TOP + 50, 10).is_none());
+    }
+
+    #[test]
+    fn scrollbar_y_to_scroll_zero_items() {
+        assert_eq!(
+            scrollbar_y_to_scroll(CH_LIST_TOP + 50, CH_LIST_TOP, 1000, 0),
+            0
+        );
+    }
+
+    #[test]
+    fn scrollbar_y_to_scroll_clamps_to_range() {
+        let top = CH_LIST_TOP;
+        let bottom = 1000;
+        let scroll = scrollbar_y_to_scroll(top, top, bottom, 100);
+        assert!(scroll >= 0);
+        let scroll2 = scrollbar_y_to_scroll(bottom, top, bottom, 100);
+        assert!(scroll2 >= scroll);
+    }
+
+    #[test]
+    fn scrollbar_y_to_scroll_top_is_zero() {
+        let top = CH_LIST_TOP;
+        let bottom = 1000;
+        assert_eq!(scrollbar_y_to_scroll(top, top, bottom, 100), 0);
     }
 }

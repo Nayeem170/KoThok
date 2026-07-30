@@ -86,6 +86,7 @@ export component Reader inherits Window {
     in-out property <image> audio-disk-img;
     in-out property <int> chapter-preview-idx: -1;
     in-out property <int> chapter-pending: -1;
+    in-out property <int> chapter-overlay-active-tab: 0;
     in-out property <bool> loading-visible: false;
     in-out property <int> loading-pct: 0;
 
@@ -99,7 +100,7 @@ export component Reader inherits Window {
     callback progress-tap(float);
     callback panel-frac(int, float);
     callback panel-close();
-    callback chapter-selected(int);
+    callback chapter-selected(int, int);
     callback jump-to-reading();
 
     in-out property <bool> audio-mode: false;
@@ -263,7 +264,8 @@ export component Reader inherits Window {
         text-secondary: root.text-secondary;
         brand-red: root.brand-red;
         track-color: root.track-color;
-        chapter-selected(i) => { root.chapter-selected(i); }
+        active-tab: root.chapter-overlay-active-tab;
+        chapter-selected(i, tab) => { root.chapter-selected(i, tab); }
         close-to-book => {
             root.chapter-overlay-open = false;
             root.panel-close();

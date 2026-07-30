@@ -77,8 +77,12 @@ pub struct LoopState {
     pub search_results_active: bool,
     pub search_results_scroll: i32,
     pub search_selected_word: usize,
+    pub search_word_selected: bool,
     pub press_search_scroll: i32,
     pub press_search_results_scroll: i32,
+
+    pub sb_dragging: bool,
+    pub sb_drag_tab: ChapterTab,
 
     pub bt_fail_count: u32,
     pub text_dirty: bool,

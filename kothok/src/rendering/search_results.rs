@@ -135,7 +135,7 @@ pub fn paint_search_results(
             );
         }
     }
-    paint_scrollbar(buf_bytes, w, h, display_count, scroll);
+    paint_scrollbar(buf_bytes, w, h, display_count, scroll, false);
 }
 
 fn build_snippet(chapters: &[kobo_core::Chapter], hit: &WordHit) -> String {

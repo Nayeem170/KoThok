@@ -250,6 +250,8 @@ pub(super) fn process_loop_callbacks(st: &mut LoopState, ctx: &mut LoopContext) 
         st.search_scroll = 0;
         st.search_results_active = false;
         st.search_results_scroll = 0;
+        st.search_word_selected = false;
+        reader.set_chapter_overlay_active_tab(0);
     }
 
     jump::handle_jump_to_reading(st, reader, cb, cmd_tx, ctx);

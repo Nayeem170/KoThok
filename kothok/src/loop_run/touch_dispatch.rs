@@ -5,6 +5,10 @@ use super::*;
 use crate::device::input::{
     ABS_MT_POSITION_X, ABS_MT_POSITION_Y, BTN_TOUCH_CODE, EV_ABS, EV_KEY, EV_SYN, SYN_REPORT,
 };
+use crate::rendering::chapter_list::{
+    scrollbar_hit_test, scrollbar_y_to_scroll, CH_LIST_BOTTOM_PAD, CH_LIST_TOP, CH_ROW_H,
+    CH_ROW_PITCH,
+};
 #[cfg(feature = "screenshot")]
 use crate::rendering::common::rgb565_as_bytes_ref;
 use std::io::Read;
@@ -190,6 +194,50 @@ pub(super) fn poll_and_dispatch_touch(st: &mut LoopState, ctx: &mut LoopContext)
                                 );
                             } else if !st.panel_open && !reader.get_chapter_overlay_open() {
                                 st.press_dispatched = false;
+                            } else if reader.get_chapter_overlay_open() {
+                                let list_top = CH_LIST_TOP;
+                                let list_bottom = ctx.h as i32 - CH_LIST_BOTTOM_PAD;
+                                let item_count =
+                                    if st.chapter_tab == crate::loop_state::ChapterTab::Words {
+                                        st.word_index.words.len()
+                                    } else {
+                                        st.toc_rows.len()
+                                    };
+                                if let Some(_zone) = scrollbar_hit_test(
+                                    ctx.w,
+                                    list_top,
+                                    list_bottom,
+                                    st.frame_x,
+                                    st.frame_y,
+                                    item_count,
+                                ) {
+                                    st.sb_dragging = true;
+                                    st.sb_drag_tab = st.chapter_tab;
+                                    st.press_dispatched = false;
+                                    let new_scroll = scrollbar_y_to_scroll(
+                                        st.frame_y,
+                                        list_top,
+                                        list_bottom,
+                                        item_count,
+                                    );
+                                    if st.chapter_tab == crate::loop_state::ChapterTab::Words {
+                                        st.search_scroll = new_scroll;
+                                        st.press_search_scroll = new_scroll;
+                                    } else {
+                                        st.chapter_scroll = new_scroll;
+                                        st.press_chapter_scroll = new_scroll;
+                                    }
+                                    st.text_dirty = true;
+                                    ctx.window.request_redraw();
+                                } else {
+                                    st.press_dispatched = true;
+                                    ctx.window.window().dispatch_event(
+                                        slint::platform::WindowEvent::PointerPressed {
+                                            position: slint::LogicalPosition::new(dx, dy),
+                                            button: slint::platform::PointerEventButton::Left,
+                                        },
+                                    );
+                                }
                             } else {
                                 st.press_dispatched = true;
                                 ctx.window.window().dispatch_event(
@@ -236,6 +284,28 @@ pub(super) fn poll_and_dispatch_touch(st: &mut LoopState, ctx: &mut LoopContext)
                     if st.scrubbing {
                         let frac = ((dx - pbar_x) / pbar_w).clamp(0.0, 1.0);
                         cb.progress_target.set((frac * 1000.0) as i32);
+                    } else if st.sb_dragging
+                        && reader.get_chapter_overlay_open()
+                        && st.sb_drag_tab == st.chapter_tab
+                    {
+                        let list_top = CH_LIST_TOP;
+                        let list_bottom = ctx.h as i32 - CH_LIST_BOTTOM_PAD;
+                        let item_count = if st.chapter_tab == crate::loop_state::ChapterTab::Words {
+                            st.word_index.words.len()
+                        } else {
+                            st.toc_rows.len()
+                        };
+                        let new_scroll =
+                            scrollbar_y_to_scroll(st.frame_y, list_top, list_bottom, item_count);
+                        if st.chapter_tab == crate::loop_state::ChapterTab::Words {
+                            st.search_scroll = new_scroll;
+                            st.press_search_scroll = new_scroll;
+                        } else {
+                            st.chapter_scroll = new_scroll;
+                            st.press_chapter_scroll = new_scroll;
+                        }
+                        st.text_dirty = true;
+                        ctx.window.request_redraw();
                     } else if reader.get_chapter_overlay_open() {
                         let (press_dx, press_dy) = to_display(st.press_x, st.press_y);
                         let swipe_dy = dy - press_dy;

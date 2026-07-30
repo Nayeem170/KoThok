@@ -163,7 +163,11 @@ pub fn render_and_present(
                     &st.word_index.words,
                     st.search_scroll,
                     st.body_px,
-                    st.search_selected_word,
+                    if st.search_word_selected {
+                        st.search_selected_word
+                    } else {
+                        usize::MAX
+                    },
                 );
             } else {
                 crate::rendering::word_list::paint_tab_bar(

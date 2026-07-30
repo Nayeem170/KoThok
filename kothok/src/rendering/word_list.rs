@@ -169,7 +169,7 @@ pub fn paint_word_list(
         if y < CH_LIST_TOP || y + CH_ROW_H > list_bottom {
             continue;
         }
-        let selected = i == selected_word;
+        let selected = selected_word != usize::MAX && i == selected_word;
         let (fill, border) = if selected {
             (INK, TAB_BORDER)
         } else {
@@ -202,7 +202,7 @@ pub fn paint_word_list(
             h,
         );
     }
-    paint_scrollbar(buf_bytes, w, h, words.len(), scroll);
+    paint_scrollbar(buf_bytes, w, h, words.len(), scroll, false);
 }
 
 pub fn word_list_hit_test(tap_y: i32, scroll: i32, word_count: usize) -> Option<usize> {
