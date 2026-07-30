@@ -60,6 +60,7 @@ mod picker;
 mod power;
 mod status;
 pub(crate) use status::save_position_now;
+mod search;
 mod touch_dispatch;
 mod touch_release;
 

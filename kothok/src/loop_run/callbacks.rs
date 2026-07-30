@@ -31,7 +31,7 @@ pub(super) fn process_loop_callbacks(st: &mut LoopState, ctx: &mut LoopContext) 
     if let Some(t) = st.pending_tap_at {
         if st.panel_open
             || st.picker_active
-            || t.elapsed().as_millis() >= touch::DOUBLE_TAP_WINDOW_MS as u128
+            || t.elapsed().as_millis() >= touch::DOUBLE_TAP_WINDOW_MS
         {
             st.pending_tap_at = None;
         }
@@ -150,7 +150,7 @@ pub(super) fn process_loop_callbacks(st: &mut LoopState, ctx: &mut LoopContext) 
         let total = *st.chapter_offsets.last().unwrap_or(&1).max(&1) as f32;
         let frac = st
             .bookmark
-            .and_then(|bm| {
+            .map(|bm| {
                 // A font-size change repaginates the loaded chapter, so the
                 // stored page number drifts and the seek-bar marker would
                 // land away from the reading cursor. Derive the page from the
@@ -164,7 +164,7 @@ pub(super) fn process_loop_callbacks(st: &mut LoopState, ctx: &mut LoopContext) 
                 };
                 let global =
                     st.chapter_offsets.get(bm.chapter).copied().unwrap_or(0) + page_in_chapter;
-                Some((global as f32 / total).clamp(0.0, 1.0))
+                (global as f32 / total).clamp(0.0, 1.0)
             })
             .unwrap_or(-1.0);
         reader.set_bookmark_frac(frac);
@@ -246,6 +246,10 @@ pub(super) fn process_loop_callbacks(st: &mut LoopState, ctx: &mut LoopContext) 
     let overlay_now = reader.get_chapter_overlay_open();
     if overlay_now && !st.prev_chapter_overlay {
         st.chapter_scroll = 0;
+        st.chapter_tab = crate::loop_state::ChapterTab::Chapters;
+        st.search_scroll = 0;
+        st.search_results_active = false;
+        st.search_results_scroll = 0;
     }
 
     jump::handle_jump_to_reading(st, reader, cb, cmd_tx, ctx);

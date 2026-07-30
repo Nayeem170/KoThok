@@ -205,10 +205,6 @@ pub fn jump_to_link_target(
             },
         );
     }
-    // The anchor is a chapter-text offset; rows are keyed by `body` offsets and
-    // the two differ wherever a block contributes no text (an image) or extra
-    // text (a list marker). Seeking by page keeps the jump on a real boundary
-    // rather than trusting the two to coincide.
     let dest_offset = kobo_core::formats::epub::anchor_offset(&st.chapters, target);
     st.current_page = st
         .state

@@ -23,6 +23,58 @@ pub const CH_TITLE_PX: f32 = 24.0;
 /// `depth * CH_ROW_INDENT`, on top of the row's fixed internal padding.
 pub const CH_ROW_INDENT: i32 = 28;
 
+pub const SB_TRACK_W: usize = 6;
+pub const SB_THUMB_W: usize = 6;
+pub const SB_TRACK_PAD: usize = 10;
+pub const SB_TRACK_COLOR: u16 = 0xD6BA;
+pub const SB_THUMB_COLOR: u16 = 0x94B2;
+
+pub fn paint_scrollbar(
+    buf_bytes: &mut [u8],
+    screen_w: usize,
+    screen_h: usize,
+    item_count: usize,
+    scroll: i32,
+) {
+    if item_count <= 1 {
+        return;
+    }
+    let list_top = CH_LIST_TOP as usize;
+    let list_bottom = (screen_h as i32 - CH_LIST_BOTTOM_PAD) as usize;
+    let track_h = list_bottom.saturating_sub(list_top);
+    if track_h < SB_THUMB_W * 2 {
+        return;
+    }
+    let track_x = screen_w.saturating_sub(SB_TRACK_PAD + SB_TRACK_W);
+    let total_h = item_count as i32 * CH_ROW_PITCH;
+    let visible_h = (list_bottom - list_top) as i32;
+    let frac = (visible_h as f32 / total_h as f32).min(1.0);
+    let thumb_h = (frac * track_h as f32).ceil() as usize;
+    let max_travel = track_h.saturating_sub(thumb_h);
+    let scroll_frac = if total_h <= visible_h {
+        0.0
+    } else {
+        (scroll as f32 / (total_h - visible_h) as f32).clamp(0.0, 1.0)
+    };
+    let thumb_top = list_top + (scroll_frac * max_travel as f32).round() as usize;
+    let thumb_top = thumb_top.clamp(list_top, list_top + max_travel);
+    let thumb_start = thumb_top - list_top;
+    for dy in 0..track_h {
+        let py = list_top + dy;
+        let in_thumb = dy >= thumb_start && dy < thumb_start + thumb_h;
+        let v = if in_thumb {
+            SB_THUMB_COLOR
+        } else {
+            SB_TRACK_COLOR
+        };
+        let off = (py * screen_w + track_x) * 2;
+        if off + 2 <= buf_bytes.len() && track_x < screen_w {
+            buf_bytes[off] = (v & 0xff) as u8;
+            buf_bytes[off + 1] = (v >> 8) as u8;
+        }
+    }
+}
+
 pub fn chapter_list_hit_test(tap_y: i32, scroll: i32, row_count: usize) -> Option<usize> {
     let h = crate::h() as i32;
     let list_bottom = h - CH_LIST_BOTTOM_PAD;

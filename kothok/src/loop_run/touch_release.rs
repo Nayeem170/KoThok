@@ -147,6 +147,13 @@ pub(super) fn on_release(
                 }
             }
             if reader.get_chapter_overlay_open() {
+                // The tab bar, the word list and the search results all live in
+                // the same overlay, so their release handler runs first: a tap
+                // on [Chapters]/[Words]/[X] must not also fall through to the
+                // chapter-row hit test below.
+                if search::handle_search_release(st, ctx, dx, dy) {
+                    return;
+                }
                 match gesture::chapter_overlay_target(
                     dy,
                     swipe_dy,
@@ -208,17 +215,17 @@ pub(super) fn on_release(
                 );
                 st.prev_buffer.copy_from_slice(&st.buffer);
                 if matches!(st.view_mode, crate::ViewMode::Audio) {
-                    crate::audio::glue::load_chapter_audio(&st.state, &cmd_tx);
+                    crate::audio::glue::load_chapter_audio(&st.state, cmd_tx);
                     let off = reader.get_cur_start().max(0) as usize;
                     if off > 0 {
                         let idx = crate::audio::glue::utterance_index_for_offset(
                             &st.state.utterances,
                             off,
                         );
-                        crate::audio::glue::best_effort_send(&cmd_tx, Cmd::Seek(idx));
+                        crate::audio::glue::best_effort_send(cmd_tx, Cmd::Seek(idx));
                     }
                 } else {
-                    load_page_audio(st.current_page, &st.state, &cmd_tx);
+                    load_page_audio(st.current_page, &st.state, cmd_tx);
                 }
             } else if !st.picker_active
                 && !st.panel_open
@@ -261,14 +268,9 @@ pub(super) fn on_release(
                     best_effort_send(cmd_tx, Cmd::Pause);
                 }
             } else if st.panel_open
-                && swipe_dy < -SWIPE_THRESHOLD_PX
-                && swipe_dy.abs() > swipe_dx.abs()
+                && (swipe_dy < -SWIPE_THRESHOLD_PX && swipe_dy.abs() > swipe_dx.abs()
+                    || press_dy > 500.0)
             {
-                st.panel_open = false;
-                cb.panel_open_cell.set(false);
-                reader.set_panel_open(false);
-                st.text_dirty = true;
-            } else if st.panel_open && press_dy > 500.0 {
                 st.panel_open = false;
                 cb.panel_open_cell.set(false);
                 reader.set_panel_open(false);

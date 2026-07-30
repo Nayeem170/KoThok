@@ -27,43 +27,34 @@ pub(super) fn poll_and_dispatch_touch(st: &mut LoopState, ctx: &mut LoopContext)
     // running the full gesture pipeline, which would dispatch taps to Slint.
     if st.system_state == SystemState::Locked {
         let mut unlock = false;
-        loop {
-            match ctx.touch_dev.read(&mut rec) {
-                Ok(16) => {
-                    let typ = u16::from_le_bytes([rec[8], rec[9]]);
-                    let code = u16::from_le_bytes([rec[10], rec[11]]);
-                    let val = i32::from_le_bytes([rec[12], rec[13], rec[14], rec[15]]);
-                    match (typ, code) {
-                        (EV_KEY, BTN_TOUCH_CODE) => st.frame_down = val == 1,
-                        (EV_ABS, ABS_MT_POSITION_X) => st.frame_x = val,
-                        (EV_ABS, ABS_MT_POSITION_Y) => st.frame_y = val,
-                        (EV_SYN, SYN_REPORT) => {
-                            if st.frame_down && !st.prev_down {
-                                st.press_x = st.frame_x;
-                                st.press_y = st.frame_y;
-                            } else if !st.frame_down && st.prev_down {
-                                // Exactly the wake-from-sleep gesture: start in
-                                // the bottom 40% and swipe up >40% of the screen.
-                                // Reuse the function rather than re-deriving it so
-                                // lock and sleep can never drift apart.
-                                let (press_dx, press_dy) = to_display(st.press_x, st.press_y);
-                                let (rel_dx, rel_dy) = to_display(st.frame_x, st.frame_y);
-                                if kobo_core::device::wake::is_wake_swipe(
-                                    press_dx,
-                                    press_dy,
-                                    rel_dx,
-                                    rel_dy,
-                                    ctx.h as f32,
-                                ) {
-                                    unlock = true;
-                                }
-                            }
-                            st.prev_down = st.frame_down;
+        while let Ok(16) = ctx.touch_dev.read(&mut rec) {
+            let typ = u16::from_le_bytes([rec[8], rec[9]]);
+            let code = u16::from_le_bytes([rec[10], rec[11]]);
+            let val = i32::from_le_bytes([rec[12], rec[13], rec[14], rec[15]]);
+            match (typ, code) {
+                (EV_KEY, BTN_TOUCH_CODE) => st.frame_down = val == 1,
+                (EV_ABS, ABS_MT_POSITION_X) => st.frame_x = val,
+                (EV_ABS, ABS_MT_POSITION_Y) => st.frame_y = val,
+                (EV_SYN, SYN_REPORT) => {
+                    if st.frame_down && !st.prev_down {
+                        st.press_x = st.frame_x;
+                        st.press_y = st.frame_y;
+                    } else if !st.frame_down && st.prev_down {
+                        let (press_dx, press_dy) = to_display(st.press_x, st.press_y);
+                        let (rel_dx, rel_dy) = to_display(st.frame_x, st.frame_y);
+                        if kobo_core::device::wake::is_wake_swipe(
+                            press_dx,
+                            press_dy,
+                            rel_dx,
+                            rel_dy,
+                            ctx.h as f32,
+                        ) {
+                            unlock = true;
                         }
-                        _ => {}
                     }
+                    st.prev_down = st.frame_down;
                 }
-                _ => break,
+                _ => {}
             }
         }
         if unlock {
@@ -100,197 +91,205 @@ pub(super) fn poll_and_dispatch_touch(st: &mut LoopState, ctx: &mut LoopContext)
             libc::poll(&mut pfd, 1, LOOP_POLL_MS);
         }
     }
-    loop {
-        match ctx.touch_dev.read(&mut rec) {
-            Ok(16) => {
-                had_event = true;
-                let typ = u16::from_le_bytes([rec[8], rec[9]]);
-                let code = u16::from_le_bytes([rec[10], rec[11]]);
-                let val = i32::from_le_bytes([rec[12], rec[13], rec[14], rec[15]]);
-                match (typ, code) {
-                    (EV_KEY, BTN_TOUCH_CODE) => st.frame_down = val == 1,
-                    (EV_ABS, ABS_MT_POSITION_X) => st.frame_x = val,
-                    (EV_ABS, ABS_MT_POSITION_Y) => st.frame_y = val,
-                    (EV_SYN, SYN_REPORT) => {
-                        let now = std::time::Instant::now();
-                        let (dx, dy) = to_display(st.frame_x, st.frame_y);
-                        if st.frame_down && !st.prev_down {
-                            st.press_x = st.frame_x;
-                            st.press_y = st.frame_y;
-                            st.press_time = now;
-                            st.press_chapter_scroll = st.chapter_scroll;
-                            // A press in the capture zone is withheld from the
-                            // tap path entirely: the library acts on tap_xy in
-                            // this same iteration, so letting it through would
-                            // change the screen before the hold completes.
-                            #[cfg(feature = "screenshot")]
-                            {
-                                st.shot_armed = gesture::is_in_screenshot_zone(
-                                    dx,
-                                    dy,
-                                    ctx.w as f32,
-                                    ctx.h as f32,
-                                );
-                                st.shot_done = false;
-                                if st.shot_armed {
-                                    st.prev_down = st.frame_down;
-                                    continue;
-                                }
-                            }
-                            let footer_zone = if !st.picker_active
-                                && !st.panel_open
-                                && !reader.get_chapter_overlay_open()
-                                && !audio_mode
-                            {
-                                gesture::classify_footer_zone(
-                                    dx, dy, pbar_y, PBAR_H, pbar_x, pbar_right, pp_zone_x,
-                                )
-                            } else {
-                                gesture::FooterZone::None
-                            };
-                            match footer_zone {
-                                gesture::FooterZone::PlayPause => {
-                                    st.pp_pressed = true;
-                                }
-                                gesture::FooterZone::ProgressBar => {
-                                    let frac = ((dx - pbar_x) / pbar_w).clamp(0.0, 1.0);
-                                    cb.progress_target.set((frac * 1000.0) as i32);
-                                    st.scrubbing = true;
-                                }
-                                gesture::FooterZone::None => {}
-                            }
-                            let header_zone = if !st.picker_active
-                                && !st.panel_open
-                                && !reader.get_chapter_overlay_open()
-                                && !st.cover_page_visible
-                                && st.header_visible
-                                && !audio_mode
-                            {
-                                gesture::classify_header_zone(dx, dy, ctx.w as f32)
-                            } else {
-                                gesture::HeaderZone::None
-                            };
-                            match header_zone {
-                                gesture::HeaderZone::Library => st.lib_pressed = true,
-                                gesture::HeaderZone::Menu => st.menu_pressed = true,
-                                gesture::HeaderZone::ModeToggle => st.mode_toggle_pressed = true,
-                                gesture::HeaderZone::Bookmark => st.bookmark_set_pressed = true,
-                                gesture::HeaderZone::JumpToBookmark => {
-                                    st.bookmark_jump_pressed = true
-                                }
-                                gesture::HeaderZone::Sleep => st.sleep_pressed = true,
-                                gesture::HeaderZone::Chapters => st.chapter_pressed = true,
-                                gesture::HeaderZone::None => {}
-                            }
-                            let near = st.last_tap_y >= 0
-                                && (st.frame_y - st.last_tap_y).abs() < SWIPE_DELTA_TOLERANCE_PX;
-                            if (now.duration_since(st.last_tap_time) >= tap_cooldown || !near)
-                                && !st.scrubbing
-                                && !st.pp_pressed
-                                && !st.lib_pressed
-                                && !st.menu_pressed
-                                && !st.mode_toggle_pressed
-                                && !st.bookmark_set_pressed
-                                && !st.bookmark_jump_pressed
-                                && !st.sleep_pressed
-                                && !st.chapter_pressed
-                            {
-                                st.tap_xy = Some((dx, dy));
-                                st.last_tap_time = now;
-                                st.last_tap_y = st.frame_y;
-                                if !st.picker_active {
-                                    if audio_mode {
-                                        st.press_dispatched = true;
-                                        ctx.window.window().dispatch_event(
-                                            slint::platform::WindowEvent::PointerPressed {
-                                                position: slint::LogicalPosition::new(dx, dy),
-                                                button: slint::platform::PointerEventButton::Left,
-                                            },
-                                        );
-                                    } else if !st.panel_open && !reader.get_chapter_overlay_open() {
-                                        st.press_dispatched = false;
-                                    } else {
-                                        st.press_dispatched = true;
-                                        ctx.window.window().dispatch_event(
-                                            slint::platform::WindowEvent::PointerPressed {
-                                                position: slint::LogicalPosition::new(dx, dy),
-                                                button: slint::platform::PointerEventButton::Left,
-                                            },
-                                        );
-                                    }
-                                } else {
-                                    st.press_dispatched = false;
-                                }
-                            }
-                        } else if !st.frame_down && st.prev_down {
-                            touch_release::on_release(st, ctx, dx, dy, now);
-                        } else if st.frame_down {
-                            // Fires mid-hold, while the screen being captured
-                            // is still the one on the panel.
-                            #[cfg(feature = "screenshot")]
-                            if st.shot_armed {
-                                let (press_dx, press_dy) = to_display(st.press_x, st.press_y);
-                                if !st.shot_done
-                                    && gesture::is_screenshot_hold(
-                                        press_dx,
-                                        press_dy,
-                                        dx,
-                                        dy,
-                                        now.duration_since(st.press_time).as_millis(),
-                                        ctx.w as f32,
-                                        ctx.h as f32,
-                                    )
-                                {
-                                    match crate::rendering::screenshot::capture(
-                                        rgb565_as_bytes_ref(&st.buffer),
-                                        ctx.w,
-                                        ctx.h,
-                                    ) {
-                                        Ok(path) => info!("screenshot: wrote {}", path.display()),
-                                        Err(e) => warn!("screenshot: {}", e),
-                                    }
-                                    st.shot_done = true;
-                                }
-                                st.prev_down = st.frame_down;
-                                continue;
-                            }
-                            if st.scrubbing {
-                                let frac = ((dx - pbar_x) / pbar_w).clamp(0.0, 1.0);
-                                cb.progress_target.set((frac * 1000.0) as i32);
-                            } else if reader.get_chapter_overlay_open() {
-                                let (press_dx, press_dy) = to_display(st.press_x, st.press_y);
-                                let swipe_dy = dy - press_dy;
-                                let swipe_dx = dx - press_dx;
-                                if swipe_dy.abs() > 10.0 && swipe_dy.abs() > swipe_dx.abs() {
-                                    let n = st.chapters.len() as i32;
-                                    let list_h = ctx.h as i32
-                                        - crate::rendering::render::CH_LIST_TOP
-                                        - crate::rendering::render::CH_LIST_BOTTOM_PAD;
-                                    let content_h = n * crate::rendering::render::CH_ROW_PITCH;
-                                    let max_scroll = (content_h - list_h).max(0);
-                                    let raw = (st.press_chapter_scroll - swipe_dy as i32)
-                                        .clamp(0, max_scroll);
-                                    st.chapter_scroll = raw;
-                                    st.text_dirty = true;
-                                    ctx.window.request_redraw();
-                                }
-                            } else {
+    while let Ok(16) = ctx.touch_dev.read(&mut rec) {
+        had_event = true;
+        let typ = u16::from_le_bytes([rec[8], rec[9]]);
+        let code = u16::from_le_bytes([rec[10], rec[11]]);
+        let val = i32::from_le_bytes([rec[12], rec[13], rec[14], rec[15]]);
+        match (typ, code) {
+            (EV_KEY, BTN_TOUCH_CODE) => st.frame_down = val == 1,
+            (EV_ABS, ABS_MT_POSITION_X) => st.frame_x = val,
+            (EV_ABS, ABS_MT_POSITION_Y) => st.frame_y = val,
+            (EV_SYN, SYN_REPORT) => {
+                let now = std::time::Instant::now();
+                let (dx, dy) = to_display(st.frame_x, st.frame_y);
+                if st.frame_down && !st.prev_down {
+                    st.press_x = st.frame_x;
+                    st.press_y = st.frame_y;
+                    st.press_time = now;
+                    st.press_chapter_scroll = st.chapter_scroll;
+                    st.press_search_scroll = st.search_scroll;
+                    st.press_search_results_scroll = st.search_results_scroll;
+                    #[cfg(feature = "screenshot")]
+                    {
+                        st.shot_armed =
+                            gesture::is_in_screenshot_zone(dx, dy, ctx.w as f32, ctx.h as f32);
+                        st.shot_done = false;
+                        if st.shot_armed {
+                            st.prev_down = st.frame_down;
+                            continue;
+                        }
+                    }
+                    let footer_zone = if !st.picker_active
+                        && !st.panel_open
+                        && !reader.get_chapter_overlay_open()
+                        && !audio_mode
+                    {
+                        gesture::classify_footer_zone(
+                            dx, dy, pbar_y, PBAR_H, pbar_x, pbar_right, pp_zone_x,
+                        )
+                    } else {
+                        gesture::FooterZone::None
+                    };
+                    match footer_zone {
+                        gesture::FooterZone::PlayPause => {
+                            st.pp_pressed = true;
+                        }
+                        gesture::FooterZone::ProgressBar => {
+                            let frac = ((dx - pbar_x) / pbar_w).clamp(0.0, 1.0);
+                            cb.progress_target.set((frac * 1000.0) as i32);
+                            st.scrubbing = true;
+                        }
+                        gesture::FooterZone::None => {}
+                    }
+                    let header_zone = if !st.picker_active
+                        && !st.panel_open
+                        && !reader.get_chapter_overlay_open()
+                        && !st.cover_page_visible
+                        && st.header_visible
+                        && !audio_mode
+                    {
+                        gesture::classify_header_zone(dx, dy, ctx.w as f32)
+                    } else {
+                        gesture::HeaderZone::None
+                    };
+                    match header_zone {
+                        gesture::HeaderZone::Library => st.lib_pressed = true,
+                        gesture::HeaderZone::Menu => st.menu_pressed = true,
+                        gesture::HeaderZone::ModeToggle => st.mode_toggle_pressed = true,
+                        gesture::HeaderZone::Bookmark => st.bookmark_set_pressed = true,
+                        gesture::HeaderZone::JumpToBookmark => st.bookmark_jump_pressed = true,
+                        gesture::HeaderZone::Sleep => st.sleep_pressed = true,
+                        gesture::HeaderZone::Chapters => st.chapter_pressed = true,
+                        gesture::HeaderZone::None => {}
+                    }
+                    let near = st.last_tap_y >= 0
+                        && (st.frame_y - st.last_tap_y).abs() < SWIPE_DELTA_TOLERANCE_PX;
+                    if (now.duration_since(st.last_tap_time) >= tap_cooldown || !near)
+                        && !st.scrubbing
+                        && !st.pp_pressed
+                        && !st.lib_pressed
+                        && !st.menu_pressed
+                        && !st.mode_toggle_pressed
+                        && !st.bookmark_set_pressed
+                        && !st.bookmark_jump_pressed
+                        && !st.sleep_pressed
+                        && !st.chapter_pressed
+                    {
+                        st.tap_xy = Some((dx, dy));
+                        st.last_tap_time = now;
+                        st.last_tap_y = st.frame_y;
+                        if !st.picker_active {
+                            if audio_mode {
+                                st.press_dispatched = true;
                                 ctx.window.window().dispatch_event(
-                                    slint::platform::WindowEvent::PointerMoved {
+                                    slint::platform::WindowEvent::PointerPressed {
                                         position: slint::LogicalPosition::new(dx, dy),
+                                        button: slint::platform::PointerEventButton::Left,
+                                    },
+                                );
+                            } else if !st.panel_open && !reader.get_chapter_overlay_open() {
+                                st.press_dispatched = false;
+                            } else {
+                                st.press_dispatched = true;
+                                ctx.window.window().dispatch_event(
+                                    slint::platform::WindowEvent::PointerPressed {
+                                        position: slint::LogicalPosition::new(dx, dy),
+                                        button: slint::platform::PointerEventButton::Left,
                                     },
                                 );
                             }
+                        } else {
+                            st.press_dispatched = false;
                         }
-                        if !st.frame_down {
-                            st.scrubbing = false;
+                    }
+                } else if !st.frame_down && st.prev_down {
+                    touch_release::on_release(st, ctx, dx, dy, now);
+                } else if st.frame_down {
+                    #[cfg(feature = "screenshot")]
+                    if st.shot_armed {
+                        let (press_dx, press_dy) = to_display(st.press_x, st.press_y);
+                        if !st.shot_done
+                            && gesture::is_screenshot_hold(
+                                press_dx,
+                                press_dy,
+                                dx,
+                                dy,
+                                now.duration_since(st.press_time).as_millis(),
+                                ctx.w as f32,
+                                ctx.h as f32,
+                            )
+                        {
+                            match crate::rendering::screenshot::capture(
+                                rgb565_as_bytes_ref(&st.buffer),
+                                ctx.w,
+                                ctx.h,
+                            ) {
+                                Ok(path) => info!("screenshot: wrote {}", path.display()),
+                                Err(e) => warn!("screenshot: {}", e),
+                            }
+                            st.shot_done = true;
                         }
                         st.prev_down = st.frame_down;
+                        continue;
                     }
-                    _ => {}
+                    if st.scrubbing {
+                        let frac = ((dx - pbar_x) / pbar_w).clamp(0.0, 1.0);
+                        cb.progress_target.set((frac * 1000.0) as i32);
+                    } else if reader.get_chapter_overlay_open() {
+                        let (press_dx, press_dy) = to_display(st.press_x, st.press_y);
+                        let swipe_dy = dy - press_dy;
+                        let swipe_dx = dx - press_dx;
+                        if swipe_dy.abs() > 10.0 && swipe_dy.abs() > swipe_dx.abs() {
+                            if st.search_results_active {
+                                let hit_count = st
+                                    .word_index
+                                    .occurrences
+                                    .get(st.search_selected_word)
+                                    .map(|h| {
+                                        h.len().min(crate::data::word_index::MAX_SEARCH_RESULTS)
+                                    })
+                                    .unwrap_or(0);
+                                let max_scroll = search::results_scroll_max(hit_count);
+                                let raw = (st.press_search_results_scroll - swipe_dy as i32)
+                                    .clamp(0, max_scroll);
+                                st.search_results_scroll = raw;
+                            } else if st.chapter_tab == crate::loop_state::ChapterTab::Words {
+                                let max_scroll =
+                                    search::search_scroll_max(st.word_index.words.len());
+                                let raw =
+                                    (st.press_search_scroll - swipe_dy as i32).clamp(0, max_scroll);
+                                st.search_scroll = raw;
+                            } else {
+                                let n = st.chapters.len() as i32;
+                                let list_h = ctx.h as i32
+                                    - crate::rendering::render::CH_LIST_TOP
+                                    - crate::rendering::render::CH_LIST_BOTTOM_PAD;
+                                let content_h = n.saturating_sub(1)
+                                    * crate::rendering::render::CH_ROW_PITCH
+                                    + crate::rendering::render::CH_ROW_H;
+                                let max_scroll = (content_h - list_h).max(0);
+                                let raw = (st.press_chapter_scroll - swipe_dy as i32)
+                                    .clamp(0, max_scroll);
+                                st.chapter_scroll = raw;
+                            }
+                            st.text_dirty = true;
+                            ctx.window.request_redraw();
+                        }
+                    } else {
+                        ctx.window.window().dispatch_event(
+                            slint::platform::WindowEvent::PointerMoved {
+                                position: slint::LogicalPosition::new(dx, dy),
+                            },
+                        );
+                    }
                 }
+                if !st.frame_down {
+                    st.scrubbing = false;
+                }
+                st.prev_down = st.frame_down;
             }
-            _ => break,
+            _ => {}
         }
     }
     had_event

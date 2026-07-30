@@ -1,8 +1,12 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (c) 2026 Nayeem Bin Ahsan
+use crate::rendering::chapter_list::CH_LIST_TOP;
 use crate::rendering::render::{
     chapter_list_hit_test, GridCell, LibraryFilter, PillRect, PICKER_HEADER_H,
 };
+use crate::rendering::search_results::back_arrow_hit_test;
+use crate::rendering::word_list::tab_btn_rects;
+use crate::rendering::word_list::TAB_BAR_TOP;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FooterZone {
@@ -179,13 +183,13 @@ pub fn picker_hit_test(
         const EXIT_TOP: f32 = 17.0;
         let exit_left = screen_w - EXIT_BTN_PX - EXIT_PAD;
         let exit_right = screen_w - EXIT_PAD;
-        if dx >= exit_left && dx < exit_right && dy >= EXIT_TOP && dy < EXIT_TOP + EXIT_BTN_PX {
+        if dx >= exit_left && dx < exit_right && (EXIT_TOP..EXIT_TOP + EXIT_BTN_PX).contains(&dy) {
             return PickerTarget::Exit;
         }
         const LOGO_PX: f32 = 76.0;
         const LOGO_X: f32 = 23.0;
         const LOGO_Y: f32 = 17.0;
-        if dx >= LOGO_X && dx < LOGO_X + LOGO_PX && dy >= LOGO_Y && dy < LOGO_Y + LOGO_PX {
+        if (LOGO_X..LOGO_X + LOGO_PX).contains(&dx) && (LOGO_Y..LOGO_Y + LOGO_PX).contains(&dy) {
             return PickerTarget::Logo;
         }
         return PickerTarget::None;
@@ -248,6 +252,54 @@ pub enum ChapterOverlayAction {
     None,
     Scroll,
     Select(usize),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TabBarAction {
+    None,
+    ChaptersTab,
+    WordsTab,
+    Close,
+    Back,
+}
+
+pub fn tab_bar_hit_test(dx: f32, dy: f32, w: usize) -> TabBarAction {
+    if dy < TAB_BAR_TOP as f32 || dy >= CH_LIST_TOP as f32 {
+        return TabBarAction::None;
+    }
+    let (ch_btn, wd_btn, cl_btn) = tab_btn_rects(w);
+    if dx >= cl_btn.x as f32
+        && dx < (cl_btn.x + cl_btn.s) as f32
+        && dy >= cl_btn.y as f32
+        && dy < (cl_btn.y + cl_btn.s) as f32
+    {
+        return TabBarAction::Close;
+    }
+    if dx >= ch_btn.x as f32
+        && dx < (ch_btn.x + ch_btn.w) as f32
+        && dy >= ch_btn.y as f32
+        && dy < (ch_btn.y + ch_btn.h) as f32
+    {
+        return TabBarAction::ChaptersTab;
+    }
+    if dx >= wd_btn.x as f32
+        && dx < (wd_btn.x + wd_btn.w) as f32
+        && dy >= wd_btn.y as f32
+        && dy < (wd_btn.y + wd_btn.h) as f32
+    {
+        return TabBarAction::WordsTab;
+    }
+    TabBarAction::None
+}
+
+pub fn search_header_hit_test(dx: f32, dy: f32, w: usize) -> TabBarAction {
+    if dy < TAB_BAR_TOP as f32 || dy >= CH_LIST_TOP as f32 {
+        return TabBarAction::None;
+    }
+    if back_arrow_hit_test(dx, dy, w) {
+        return TabBarAction::Back;
+    }
+    TabBarAction::None
 }
 
 #[cfg(test)]

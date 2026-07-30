@@ -329,6 +329,7 @@ fn init_book_or_picker(
             None,
             None,
             Vec::new(),
+            Default::default(),
         )
     });
     let picker = picker_state

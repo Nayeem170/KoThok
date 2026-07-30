@@ -1,5 +1,17 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (c) 2026 Nayeem Bin Ahsan
+#![allow(
+    clippy::needless_else,
+    clippy::needless_borrow,
+    clippy::borrow_deref_ref,
+    clippy::redundant_pattern_matching,
+    clippy::unused_enumerate_index,
+    clippy::needless_range_loop,
+    clippy::derivable_impls,
+    clippy::too_many_arguments,
+    clippy::manual_range_contains,
+    clippy::unnecessary_mut_passed
+)]
 //! KoThok reader - on-device EPUB render + Read Aloud (Layer 3a).
 //! Renders the page to the framebuffer, drives Slint via raw touch evdev, and
 //! runs the Edge-TTS -> A2DP `Player` on a worker thread (Play/Pause/Stop).
