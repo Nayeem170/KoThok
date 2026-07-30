@@ -148,6 +148,7 @@ pub fn paint_word_list(
     scroll: i32,
     body_px: f32,
     selected_word: usize,
+    dragging: bool,
 ) {
     let w = crate::w();
     let h = crate::h();
@@ -202,7 +203,7 @@ pub fn paint_word_list(
             h,
         );
     }
-    paint_scrollbar(buf_bytes, w, h, words.len(), scroll, false);
+    paint_scrollbar(buf_bytes, w, h, words.len(), scroll, dragging);
 }
 
 pub fn word_list_hit_test(tap_y: i32, scroll: i32, word_count: usize) -> Option<usize> {

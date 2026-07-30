@@ -5,7 +5,7 @@ use slint::platform::software_renderer::Rgb565Pixel;
 use log::info;
 
 use crate::loop_state::{ChapterTab, LoopContext, LoopState};
-use crate::rendering::common::rgb565_as_bytes_ref;
+use crate::rendering::common::{rgb565_as_bytes, rgb565_as_bytes_ref};
 use crate::rendering::fb::{diff_rows, waveform_for, RenderScenario, WAVE_A2, WAVE_GC16};
 use crate::rendering::layout::{self, PAD_TOP};
 use crate::rendering::render::{composite_text, refresh_text_cache};
@@ -150,6 +150,7 @@ pub fn render_and_present(
                     st.search_results_scroll,
                     st.body_px,
                     total,
+                    false,
                 );
             } else if st.chapter_tab == ChapterTab::Words {
                 crate::rendering::word_list::paint_tab_bar(
@@ -168,6 +169,7 @@ pub fn render_and_present(
                     } else {
                         usize::MAX
                     },
+                    st.sb_dragging && st.sb_drag_tab == ChapterTab::Words,
                 );
             } else {
                 crate::rendering::word_list::paint_tab_bar(
@@ -185,6 +187,15 @@ pub fn render_and_present(
                     st.chapter_scroll,
                     ctx.reader.get_chapter_preview_idx(),
                     current_row,
+                );
+                let buf_bytes = rgb565_as_bytes(&mut st.buffer);
+                crate::rendering::chapter_list::paint_scrollbar(
+                    buf_bytes,
+                    ctx.w,
+                    ctx.h,
+                    st.toc_rows.len(),
+                    st.chapter_scroll,
+                    st.sb_dragging && st.sb_drag_tab == ChapterTab::Chapters,
                 );
             }
         }

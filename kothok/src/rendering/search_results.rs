@@ -29,6 +29,7 @@ pub fn paint_search_results(
     scroll: i32,
     body_px: f32,
     total_hits: usize,
+    _dragging: bool,
 ) {
     let w = crate::w();
     let h = crate::h();

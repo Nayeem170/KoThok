@@ -44,7 +44,10 @@ pub fn scrollbar_hit_test(
     tap_y: i32,
     item_count: usize,
 ) -> Option<ScrollbarZone> {
-    if item_count <= 1 || tap_y < list_top || tap_y >= list_bottom {
+    if !scrollbar_visible(item_count, list_top, list_bottom)
+        || tap_y < list_top
+        || tap_y >= list_bottom
+    {
         return None;
     }
     let track_x = (screen_w as i32 - SB_TRACK_PAD as i32 - SB_TRACK_W as i32).max(0);
@@ -91,6 +94,10 @@ pub fn scrollbar_y_to_scroll(
     let finger_offset = finger_y - list_top - thumb_h / 2;
     let fraction = (finger_offset as f32 / max_travel as f32).clamp(0.0, 1.0);
     (fraction * scroll_max as f32).round() as i32
+}
+
+pub fn scrollbar_visible(item_count: usize, list_top: i32, list_bottom: i32) -> bool {
+    item_count > 1 && list_bottom > list_top
 }
 
 pub fn paint_scrollbar(
@@ -490,5 +497,53 @@ mod tests {
         let top = CH_LIST_TOP;
         let bottom = 1000;
         assert_eq!(scrollbar_y_to_scroll(top, top, bottom, 100), 0);
+    }
+
+    #[test]
+    fn scrollbar_hit_test_below_list_returns_none() {
+        let w = crate::w();
+        let list_bottom = 1000;
+        assert!(
+            scrollbar_hit_test(w, CH_LIST_TOP, list_bottom, w as i32, list_bottom, 10).is_none()
+        );
+        assert!(
+            scrollbar_hit_test(w, CH_LIST_TOP, list_bottom, w as i32, list_bottom + 500, 10)
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn scrollbar_y_to_scroll_bottom_equals_scroll_max() {
+        let top = CH_LIST_TOP;
+        let bottom = 1000;
+        let track_h = bottom - top;
+        let item_count = 100usize;
+        let total_h = item_count as i32 * CH_ROW_PITCH;
+        let scroll_max = (total_h - track_h + CH_ROW_H).max(0);
+        let result = scrollbar_y_to_scroll(bottom, top, bottom, item_count);
+        assert_eq!(result, scroll_max);
+    }
+
+    #[test]
+    fn scrollbar_y_to_scroll_midpoint() {
+        let top = CH_LIST_TOP;
+        let bottom = 1000;
+        let track_h = bottom - top;
+        let item_count = 100usize;
+        let total_h = item_count as i32 * CH_ROW_PITCH;
+        let scroll_max = (total_h - track_h + CH_ROW_H).max(0);
+        let mid_y = top + (bottom - top) / 2;
+        let result = scrollbar_y_to_scroll(mid_y, top, bottom, item_count);
+        assert_eq!(result, scroll_max / 2);
+    }
+
+    #[test]
+    fn scrollbar_visible_few_items() {
+        assert!(!scrollbar_visible(1, CH_LIST_TOP, 1000));
+    }
+
+    #[test]
+    fn scrollbar_visible_many_items() {
+        assert!(scrollbar_visible(20, CH_LIST_TOP, 1000));
     }
 }
