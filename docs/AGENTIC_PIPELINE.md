@@ -198,7 +198,10 @@ flowchart TD
     R15 -- No --> R15b["Given/When/Then script"]
     R15a --> R15r["Reviewer reviews (max 10)"]
     R15b --> R15r
-    R15r --> S3B["S3: Root cause + fix plan (file:line)"]
+    R15r --> UI2{"UI layout change?"}
+    UI2 -- Yes --> S25B["S2.5: UI mock (before/after)"]
+    UI2 -- No --> S3B
+    S25B --> S3B
     S3B --> S4B["S4: Implement fix (reproduction must PASS)"]
     S4B --> S5B["S5: Code + test review"]
     S5B --> S6B["S6: DoD verification"]
