@@ -8,7 +8,7 @@ The pipeline is defined across several files. When they disagree, this priority 
 
 | Priority | File | Scope |
 |----------|------|-------|
-| 1 (highest) | `.agentic/config.md` | Build commands, model IDs, pipeline mode, deploy instructions |
+| 1 (highest) | `.agentic/config.md` | Build commands, model IDs, deploy instructions |
 | 2 | `.agentic/orchestrator.md` | Project-specific overrides (build gate format, device test, git ops) |
 | 3 | `~/.config/kilo/agent/agentic-orchestrator.md` | Full pipeline flow, step definitions, relay protocol |
 | 4 | `.agentic/reviewer.md` | Severity spec, gate rules, review checklist |
@@ -33,11 +33,7 @@ Two pipeline types:
 
 ## Pipeline modes
 
-The pipeline runs in one of two modes, set per-project in `.agentic/config.md`:
-
-```
-pipeline_mode = direct    # or: worktree
-```
+The pipeline runs in one of two modes. Direct is the default. Worktree is activated only when the user explicitly requests it (parallel work, multiple tickets, or "use worktree mode").
 
 ### Direct mode (default)
 
@@ -67,7 +63,7 @@ Constraint: Agent Manager subagents cannot spawn their own subagents. The coordi
 
 ### How mode is chosen
 
-At startup, the pipeline reads `pipeline_mode` from `.agentic/config.md`. If the file exists and has the field, that value is used. If the user explicitly requests worktree mode, that overrides. Otherwise, direct.
+At startup, if the user explicitly requests parallel work, multiple tickets, or worktree mode, the pipeline uses worktree. Otherwise, it uses direct. There is no config field to pre-select worktree -- the user must ask for it each time.
 
 **Mode is fixed at Step 0.** Once the pipeline starts, `pipeline_mode` is written to `state.md`. If someone edits `config.md` mid-ticket, the pipeline ignores the change and uses the `state.md` value. This prevents a silent architecture switch during a resumed session.
 
@@ -80,7 +76,7 @@ flowchart TD
     K --> S["SHARED_CONVENTIONS.md"]
     K --> A["agentic-orchestrator.md"]
     K --> C{".agentic/config.md exists?"}
-    C -- Yes --> PC["Project config (build commands, models, deploy, pipeline_mode, pen_cli)"]
+    C -- Yes --> PC["Project config (build commands, models, deploy, pen_cli)"]
     C -- No --> F["AGENTS.md / CLAUDE.md (fallback)"]
     U --> K
     S --> ST["Startup"]

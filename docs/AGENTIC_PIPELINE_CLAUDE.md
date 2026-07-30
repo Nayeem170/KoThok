@@ -59,7 +59,6 @@ pipeline steps.
 `.agentic/config.md` is shared. These fields apply to both implementations:
 
 ```
-pipeline_mode    direct (default) or worktree
 base_branch      develop
 preflight        docker info
 build/test/lint/cargo_fmt_check
@@ -75,7 +74,12 @@ agent frontmatter instead:
 ```
 reviewer_id / reviewer_variant
 developer_id / developer_variant
+pipeline_mode
 ```
+
+`pipeline_mode` is kilo-only. Worktree is activated in both implementations
+only when the user explicitly requests it (parallel work, multiple tickets,
+or "use worktree mode"). There is no config field to pre-select worktree.
 
 To change the reviewer model here, edit `model:` in
 `.claude/agents/pipeline-reviewer.md` (`opus`, `sonnet`, or `haiku`).
