@@ -6,7 +6,7 @@ use crate::data::word_index::MAX_SEARCH_RESULTS;
 use crate::gesture;
 use crate::loop_state::ChapterTab;
 use crate::reader::{apply_page, switch_chapter, ChapterSwitchOpts};
-use crate::rendering::chapter_list::{CH_LIST_BOTTOM_PAD, CH_LIST_TOP, CH_ROW_H, CH_ROW_PITCH};
+use crate::rendering::chapter_list::{list_scroll_max, CH_LIST_BOTTOM_PAD, CH_LIST_TOP};
 use crate::rendering::search_results::results_hit_test;
 use crate::rendering::word_list::word_list_hit_test;
 use crate::Reader;
@@ -18,7 +18,6 @@ pub(super) fn handle_search_release(
     dy: f32,
 ) -> bool {
     let reader = ctx.reader;
-    let cmd_tx = ctx.cmd_tx;
     let (press_dx, press_dy) = touch::to_display(st.press_x, st.press_y, ctx.touch_cfg);
     let swipe_dy = dy - press_dy;
     let swipe_dx = dx - press_dx;
@@ -38,7 +37,10 @@ pub(super) fn handle_search_release(
                 .map(|h| h.len().min(MAX_SEARCH_RESULTS))
                 .unwrap_or(0);
             if let Some(idx) = results_hit_test(dy as i32, st.search_results_scroll, hit_count) {
-                return jump_to_occurrence(st, reader, cmd_tx, idx);
+                st.search_selected_result = idx;
+                st.search_result_selected = true;
+                st.text_dirty = true;
+                ctx.window.request_redraw();
             }
         }
         return true;
@@ -93,14 +95,16 @@ pub(super) fn handle_search_release(
 pub(super) fn select_word(st: &mut LoopState, idx: usize) {
     st.search_selected_word = idx;
     st.search_word_selected = true;
+    st.search_result_selected = false;
 }
 
 pub(super) fn back_from_results(st: &mut LoopState) {
     st.search_results_active = false;
     st.search_results_scroll = 0;
+    st.search_result_selected = false;
 }
 
-fn jump_to_occurrence(
+pub(super) fn jump_to_occurrence(
     st: &mut LoopState,
     reader: &Reader,
     cmd_tx: &std::sync::mpsc::Sender<Cmd>,
@@ -158,6 +162,7 @@ fn jump_to_occurrence(
     let utt_idx = crate::audio::glue::utterance_index_for_offset(&utts, hit.byte_offset as usize);
     best_effort_send(cmd_tx, Cmd::Reload(utts));
     best_effort_send(cmd_tx, Cmd::Seek(utt_idx));
+    st.search_result_selected = false;
     st.search_results_active = false;
     reader.set_chapter_overlay_open(false);
     st.text_dirty = true;
@@ -169,8 +174,7 @@ fn jump_to_occurrence(
 pub(super) fn search_scroll_max(word_count: usize) -> i32 {
     let h = crate::h() as i32;
     let list_h = h - CH_LIST_TOP - CH_LIST_BOTTOM_PAD;
-    let content_h = word_count.saturating_sub(1) as i32 * CH_ROW_PITCH + CH_ROW_H;
-    (content_h - list_h).max(0)
+    list_scroll_max(word_count, list_h)
 }
 
 pub(super) fn results_scroll_max(result_count: usize) -> i32 {
@@ -235,10 +239,13 @@ mod tests {
             search_results_scroll: 0,
             search_selected_word: 0,
             search_word_selected: false,
+            search_selected_result: 0,
+            search_result_selected: false,
             press_search_scroll: 0,
             press_search_results_scroll: 0,
             sb_dragging: false,
             sb_drag_tab: Default::default(),
+            sb_grab_offset: 0,
             bt_fail_count: 0,
             text_dirty: false,
             #[cfg(feature = "screenshot")]

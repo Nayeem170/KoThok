@@ -6,8 +6,7 @@ use crate::device::input::{
     ABS_MT_POSITION_X, ABS_MT_POSITION_Y, BTN_TOUCH_CODE, EV_ABS, EV_KEY, EV_SYN, SYN_REPORT,
 };
 use crate::rendering::chapter_list::{
-    scrollbar_hit_test, scrollbar_y_to_scroll, CH_LIST_BOTTOM_PAD, CH_LIST_TOP, CH_ROW_H,
-    CH_ROW_PITCH,
+    list_scroll_max, scrollbar_hit_test, scrollbar_y_to_scroll, CH_LIST_BOTTOM_PAD, CH_LIST_TOP,
 };
 #[cfg(feature = "screenshot")]
 use crate::rendering::common::rgb565_as_bytes_ref;
@@ -203,40 +202,103 @@ pub(super) fn poll_and_dispatch_touch(st: &mut LoopState, ctx: &mut LoopContext)
                                     } else {
                                         st.toc_rows.len()
                                     };
-                                if let Some(_zone) = scrollbar_hit_test(
+                                let sb_dx = dx as i32;
+                                let sb_dy = dy as i32;
+                                let cur_scroll =
+                                    if st.chapter_tab == crate::loop_state::ChapterTab::Words {
+                                        st.search_scroll
+                                    } else {
+                                        st.chapter_scroll
+                                    };
+                                if let Some(zone) = scrollbar_hit_test(
                                     ctx.w,
                                     list_top,
                                     list_bottom,
-                                    st.frame_x,
-                                    st.frame_y,
+                                    sb_dx,
+                                    sb_dy,
                                     item_count,
+                                    cur_scroll,
                                 ) {
-                                    st.sb_dragging = true;
-                                    st.sb_drag_tab = st.chapter_tab;
                                     st.press_dispatched = false;
-                                    let new_scroll = scrollbar_y_to_scroll(
-                                        st.frame_y,
-                                        list_top,
-                                        list_bottom,
-                                        item_count,
-                                    );
-                                    if st.chapter_tab == crate::loop_state::ChapterTab::Words {
-                                        st.search_scroll = new_scroll;
-                                        st.press_search_scroll = new_scroll;
-                                    } else {
-                                        st.chapter_scroll = new_scroll;
-                                        st.press_chapter_scroll = new_scroll;
+                                    let track_h = list_bottom - list_top;
+                                    match zone {
+                                        crate::rendering::chapter_list::ScrollbarZone::Thumb => {
+                                            st.sb_dragging = true;
+                                            st.sb_drag_tab = st.chapter_tab;
+                                            st.sb_grab_offset = sb_dy
+                                                - crate::rendering::chapter_list::thumb_top(
+                                                    list_top, track_h, item_count, cur_scroll,
+                                                );
+                                            let new_scroll = scrollbar_y_to_scroll(
+                                                sb_dy,
+                                                list_top,
+                                                list_bottom,
+                                                item_count,
+                                                st.sb_grab_offset,
+                                            );
+                                            if st.chapter_tab
+                                                == crate::loop_state::ChapterTab::Words
+                                            {
+                                                st.search_scroll = new_scroll;
+                                                st.press_search_scroll = new_scroll;
+                                            } else {
+                                                st.chapter_scroll = new_scroll;
+                                                st.press_chapter_scroll = new_scroll;
+                                            }
+                                            st.text_dirty = true;
+                                            ctx.window.request_redraw();
+                                        }
+                                        crate::rendering::chapter_list::ScrollbarZone::Rail(
+                                            tap_y,
+                                        ) => {
+                                            let visible_rows = track_h
+                                                / crate::rendering::chapter_list::CH_ROW_PITCH;
+                                            let delta = visible_rows
+                                                * crate::rendering::chapter_list::CH_ROW_PITCH;
+                                            let sm =
+                                                crate::rendering::chapter_list::list_scroll_max(
+                                                    item_count, track_h,
+                                                );
+                                            if tap_y < list_top + track_h / 2 {
+                                                let new_scroll = (cur_scroll - delta).max(0);
+                                                if st.chapter_tab
+                                                    == crate::loop_state::ChapterTab::Words
+                                                {
+                                                    st.search_scroll = new_scroll;
+                                                    st.press_search_scroll = new_scroll;
+                                                } else {
+                                                    st.chapter_scroll = new_scroll;
+                                                    st.press_chapter_scroll = new_scroll;
+                                                }
+                                            } else {
+                                                let new_scroll = (cur_scroll + delta).min(sm);
+                                                if st.chapter_tab
+                                                    == crate::loop_state::ChapterTab::Words
+                                                {
+                                                    st.search_scroll = new_scroll;
+                                                    st.press_search_scroll = new_scroll;
+                                                } else {
+                                                    st.chapter_scroll = new_scroll;
+                                                    st.press_chapter_scroll = new_scroll;
+                                                }
+                                            }
+                                            st.text_dirty = true;
+                                            ctx.window.request_redraw();
+                                        }
                                     }
-                                    st.text_dirty = true;
-                                    ctx.window.request_redraw();
                                 } else {
-                                    st.press_dispatched = true;
-                                    ctx.window.window().dispatch_event(
-                                        slint::platform::WindowEvent::PointerPressed {
-                                            position: slint::LogicalPosition::new(dx, dy),
-                                            button: slint::platform::PointerEventButton::Left,
-                                        },
-                                    );
+                                    let list_bottom = ctx.h as i32 - CH_LIST_BOTTOM_PAD;
+                                    if (dy as i32) >= list_bottom {
+                                        st.press_dispatched = false;
+                                    } else {
+                                        st.press_dispatched = true;
+                                        ctx.window.window().dispatch_event(
+                                            slint::platform::WindowEvent::PointerPressed {
+                                                position: slint::LogicalPosition::new(dx, dy),
+                                                button: slint::platform::PointerEventButton::Left,
+                                            },
+                                        );
+                                    }
                                 }
                             } else {
                                 st.press_dispatched = true;
@@ -284,23 +346,45 @@ pub(super) fn poll_and_dispatch_touch(st: &mut LoopState, ctx: &mut LoopContext)
                     if st.scrubbing {
                         let frac = ((dx - pbar_x) / pbar_w).clamp(0.0, 1.0);
                         cb.progress_target.set((frac * 1000.0) as i32);
-                    } else if st.sb_dragging
-                        && reader.get_chapter_overlay_open()
-                        && st.sb_drag_tab == st.chapter_tab
-                    {
+                    } else if st.sb_dragging && reader.get_chapter_overlay_open() {
                         let list_top = CH_LIST_TOP;
                         let list_bottom = ctx.h as i32 - CH_LIST_BOTTOM_PAD;
-                        let item_count = if st.chapter_tab == crate::loop_state::ChapterTab::Words {
-                            st.word_index.words.len()
-                        } else {
-                            st.toc_rows.len()
-                        };
-                        let new_scroll =
-                            scrollbar_y_to_scroll(st.frame_y, list_top, list_bottom, item_count);
-                        if st.chapter_tab == crate::loop_state::ChapterTab::Words {
+                        if st.search_results_active {
+                            let hit_count = st
+                                .word_index
+                                .occurrences
+                                .get(st.search_selected_word)
+                                .map(|h| h.len().min(crate::data::word_index::MAX_SEARCH_RESULTS))
+                                .unwrap_or(0);
+                            let new_scroll = scrollbar_y_to_scroll(
+                                dy as i32,
+                                list_top,
+                                list_bottom,
+                                hit_count,
+                                st.sb_grab_offset,
+                            );
+                            st.search_results_scroll = new_scroll;
+                            st.press_search_results_scroll = new_scroll;
+                        } else if st.chapter_tab == crate::loop_state::ChapterTab::Words {
+                            let item_count = st.word_index.words.len();
+                            let new_scroll = scrollbar_y_to_scroll(
+                                dy as i32,
+                                list_top,
+                                list_bottom,
+                                item_count,
+                                st.sb_grab_offset,
+                            );
                             st.search_scroll = new_scroll;
                             st.press_search_scroll = new_scroll;
                         } else {
+                            let item_count = st.toc_rows.len();
+                            let new_scroll = scrollbar_y_to_scroll(
+                                dy as i32,
+                                list_top,
+                                list_bottom,
+                                item_count,
+                                st.sb_grab_offset,
+                            );
                             st.chapter_scroll = new_scroll;
                             st.press_chapter_scroll = new_scroll;
                         }
@@ -331,14 +415,9 @@ pub(super) fn poll_and_dispatch_touch(st: &mut LoopState, ctx: &mut LoopContext)
                                     (st.press_search_scroll - swipe_dy as i32).clamp(0, max_scroll);
                                 st.search_scroll = raw;
                             } else {
-                                let n = st.chapters.len() as i32;
-                                let list_h = ctx.h as i32
-                                    - crate::rendering::render::CH_LIST_TOP
-                                    - crate::rendering::render::CH_LIST_BOTTOM_PAD;
-                                let content_h = n.saturating_sub(1)
-                                    * crate::rendering::render::CH_ROW_PITCH
-                                    + crate::rendering::render::CH_ROW_H;
-                                let max_scroll = (content_h - list_h).max(0);
+                                let item_count = st.chapters.len();
+                                let list_h = ctx.h as i32 - CH_LIST_TOP - CH_LIST_BOTTOM_PAD;
+                                let max_scroll = list_scroll_max(item_count, list_h);
                                 let raw = (st.press_chapter_scroll - swipe_dy as i32)
                                     .clamp(0, max_scroll);
                                 st.chapter_scroll = raw;

@@ -63,10 +63,13 @@ pub(super) fn build_loop_state(
         search_results_scroll: 0,
         search_selected_word: 0,
         search_word_selected: false,
+        search_selected_result: 0,
+        search_result_selected: false,
         press_search_scroll: 0,
         press_search_results_scroll: 0,
         sb_dragging: false,
         sb_drag_tab: Default::default(),
+        sb_grab_offset: 0,
         bt_fail_count: 0,
         text_dirty: book.13,
         #[cfg(feature = "screenshot")]

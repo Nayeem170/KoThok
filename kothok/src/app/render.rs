@@ -150,7 +150,11 @@ pub fn render_and_present(
                     st.search_results_scroll,
                     st.body_px,
                     total,
-                    false,
+                    if st.search_result_selected {
+                        st.search_selected_result
+                    } else {
+                        usize::MAX
+                    },
                 );
             } else if st.chapter_tab == ChapterTab::Words {
                 crate::rendering::word_list::paint_tab_bar(
