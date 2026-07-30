@@ -54,7 +54,7 @@ Format: `[source] rule text`
 
 ## Learned rules
 
-<!-- Rules below are added by the reviewer during pipeline operation. -->
+- [feat/word-list-select-open-flow] UI mocks must be HTML/CSS files (mock.html), not ASCII art. Render the screens as styled HTML matching the device layout, colors, and dimensions. Include interactive states (hover, selected, disabled).
 <!-- Format: [task-name] rule description -->
 <!-- Only add a rule when the same feedback has been given more than once. -->
 
