@@ -59,9 +59,6 @@ release/
 # Local kobo-core copy for cross-build patch
 kothok/kobo-core/
 
-# Pre-commit (copy of global config, not project-specific)
-.pre-commit-config.yaml
-
 # Secrets — never commit. crates.io publish token lives in the global
 # ~/.cargo/credentials.json (created by `cargo login`), never in the repo.
 .env
