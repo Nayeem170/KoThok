@@ -1,13 +1,17 @@
 # Task State
 
-<!-- Written by the orchestrator on every phase transition. -->
-<!-- This is the restart checkpoint. -->
-
-phase: requirement
+phase: S0
+type: feature
 global_iterations: 0
 phase_iterations:
+  bug_repro: 0
+  bug_plan: 0
+  bug_code: 0
   mock: 0
   plan: 0
-  testplan: 0
+  test_plan: 0
   code: 0
-updated: <!-- ISO timestamp -->
+branch: <branch-slug>
+base_branch: <base-branch>
+branch_created: false
+updated: <ISO 8601 timestamp>

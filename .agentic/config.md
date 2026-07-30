@@ -2,8 +2,11 @@
 
 ## Models
 
-developer_model = GLM 5.2 (xhigh)
-reviewer_model = Claude Sonnet 5 (high)
+# Current session IS the developer. No separate developer model needed.
+# The orchestrator runs as the developer in the current session.
+
+reviewer_id = azure-foundry/claude-sonnet-5
+reviewer_variant = high
 
 ## Commands
 
@@ -18,11 +21,22 @@ cargo_fmt_check = cargo fmt --manifest-path kothok/Cargo.toml -- --check
 ## Branching
 
 base_branch = develop
-branch_prefix = feat/
+
+## Branch naming
+
+type_prefix: feat/ for features, fix/ for bugs
+slug_rule: replace / in branch name with - (e.g. fix/word-list-bug -> fix-word-list-bug)
+
+## Task directory
+
+task_root = .agentic-tasks/
+path: <repo-root>/.agentic-tasks/<branch-slug>/
+branch_slug: branch name with / replaced by -
 
 ## Additional repos
 
-none
+additional_repos = []
+(legacy: kobo-core is now a git dependency in Cargo.toml)
 
 ## Convention files
 
@@ -34,7 +48,12 @@ docs/REVIEW_RULES.md
 
 max_per_loop = 10
 max_global = 50
+per_loop_cap_exit: present to user. User chooses: accept as-is (phase complete), abort, or override (reset counter, continue).
 
 ## Deploy
 
 deploy = User runs deploy-usb.ps1 or deploys via USB mount
+
+## Mock format
+
+mock_format = html

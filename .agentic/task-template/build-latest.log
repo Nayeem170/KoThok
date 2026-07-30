@@ -1,0 +1,7 @@
+# Build Log
+
+=== HEAD: <git rev-parse HEAD> | <ISO timestamp> ===
+=== TREE: CLEAN ===
+=== TOTAL PASSED: <N> ===
+
+<!-- Full build stdout/stderr, test stdout/stderr, lint output below -->

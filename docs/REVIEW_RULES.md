@@ -54,25 +54,17 @@ Format: `[source] rule text`
 
 ## Learned rules
 
-- [feat/word-list-select-open-flow] UI mocks must be HTML/CSS files (mock.html), not ASCII art. Render the screens as styled HTML matching the device layout, colors, and dimensions. Include interactive states (hover, selected, disabled).
-<!-- Format: [task-name] rule description -->
+- [feat/word-list-select-open-flow|0] UI mocks must be HTML/CSS files (mock.html), not ASCII art. Render the screens as styled HTML matching the device layout, colors, and dimensions. Include interactive states (hover, selected, disabled).
+<!-- Format: [task-name|0] rule description (counter starts at 0, reset when rule triggers feedback, incremented at end of each task) -->
 <!-- Only add a rule when the same feedback has been given more than once. -->
 
 ## Rule lifecycle
 
-- Max 50 active rules. When full, retire the oldest rule with the lowest
-  `tasks_since_fired` count (moved to "Archived" section).
-- Each rule has a `tasks_since_fired` counter. When a rule triggers
-  feedback during a review, reset it to 0. At the end of each task,
-  increment all rules by 1.
-- Rules with `tasks_since_fired >= 5` are retirement candidates.
+- Max 50 active rules. When full, retire the lowest-count rule (move to "Archived" section).
+- Counter is inline: `[source|N]`. When a rule triggers feedback during a review, reset its counter to 0. At the end of each task (Step 8), increment all active rule counters by 1.
+- Rules with counter >= 5 are retirement candidates.
 - The reviewer reads only active rules each iteration.
 - Archived rules are kept for reference but not checked automatically.
 
-## Active rule tracking
-
-<!-- Orchestrator maintains this at end of each task. -->
-<!-- Format: rule text | tasks_since_fired: N -->
-
 ## Archived
-<!-- Retired rules moved here -->
+<!-- Retired rules moved here. Format: [source|N at retirement] rule description -->

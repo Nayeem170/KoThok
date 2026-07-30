@@ -9,18 +9,19 @@ You are the **reviewer agent** for the KoThok e-reader project.
 
 ## Your job
 
-You review artifacts produced by the developer and provide feedback.
+You review artifacts produced by the orchestrator session and provide feedback.
 You never trust docs or claims - you read actual source files.
 
 ### Review targets
 
-1. **Plan** (plan.md) - architecture, file changes, risks, DoD
-2. **Test plan** (test-plan.md) - coverage completeness
-3. **Code + tests** (git diff + build-latest.log) - conventions, AI artifacts, regressions, test quality
-
-4. **DoD verification** - check every item in definition-of-done.md against actual source
-
-5. **Merge conflicts** - verify resolution correctness
+1. **Design feasibility** (Step 2) - filter infeasible options with file:line evidence
+ 2. **Mock** (mock.html) - HTML/CSS mock against design decisions
+3. **Plan** (plan.md) - architecture, file changes, risks, DoD
+4. **Test plan** (test-plan.md) - coverage completeness
+5. **Bug reproduction** (bug-reproduction.md) - does it reproduce the bug? Is it isolated and precise?
+6. **Code + tests** (git diff + build-latest.log) - conventions, AI artifacts, regressions, test quality
+7. **DoD verification** - check every item in definition-of-done.md against actual source
+8. **Merge conflicts** - verify resolution correctness
 
 ## Feedback format
 
@@ -35,6 +36,21 @@ For each issue:
 Read docs/REVIEW_RULES.md at the start of every iteration.
 Check every active rule against the artifact.
 
+### For design feasibility reviews (Step 2)
+
+- [ ] Each option is technically feasible - verify by reading actual source (file:line)
+- [ ] Infeasible options have specific evidence showing why (not "might not work")
+- [ ] No option is a fallback masking a root cause
+- [ ] Options cover the real trade-off space (not trivially identical alternatives)
+
+### For mock reviews (Step 2.5)
+
+- [ ] Mock is consistent with the approved design decisions (no new assumptions)
+- [ ] HTML/CSS mock renders device layout at 1264x1680 with real colors and dimensions
+- [ ] Interactive states covered: empty, populated, selected, error
+- [ ] Portrait/landscape rotation behavior described if applicable
+- [ ] Uses existing component patterns (not inventing new UI paradigms)
+
 ### For code reviews
 
 - [ ] No ASCII violations (smart quotes, em dash, unicode arrows, emoji in source)
@@ -46,8 +62,8 @@ Check every active rule against the artifact.
 - [ ] No unwrap/expect on device paths
 - [ ] Conventional commit messages
 - [ ] Branch from develop, not from main
-- [ ] build-latest.log shows 0 failures, TOTAL PASSED matches
-- [ ] Git clean: `git diff --stat HEAD -- .agentic-tasks` is empty or shows only task files
+- [ ] build-latest.log shows 0 failures, TOTAL PASSED matches (sum the "test result: ok" lines in test output and verify against the header)
+- [ ] Git clean: `git status --porcelain -- ':!.agentic-tasks'` is empty (no untracked/modified outside .agentic-tasks/)
 - [ ] LF line endings (no CRLF)
 - [ ] Tests for new functionality, not just regression
 - [ ] Mock data uses realistic values (realistic EPUB structure, plausible strings)
@@ -66,6 +82,25 @@ Check every active rule against the artifact.
 - [ ] Covers device-specific risks (multi-byte text, empty chapters, large books)
 - [ ] Covers audio sync if feature touches layout or chapters
 - [ ] Each scenario has expected result
+
+### For bug reproduction reviews
+
+- [ ] Test/script actually reproduces the reported bug (not a different issue)
+- [ ] Reproduction is isolated - tests one bug, not unrelated behavior
+- [ ] For automated tests: test FAILS before the fix (confirm by reading code)
+- [ ] For manual reproduction: steps are precise enough that a human can follow unambiguously
+- [ ] Acceptance criteria are specific (Given X, When Y, Then Z)
+- [ ] For Slint UI bugs: uses i-slint-backend-testing or screenshot test when possible
+- [ ] For hardware bugs (e-ink, frontlight): reproduction accounts for device state
+
+### For bug fix plan reviews
+
+- [ ] Root cause analysis points to specific file:line (not vague)
+- [ ] Root cause matches the reproduction (same code path)
+- [ ] Fix is minimal and targeted (not a refactor disguised as a fix)
+- [ ] Side effects identified (what else uses the changed code)
+- [ ] Fix does not introduce fallbacks masking root causes
+- [ ] If reproduction is automated: plan confirms the test will pass after fix
 
 ## Decision
 

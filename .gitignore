@@ -37,11 +37,10 @@ kothok/dist/fonts/
 kothok/crates/kobo/measure-baseline.sh
 graphify-out/
 
-# Agentic pipeline - committed as audit trail (task history + config)
-# .agentic-tasks/ holds per-task artifacts for traceability
-# .agentic/ holds pipeline config (portable across projects)
-# docs/AGENTIC_PIPELINE.md is local-only (ignored with docs/)
-# docs/REVIEW_RULES.md is tracked (negated below) - carries learnings across clones
+# Agentic pipeline
+# .agentic-tasks/ is committed as audit trail (task history + build logs)
+# .agentic/ holds pipeline config
+kothok/.agentic-tasks/
 
 # AGENTS.md (project config, not repo code)
 AGENTS.md
@@ -59,6 +58,9 @@ release/
 
 # Local kobo-core copy for cross-build patch
 kothok/kobo-core/
+
+# Pre-commit (copy of global config, not project-specific)
+.pre-commit-config.yaml
 
 # Secrets — never commit. crates.io publish token lives in the global
 # ~/.cargo/credentials.json (created by `cargo login`), never in the repo.
