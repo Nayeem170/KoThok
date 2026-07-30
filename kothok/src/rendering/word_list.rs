@@ -3,7 +3,8 @@
 use slint::platform::software_renderer::Rgb565Pixel;
 
 use crate::rendering::chapter_list::{
-    paint_scrollbar, CH_LIST_BOTTOM_PAD, CH_LIST_TOP, CH_ROW_H, CH_ROW_PITCH, CH_ROW_X, CH_TITLE_PX,
+    paint_scrollbar, CH_LIST_BOTTOM_PAD, CH_LIST_TOP, CH_ROW_H, CH_ROW_PITCH, CH_ROW_X,
+    CH_TITLE_PX, SB_ROW_SHRINK,
 };
 use crate::rendering::common::rgb565_as_bytes;
 use crate::rendering::draw::{fill_rounded_rect, measure_text, truncate_to_width};
@@ -148,6 +149,7 @@ pub fn paint_word_list(
     scroll: i32,
     body_px: f32,
     selected_word: usize,
+    dragging: bool,
 ) {
     let w = crate::w();
     let h = crate::h();
@@ -162,14 +164,14 @@ pub fn paint_word_list(
     }
     let buf_bytes = rgb565_as_bytes(buf);
     let lh = text_render::line_height(body_px) as i32;
-    let row_w = (w as i32 - 2 * CH_ROW_X) as usize;
+    let row_w = (w as i32 - 2 * CH_ROW_X - SB_ROW_SHRINK) as usize;
     let title_max_w = row_w;
     for (i, word) in words.iter().enumerate() {
         let y = CH_LIST_TOP + (i as i32) * CH_ROW_PITCH - scroll;
         if y < CH_LIST_TOP || y + CH_ROW_H > list_bottom {
             continue;
         }
-        let selected = i == selected_word;
+        let selected = selected_word != usize::MAX && i == selected_word;
         let (fill, border) = if selected {
             (INK, TAB_BORDER)
         } else {
@@ -202,7 +204,7 @@ pub fn paint_word_list(
             h,
         );
     }
-    paint_scrollbar(buf_bytes, w, h, words.len(), scroll);
+    paint_scrollbar(buf_bytes, w, h, words.len(), scroll, dragging);
 }
 
 pub fn word_list_hit_test(tap_y: i32, scroll: i32, word_count: usize) -> Option<usize> {

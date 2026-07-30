@@ -25,6 +25,7 @@ pub struct Callbacks {
     pub play_toggle_cell: Rc<Cell<bool>>,
     pub chapter_panel_cell: Rc<Cell<bool>>,
     pub chapter_select_cell: Rc<Cell<Option<usize>>>,
+    pub word_open_cell: Rc<Cell<bool>>,
     pub jump_to_reading_cell: Rc<Cell<bool>>,
     pub font_pending_val: Rc<Cell<Option<i32>>>,
     pub font_last_change: Rc<Cell<Option<std::time::Instant>>>,
@@ -40,12 +41,14 @@ pub struct Callbacks {
 struct ChapterCells {
     panel_cell: Rc<Cell<bool>>,
     select_cell: Rc<Cell<Option<usize>>>,
+    word_open_cell: Rc<Cell<bool>>,
     jump_cell: Rc<Cell<bool>>,
 }
 
 fn register_chapter(reader: &Reader, panel_open_cell: &Rc<Cell<bool>>) -> ChapterCells {
     let panel_cell = Rc::new(Cell::new(false));
     let select_cell = Rc::new(Cell::new(None::<usize>));
+    let word_open_cell = Rc::new(Cell::new(false));
     let jump_cell = Rc::new(Cell::new(false));
 
     let cp_jtr = jump_cell.clone();
@@ -62,11 +65,16 @@ fn register_chapter(reader: &Reader, panel_open_cell: &Rc<Cell<bool>>) -> Chapte
     });
 
     let cp_ch_sel = select_cell.clone();
+    let cp_word_open = word_open_cell.clone();
     let reader_clone = reader.as_weak();
-    reader.on_chapter_selected(move |idx: i32| {
+    reader.on_chapter_selected(move |idx: i32, tab: i32| {
         let Some(reader) = reader_clone.upgrade() else {
             return;
         };
+        if tab == 1 {
+            cp_word_open.set(true);
+            return;
+        }
         let idx = idx as usize;
         if idx < reader.get_toc_row_count() as usize {
             reader.set_chapter_overlay_open(false);
@@ -80,6 +88,7 @@ fn register_chapter(reader: &Reader, panel_open_cell: &Rc<Cell<bool>>) -> Chapte
     ChapterCells {
         panel_cell,
         select_cell,
+        word_open_cell,
         jump_cell,
     }
 }
@@ -231,6 +240,7 @@ pub fn register(reader: &Reader) -> Callbacks {
         play_toggle_cell,
         chapter_panel_cell: chapter.panel_cell,
         chapter_select_cell: chapter.select_cell,
+        word_open_cell: chapter.word_open_cell,
         jump_to_reading_cell: chapter.jump_cell,
         font_pending_val,
         font_last_change,

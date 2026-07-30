@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (c) 2026 Nayeem Bin Ahsan
 use super::*;
+use crate::rendering::chapter_list::CH_LIST_BOTTOM_PAD;
 use crate::rendering::common::rgb565_as_bytes_ref;
 
 pub(super) fn on_release(
@@ -21,6 +22,13 @@ pub(super) fn on_release(
     if st.shot_armed {
         st.shot_armed = false;
         st.shot_done = false;
+        return;
+    }
+
+    if st.sb_dragging {
+        st.sb_dragging = false;
+        st.text_dirty = true;
+        ctx.window.request_redraw();
         return;
     }
 
@@ -71,6 +79,19 @@ pub(super) fn on_release(
         let (press_dx, press_dy) = touch::to_display(st.press_x, st.press_y, ctx.touch_cfg);
         let swipe_dx = dx - press_dx;
         let swipe_dy = dy - press_dy;
+        if reader.get_chapter_overlay_open() {
+            if st.press_dispatched {
+                st.press_dispatched = false;
+                ctx.window
+                    .window()
+                    .dispatch_event(slint::platform::WindowEvent::PointerReleased {
+                        position: slint::LogicalPosition::new(dx, dy),
+                        button: slint::platform::PointerEventButton::Left,
+                    });
+            }
+            chapter_overlay_release(st, ctx, dx, dy, swipe_dx, swipe_dy);
+            return;
+        }
         if st.press_dispatched {
             st.press_dispatched = false;
             ctx.window
@@ -144,33 +165,6 @@ pub(super) fn on_release(
                         cb.page_delta.set(cb.page_delta.get() - 1);
                     }
                     _ => {}
-                }
-            }
-            if reader.get_chapter_overlay_open() {
-                // The tab bar, the word list and the search results all live in
-                // the same overlay, so their release handler runs first: a tap
-                // on [Chapters]/[Words]/[X] must not also fall through to the
-                // chapter-row hit test below.
-                if search::handle_search_release(st, ctx, dx, dy) {
-                    return;
-                }
-                match gesture::chapter_overlay_target(
-                    dy,
-                    swipe_dy,
-                    swipe_dx,
-                    st.chapter_scroll,
-                    st.toc_rows.len(),
-                ) {
-                    gesture::ChapterOverlayAction::Scroll => {
-                        st.text_dirty = true;
-                        ctx.window.request_redraw();
-                    }
-                    gesture::ChapterOverlayAction::Select(idx) => {
-                        reader.set_chapter_preview_idx(idx as i32);
-                        st.text_dirty = true;
-                        ctx.window.request_redraw();
-                    }
-                    gesture::ChapterOverlayAction::None => {}
                 }
             }
         } else if !st.picker_active {
@@ -339,6 +333,76 @@ pub(super) fn on_release(
             cb.picker_scroll_delta
                 .set(cb.picker_scroll_delta.get() + delta);
         }
+    }
+}
+
+fn chapter_overlay_release(
+    st: &mut LoopState,
+    ctx: &mut LoopContext,
+    dx: f32,
+    dy: f32,
+    swipe_dx: f32,
+    swipe_dy: f32,
+) {
+    let reader = ctx.reader;
+    let cb = ctx.cb;
+    let list_bottom = (ctx.h as f32) - CH_LIST_BOTTOM_PAD as f32;
+    if dy >= list_bottom {
+        if st.search_results_active {
+            if st.search_result_selected {
+                let idx = st.search_selected_result;
+                search::jump_to_occurrence(st, reader, ctx.cmd_tx, idx);
+                ctx.window.request_redraw();
+            }
+            return;
+        }
+        if st.chapter_tab == crate::loop_state::ChapterTab::Words {
+            if st.search_word_selected {
+                st.search_results_active = true;
+                st.search_results_scroll = 0;
+                st.text_dirty = true;
+                ctx.window.request_redraw();
+            }
+        } else {
+            let preview = reader.get_chapter_preview_idx();
+            let idx = if preview >= 0 {
+                preview as usize
+            } else {
+                match crate::rendering::chapter_list::current_toc_row(
+                    &st.toc_rows,
+                    st.current_chapter,
+                ) {
+                    Some(i) => i,
+                    None => return,
+                }
+            };
+            reader.set_chapter_overlay_open(false);
+            reader.set_chapter_preview_idx(-1);
+            cb.chapter_select_cell.set(Some(idx));
+            st.text_dirty = true;
+        }
+        return;
+    }
+    if search::handle_search_release(st, ctx, dx, dy) {
+        return;
+    }
+    match gesture::chapter_overlay_target(
+        dy,
+        swipe_dy,
+        swipe_dx,
+        st.chapter_scroll,
+        st.toc_rows.len(),
+    ) {
+        gesture::ChapterOverlayAction::Scroll => {
+            st.text_dirty = true;
+            ctx.window.request_redraw();
+        }
+        gesture::ChapterOverlayAction::Select(idx) => {
+            reader.set_chapter_preview_idx(idx as i32);
+            st.text_dirty = true;
+            ctx.window.request_redraw();
+        }
+        gesture::ChapterOverlayAction::None => {}
     }
 }
 

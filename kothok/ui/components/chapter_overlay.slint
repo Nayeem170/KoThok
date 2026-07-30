@@ -10,7 +10,9 @@ export component ChapterOverlay inherits Rectangle {
     in property <color> brand-red: #F42A41;
     in property <color> track-color: #d0d0d0;
 
-    callback chapter-selected(int);
+    in-out property <int> active-tab: 0;
+
+    callback chapter-selected(int, int);
     callback close-to-book();
 
     visible: root.visible-flag;
@@ -71,7 +73,7 @@ export component ChapterOverlay inherits Rectangle {
             label: "Open";
             font-size: 32px;
             clicked => {
-                root.chapter-selected(root.chapter-preview-idx >= 0 ? root.chapter-preview-idx : root.current-chapter-idx);
+                root.chapter-selected(root.chapter-preview-idx >= 0 ? root.chapter-preview-idx : root.current-chapter-idx, root.active-tab);
             }
         }
     }
