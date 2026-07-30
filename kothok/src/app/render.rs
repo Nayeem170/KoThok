@@ -4,7 +4,7 @@ use slint::platform::software_renderer::Rgb565Pixel;
 
 use log::info;
 
-use crate::loop_state::{LoopContext, LoopState};
+use crate::loop_state::{ChapterTab, LoopContext, LoopState};
 use crate::rendering::common::rgb565_as_bytes_ref;
 use crate::rendering::fb::{diff_rows, waveform_for, RenderScenario, WAVE_A2, WAVE_GC16};
 use crate::rendering::layout::{self, PAD_TOP};
@@ -118,16 +118,71 @@ pub fn render_and_present(
                 st.buffer[strip_start..ctx.h * ctx.w].fill(Rgb565Pixel(0xFFFF));
             }
         } else if chapter_overlay {
-            let current_row =
-                crate::rendering::render::current_toc_row(&st.toc_rows, st.current_chapter)
-                    .unwrap_or(0) as i32;
-            crate::rendering::render::paint_chapter_list(
-                &mut st.buffer,
-                &st.toc_rows,
-                st.chapter_scroll,
-                ctx.reader.get_chapter_preview_idx(),
-                current_row,
-            );
+            if chapter_overlay != st.prev_chapter_overlay {
+                info!(
+                    "overlay: paint tab={:?} results={} words={} band={}..{}",
+                    st.chapter_tab,
+                    st.search_results_active,
+                    st.word_index.words.len(),
+                    crate::rendering::word_list::TAB_BAR_TOP,
+                    crate::rendering::chapter_list::CH_LIST_TOP,
+                );
+            }
+            if st.search_results_active {
+                let word = st
+                    .word_index
+                    .words
+                    .get(st.search_selected_word)
+                    .map(|s| s.as_str())
+                    .unwrap_or("");
+                let hits = st
+                    .word_index
+                    .occurrences
+                    .get(st.search_selected_word)
+                    .map(|h| h.as_slice())
+                    .unwrap_or(&[]);
+                let total = hits.len();
+                crate::rendering::search_results::paint_search_results(
+                    &mut st.buffer,
+                    word,
+                    hits,
+                    &st.chapters,
+                    st.search_results_scroll,
+                    st.body_px,
+                    total,
+                );
+            } else if st.chapter_tab == ChapterTab::Words {
+                crate::rendering::word_list::paint_tab_bar(
+                    &mut st.buffer,
+                    ctx.w,
+                    ctx.h,
+                    st.chapter_tab,
+                );
+                crate::rendering::word_list::paint_word_list(
+                    &mut st.buffer,
+                    &st.word_index.words,
+                    st.search_scroll,
+                    st.body_px,
+                    st.search_selected_word,
+                );
+            } else {
+                crate::rendering::word_list::paint_tab_bar(
+                    &mut st.buffer,
+                    ctx.w,
+                    ctx.h,
+                    st.chapter_tab,
+                );
+                let current_row =
+                    crate::rendering::render::current_toc_row(&st.toc_rows, st.current_chapter)
+                        .unwrap_or(0) as i32;
+                crate::rendering::render::paint_chapter_list(
+                    &mut st.buffer,
+                    &st.toc_rows,
+                    st.chapter_scroll,
+                    ctx.reader.get_chapter_preview_idx(),
+                    current_row,
+                );
+            }
         }
         // Marker fast path: refresh ONLY the box the marker moved through, with A2.
         //

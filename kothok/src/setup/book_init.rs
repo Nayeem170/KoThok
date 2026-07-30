@@ -7,6 +7,7 @@ use crate::capabilities::KoboCapabilities;
 use crate::data::config::AppConfig;
 use crate::data::library::{self, EpubEntry};
 use crate::data::persistence::{self, POSITIONS_FILE};
+use crate::data::word_index::WordIndex;
 use crate::rendering::common::rgb565_as_bytes_ref;
 use crate::rendering::fb::{Fb, WAVE_GC16};
 use crate::rendering::layout::{ChapterState, OffsetComputation, PAD_TOP};
@@ -93,6 +94,7 @@ pub(super) type BookInit = (
     Option<crate::Bookmark>,
     Option<std::time::Instant>,
     Vec<library::FlatTocRow>,
+    WordIndex,
 );
 
 pub(super) fn init_book(
@@ -104,7 +106,7 @@ pub(super) fn init_book(
 ) -> (Option<BookInit>, Option<PickerInit>) {
     let reader = &setup.reader;
     let book_path = initial_path.clone().unwrap_or_default();
-    let (loaded_chapters, book_lang, toc_tree) = initial_path
+    let (loaded_chapters, book_lang, toc_tree, word_index) = initial_path
         .as_ref()
         .and_then(|p| library::open_book(p))
         .unwrap_or_else(|| {
@@ -112,6 +114,7 @@ pub(super) fn init_book(
                 vec![Chapter::from_xhtml(0, None, SAMPLE_CHAPTER)],
                 None,
                 Vec::new(),
+                Default::default(),
             )
         });
 
@@ -176,7 +179,7 @@ pub(super) fn init_book(
     let session = crate::book_session::open_book_session(
         &mut chapters_mut,
         &pos,
-        &mut setup.cfg,
+        &setup.cfg,
         setup.body_px,
         setup.head_px,
         setup.line_h,
@@ -265,6 +268,7 @@ pub(super) fn init_book(
             initial_bookmark,
             None,
             toc_rows,
+            word_index,
         )),
         None,
     )

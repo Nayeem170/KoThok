@@ -15,11 +15,19 @@ use crate::callbacks::Callbacks;
 use crate::capabilities::KoboCapabilities;
 use crate::data::config::AppConfig;
 use crate::data::library::{EpubEntry, FlatTocRow};
+use crate::data::word_index::WordIndex;
 use crate::device::touch::TouchConfig;
 use crate::rendering::fb::Fb;
 use crate::rendering::layout::{ChapterState, OffsetComputation};
 use crate::rendering::render::{CoverCache, GridCell, LibraryFilter};
 use crate::{Bookmark, Reader, SystemState, ViewMode};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ChapterTab {
+    #[default]
+    Chapters,
+    Words,
+}
 
 pub struct LoopState {
     pub current_chapter: usize,
@@ -62,6 +70,16 @@ pub struct LoopState {
     pub cover_page_visible: bool,
     pub chapter_scroll: i32,
     pub press_chapter_scroll: i32,
+
+    pub word_index: WordIndex,
+    pub chapter_tab: ChapterTab,
+    pub search_scroll: i32,
+    pub search_results_active: bool,
+    pub search_results_scroll: i32,
+    pub search_selected_word: usize,
+    pub press_search_scroll: i32,
+    pub press_search_results_scroll: i32,
+
     pub bt_fail_count: u32,
     pub text_dirty: bool,
 

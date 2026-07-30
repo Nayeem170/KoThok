@@ -132,7 +132,7 @@ fn open_book_returns_chapters_from_fixture() {
             "<p>Second chapter.</p>",
         ],
     );
-    let (chapters, lang, _toc) =
+    let (chapters, lang, _toc, _idx) =
         open_book(path.to_str().unwrap()).expect("fixture epub must open via open_book");
     assert_eq!(chapters.len(), 2);
     assert!(chapters[0].text.contains("First chapter body."));
@@ -145,7 +145,7 @@ fn open_book_detects_bengali_from_fixture() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("bn.epub");
     write_fixture_epub(&path, &["<p>এটি একটি বাংলা বই যার অনেক শব্দ আছে।</p>"]);
-    let (chapters, lang, _toc) = open_book(path.to_str().unwrap()).unwrap();
+    let (chapters, lang, _toc, _idx) = open_book(path.to_str().unwrap()).unwrap();
     assert_eq!(chapters.len(), 1);
     assert_eq!(
         lang.as_deref(),
@@ -288,7 +288,7 @@ fn welcome_epub_opens_and_has_expected_chapters() {
         eprintln!("welcome.epub not found at {epub} - run package/make-tutorial.ps1");
         return;
     }
-    let (chapters, lang, toc) =
+    let (chapters, lang, toc, _idx) =
         open_book(&epub).expect("welcome.epub must open via open_book");
     assert_eq!(chapters.len(), 16, "guide must have 16 chapters");
     assert_eq!(lang.as_deref(), Some("en"));

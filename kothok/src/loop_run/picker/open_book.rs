@@ -34,15 +34,17 @@ pub(super) fn open_book_from_picker(
     show_status(reader, window, fb, w, h, st, "Opening...");
 
     let t0 = std::time::Instant::now();
-    let (loaded_chapters, book_lang, toc_tree) = open_book(&book_path)
-        .filter(|(c, _, _)| !c.is_empty())
+    let (loaded_chapters, book_lang, toc_tree, word_index) = open_book(&book_path)
+        .filter(|(c, _, _, _)| !c.is_empty())
         .unwrap_or_else(|| {
             (
                 vec![Chapter::from_xhtml(0, None, SAMPLE_CHAPTER)],
                 None,
                 Vec::new(),
+                Default::default(),
             )
         });
+    st.word_index = word_index;
     log::info!("perf: open_book {}ms", t0.elapsed().as_millis());
     st.chapters = loaded_chapters;
     st.toc_rows = crate::data::library::toc_rows(&toc_tree, &st.chapters);
@@ -85,7 +87,7 @@ pub(super) fn open_book_from_picker(
         show_status(reader, window, fb, w, h, st, &status);
     }
     log::info!("perf: ensure_font {}ms", t1.elapsed().as_millis());
-    apply_book_voice(cfg, book_lang.as_deref(), reader, Some(&cmd_tx));
+    apply_book_voice(cfg, book_lang.as_deref(), reader, Some(cmd_tx));
     st.chapter_count = st.chapters.len();
     reader.set_chapter_count(st.chapter_count as i32);
     reader.set_toc_row_count(st.toc_rows.len().max(1) as i32);
@@ -211,14 +213,14 @@ pub(super) fn open_book_from_picker(
         st.prev_buffer.copy_from_slice(&st.buffer);
         st.prev_view_mode = st.view_mode;
         if audio {
-            crate::audio::glue::load_chapter_audio(&st.state, &cmd_tx);
+            crate::audio::glue::load_chapter_audio(&st.state, cmd_tx);
             let off = reader.get_cur_start().max(0) as usize;
             if off > 0 {
                 let idx = crate::audio::glue::utterance_index_for_offset(&st.state.utterances, off);
-                crate::audio::glue::best_effort_send(&cmd_tx, Cmd::Seek(idx));
+                crate::audio::glue::best_effort_send(cmd_tx, Cmd::Seek(idx));
             }
         } else {
-            load_page_audio(st.current_page, &st.state, &cmd_tx);
+            load_page_audio(st.current_page, &st.state, cmd_tx);
         }
         reader.set_status("".into());
     }
