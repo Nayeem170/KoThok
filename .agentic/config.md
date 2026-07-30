@@ -2,10 +2,10 @@
 
 ## Pipeline mode
 
-# Worktree mode is activated only when the user explicitly requests it
-# (parallel work, multiple tickets, or "use worktree mode"). Otherwise,
-# the pipeline always runs in direct mode. There is no config field to
-# pre-select worktree.
+# Default: direct (orchestrator IS the developer in the current session).
+# Worktree: coordinator spawns developer (worktree) + reviewer (local).
+# Activated when the user's command/request mentions worktree, parallel,
+# or multiple tickets. Not a config field -- detected from the prompt.
 
 reviewer_id = azure-foundry/claude-sonnet-5
 reviewer_variant = high

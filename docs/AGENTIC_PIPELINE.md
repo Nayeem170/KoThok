@@ -33,7 +33,7 @@ Two pipeline types:
 
 ## Pipeline modes
 
-The pipeline runs in one of two modes. Direct is the default. Worktree is activated only when the user explicitly requests it (parallel work, multiple tickets, or "use worktree mode").
+The pipeline runs in one of two modes. Direct is the default. Worktree activates when the user's command mentions worktree, parallel work, or multiple tickets.
 
 ### Direct mode (default)
 
@@ -63,7 +63,7 @@ Constraint: Agent Manager subagents cannot spawn their own subagents. The coordi
 
 ### How mode is chosen
 
-At startup, if the user explicitly requests parallel work, multiple tickets, or worktree mode, the pipeline uses worktree. Otherwise, it uses direct. There is no config field to pre-select worktree -- the user must ask for it each time.
+At startup, the pipeline inspects the user's command/request. If it mentions worktree, parallel work, multiple tickets, or similar terms, the pipeline uses worktree. Otherwise, it defaults to direct. No config field controls this -- it's detected from the prompt.
 
 **Mode is fixed at Step 0.** Once the pipeline starts, `pipeline_mode` is written to `state.md`. If someone edits `config.md` mid-ticket, the pipeline ignores the change and uses the `state.md` value. This prevents a silent architecture switch during a resumed session.
 

@@ -78,8 +78,8 @@ pipeline_mode
 ```
 
 `pipeline_mode` is kilo-only. Worktree is activated in both implementations
-only when the user explicitly requests it (parallel work, multiple tickets,
-or "use worktree mode"). There is no config field to pre-select worktree.
+when the user's command mentions worktree, parallel work, or multiple tickets.
+No config field controls this -- it's detected from the prompt.
 
 To change the reviewer model here, edit `model:` in
 `.claude/agents/pipeline-reviewer.md` (`opus`, `sonnet`, or `haiku`).
