@@ -1,12 +1,19 @@
 # Pipeline configuration
 
-## Models
+## Pipeline mode
 
-# Current session IS the developer. No separate developer model needed.
-# The orchestrator runs as the developer in the current session.
+# direct: orchestrator IS the developer (single-session, default)
+# worktree: coordinator spawns developer (worktree) + reviewer (local)
+pipeline_mode = direct
 
 reviewer_id = azure-foundry/claude-sonnet-5
 reviewer_variant = high
+
+# worktree mode only: model/variant for the developer worktree session
+# direct mode does not use these (current session IS the developer)
+# Note: zai/glm-5-turbo supports low/medium/high variants. xhigh is only on kilo provider.
+developer_id = zai/glm-5-turbo
+developer_variant = high
 
 ## Commands
 
@@ -54,6 +61,8 @@ per_loop_cap_exit: present to user. User chooses: accept as-is (phase complete),
 
 deploy = User runs deploy-usb.ps1 or deploys via USB mount
 
-## Mock format
+## Pencil
 
-mock_format = html
+pen_cli = pen
+(pen.dev CLI binary name. Requires pen login or PEN_CLI_KEY env var.)
+(PEN_CLI_KEY must only exist in the user environment, never committed to git.)

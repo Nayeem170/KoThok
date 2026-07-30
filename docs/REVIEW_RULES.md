@@ -54,7 +54,7 @@ Format: `[source] rule text`
 
 ## Learned rules
 
-- [feat/word-list-select-open-flow|0] UI mocks must be HTML/CSS files (mock.html), not ASCII art. Render the screens as styled HTML matching the device layout, colors, and dimensions. Include interactive states (hover, selected, disabled).
+- [feat/word-list-select-open-flow|0] UI mocks use Pencil CLI (pen.dev) by default. Read `pen_cli` from `.agentic/config.md` for the binary name (default: `pen`). Write mock.md with device dimensions, prompt, design decisions, interactive states. Generate with `<pen_cli> --out mock.pen --prompt-file mock.md --enable-preview`. Export preview with `<pen_cli> --in mock.pen --export mock-preview.png`. If Pencil unavailable, fall back to mock.html with device dimensions.
 <!-- Format: [task-name|0] rule description (counter starts at 0, reset when rule triggers feedback, incremented at end of each task) -->
 <!-- Only add a rule when the same feedback has been given more than once. -->
 

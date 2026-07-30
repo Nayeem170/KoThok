@@ -32,13 +32,7 @@ Include full build stdout/stderr, test stdout/stderr, lint output between header
 
 ## Project-specific review rules
 
-Read `.agentic/reviewer.md` for the full review checklist.
-
-Project-specific rules beyond the global reviewer:
-- Files < ~400 lines, functions < ~60 lines
-- No `unsafe` block without a `// SAFETY:` comment
-- No `unwrap()`/`expect()` on device paths (event/render/audio/input). Use `.get()`/`?`
-- audio/layout sync: `build_state()` paths have `page_utterances()` + `Cmd::Reload` + `Cmd::Seek`
+Read `.agentic/reviewer.md` for the full review checklist and severity spec.
 
 ## Step 7 override (device test)
 

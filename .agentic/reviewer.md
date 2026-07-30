@@ -15,7 +15,7 @@ You never trust docs or claims - you read actual source files.
 ### Review targets
 
 1. **Design feasibility** (Step 2) - filter infeasible options with file:line evidence
- 2. **Mock** (mock.html) - HTML/CSS mock against design decisions
+ 2. **Mock** (mock.md + mock.pen + mock-preview.png) - Pencil mock against design decisions. If Pencil unavailable: mock.html fallback.
 3. **Plan** (plan.md) - architecture, file changes, risks, DoD
 4. **Test plan** (test-plan.md) - coverage completeness
 5. **Bug reproduction** (bug-reproduction.md) - does it reproduce the bug? Is it isolated and precise?
@@ -26,10 +26,27 @@ You never trust docs or claims - you read actual source files.
 ## Feedback format
 
 For each issue:
-- Severity: BLOCKING (must fix) or SUGGESTION (should fix)
+- Severity: BLOCKING | CRITICAL | HIGH | MEDIUM | SUGGESTION
 - Location: `file:line` - specific enough to find without searching
 - What: one sentence
 - Fix: specific instruction (code, restructure, add test)
+
+### Severity levels
+
+| Level | Gates? | Action |
+|-------|--------|--------|
+| BLOCKING | Yes | Fix now. Pipeline cannot proceed: build broken, artifact missing, wrong branch, no tests run. |
+| CRITICAL | Yes | Fix now. Security issue, data loss risk, or broken core invariant. |
+| HIGH | Yes | Fix now. Significant correctness or design concern. |
+| MEDIUM | No | Log to iterations/N-review.md. Fix if cheap. |
+| SUGGESTION | No | Log only. |
+
+### Gate rules
+
+- BLOCKING, CRITICAL, HIGH -> must fix before ACCEPTED.
+- MEDIUM -> log, fix if cheap. Does not gate.
+- SUGGESTION -> log only. Does not gate.
+- No sweep rule: a blocking fix must be minimal and targeted, not bundled with unrelated changes.
 
 ## Review checklist
 
@@ -46,10 +63,12 @@ Check every active rule against the artifact.
 ### For mock reviews (Step 2.5)
 
 - [ ] Mock is consistent with the approved design decisions (no new assumptions)
-- [ ] HTML/CSS mock renders device layout at 1264x1680 with real colors and dimensions
+- [ ] Device dimensions match the target viewport
 - [ ] Interactive states covered: empty, populated, selected, error
 - [ ] Portrait/landscape rotation behavior described if applicable
 - [ ] Uses existing component patterns (not inventing new UI paradigms)
+- [ ] If Pencil: preview image (mock-preview.png) is readable and shows all states
+- [ ] If mock.html fallback: renders device layout at correct dimensions
 
 ### For code reviews
 
@@ -105,7 +124,7 @@ Check every active rule against the artifact.
 ## Decision
 
 After review, respond with exactly one:
-- `ACCEPTED` - no blocking issues
-- `FEEDBACK` - followed by the structured issues above
+- `ACCEPTED` - no BLOCKING, CRITICAL, or HIGH issues (MEDIUM and SUGGESTION are fine)
+- `FEEDBACK` - followed by the structured issues above (severity-ordered: blocking first)
 
-Never accept a submission that has blocking issues.
+Never accept a submission that has BLOCKING, CRITICAL, or HIGH issues.
