@@ -8,12 +8,17 @@ export component ChapterOverlay inherits Rectangle {
     in property <color> text-primary: #111111;
     in property <color> text-secondary: #666666;
     in property <color> brand-red: #F42A41;
+    in property <color> brand-green: #006A4E;
     in property <color> track-color: #d0d0d0;
 
     in-out property <int> active-tab: 0;
+    in-out property <bool> results-active: false;
+    in-out property <string> results-title: "";
 
     callback chapter-selected(int, int);
     callback close-to-book();
+    callback tab-switch(int);
+    callback back-from-results();
 
     visible: root.visible-flag;
     background: #ffffff;
@@ -25,33 +30,95 @@ export component ChapterOverlay inherits Rectangle {
         height: root.height;
     }
 
-    // Shared header geometry: 110px tall, 76px buttons, 23px edge padding.
+    // Header: 110px tall, 76px buttons, 23px edge padding.
+    // Right cluster (right-to-left): toggle | pipe | close/back
+    // Title centred with 240px margins to clear the cluster.
     Rectangle {
         y: 0px; height: 110px; width: root.width;
         background: #ffffff;
 
+        // Title centred in 240px margins.
+        // Hidden in results mode (replaced by results-title below).
+        if !root.results-active : Text {
+            x: 240px; width: root.width - 480px; height: 110px;
+            text: root.active-tab == 0 ? "Chapters" : "Words";
+            color: root.text-primary;
+            font-size: 33px; font-weight: 700;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+
+        // Results context title (centred, same geometry, shown only in results mode).
+        if root.results-active : Text {
+            x: 240px; width: root.width - 480px; height: 110px;
+            text: root.results-title;
+            color: root.text-secondary;
+            font-size: 33px; font-weight: 700;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+
+        // Right cluster, stacked right-to-left from 23px edge:
+        // close|back (76px) + gap(19px) + pipe(3px) + gap(19px) + toggle(76px) = 193px from edge
+
+        // Close/back button (far right). Dual purpose:
+        // - Normal mode: close overlay
+        // - Results mode: back from results (return to word list)
         ActionButton {
-            x: 23px; y: 17px;
+            x: root.width - 99px; y: 17px;
             width: 76px; height: 76px;
-            icon: @image-url("assets/back.svg");
+            icon: root.results-active
+                ? @image-url("assets/back.svg")
+                : @image-url("assets/close.svg");
             bg: root.brand-red;
             radius: 38px;
             clicked => {
                 root.chapter-preview-idx = -1;
                 root.chapter-pending = -1;
-                root.visible-flag = false;
-                root.close-to-book();
+                if root.results-active {
+                    root.back-from-results();
+                } else {
+                    root.visible-flag = false;
+                    root.close-to-book();
+                }
             }
         }
 
-        Text {
-            text: "Chapters";
-            color: root.text-secondary; font-size: 33px; font-weight: 700;
-            horizontal-alignment: center; vertical-alignment: center;
-            x: 119px; width: root.width - 238px; height: 110px;
-            overflow: elide;
+        // Pipe separator. Hidden in results mode.
+        if !root.results-active : Rectangle {
+            x: root.width - 121px; y: 30px;
+            width: 3px; height: 50px;
+            background: root.track-color;
+            border-radius: 1.5px;
         }
 
+        // Toggle button (chapters <-> words). Green circle.
+        // Icon shows the *target* tab, not the current one.
+        // Hidden in results mode.
+        if !root.results-active : ActionButton {
+            x: root.width - 216px; y: 17px;
+            width: 76px; height: 76px;
+            icon: root.active-tab == 0
+                ? @image-url("assets/words.svg")
+                : @image-url("assets/chapters.svg");
+            bg: root.brand-green;
+            radius: 38px;
+            clicked => {
+                root.chapter-preview-idx = -1;
+                root.chapter-pending = -1;
+                if root.active-tab == 0 {
+                    root.active-tab = 1;
+                    root.tab-switch(1);
+                } else {
+                    root.active-tab = 0;
+                    root.tab-switch(0);
+                }
+            }
+        }
+
+        // Bottom rule at y=107.
         Rectangle {
             y: 107px; height: 3px; width: root.width;
             background: root.track-color;

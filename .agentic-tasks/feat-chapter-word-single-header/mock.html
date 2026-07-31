@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Single Header Redesign - 3 Options (with tabs)</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+
+body{
+  font-family:'Courier New',Courier,monospace;
+  background:#f0ece4;
+  color:#333;
+  padding:32px 20px;
+  min-height:100vh;
+}
+
+.page-header{text-align:center;margin-bottom:4px}
+.page-header h1{font-size:15px;font-weight:700;letter-spacing:1px;text-transform:uppercase}
+.page-header .sub{font-size:10px;color:#888;margin-top:4px}
+
+.option-header{
+  margin:28px 0 12px;padding:10px 16px;
+  background:#fff;border-left:3px solid #000;
+  font-size:12px;font-weight:700;
+}
+.option-header .label{font-size:14px;text-transform:uppercase;letter-spacing:1px}
+.option-header .desc{font-size:10px;color:#666;margin-top:4px;font-weight:400;line-height:1.4}
+
+.toggle-bar{text-align:center;margin:12px 0 20px}
+.toggle-btn{
+  font-family:inherit;font-size:10px;padding:4px 14px;
+  border:1px solid #999;background:#fff;cursor:pointer;
+  transition:background .15s,color .15s
+}
+.toggle-btn.on{background:#000;color:#fff;border-color:#000}
+
+.flow{
+  display:flex;align-items:flex-start;justify-content:center;
+  flex-wrap:nowrap;margin:0 auto 8px;padding:0 10px;
+  overflow-x:auto
+}
+
+.screen-col{display:flex;flex-direction:column;align-items:center;flex-shrink:0}
+
+.screen-label{
+  font-size:10px;font-weight:700;text-align:center;margin-bottom:5px;
+  max-width:220px;line-height:1.3;color:#444
+}
+
+.screen-frame{
+  width:202px;height:269px;overflow:hidden;
+  border:1px solid #bbb;position:relative;background:#fff;cursor:pointer;
+  transition:box-shadow .2s,border-color .2s
+}
+.screen-frame:hover{z-index:10;box-shadow:0 6px 28px rgba(0,0,0,.18);border-color:#666}
+
+.screen-inner{
+  width:632px;height:840px;
+  transform:scale(0.32);transform-origin:top left;
+  position:absolute;top:0;left:0;
+  transition:transform .2s ease;
+  font-family:'Courier New',Courier,monospace;
+}
+
+.screen-frame:hover .screen-inner{transform:scale(0.55)}
+
+.state-note{
+  font-size:9px;margin-top:5px;text-align:center;
+  max-width:220px;color:#777;line-height:1.4
+}
+
+/* ---- Shared: single 110px header band ---- */
+.single-header{
+  position:absolute;top:0;left:0;right:0;height:110px;
+  background:#fff;
+  border-bottom:1px solid #ddd;
+}
+
+/* Back button (red circle) */
+.back-btn{
+  position:absolute;left:23px;top:17px;
+  width:76px;height:76px;border-radius:38px;
+  background:#F42A41;
+  display:flex;align-items:center;justify-content:center;
+}
+.back-btn span{font-size:24px;color:#fff;font-weight:700}
+
+/* Close button (gray circle) */
+.close-btn{
+  position:absolute;right:23px;top:17px;
+  width:76px;height:76px;border-radius:38px;
+  background:#e8e6e2;
+  display:flex;align-items:center;justify-content:center;
+}
+.close-btn span{font-size:24px;color:#666;font-weight:700}
+
+/* Tab pills (picker language) */
+.tab{
+  height:36px;display:inline-flex;align-items:center;justify-content:center;
+  font-size:12px;border-radius:18px;
+  padding:0 20px;cursor:pointer;white-space:nowrap;line-height:1;
+  font-weight:700;letter-spacing:.3px
+}
+.tab.active{background:#000;color:#fff}
+.tab.inactive{background:#fff;color:#000;border:1.5px solid #444}
+
+/* Context title */
+.context-title{
+  font-size:16px;font-weight:700;color:#666;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  position:absolute;top:0;height:110px;
+  display:flex;align-items:center;
+}
+
+/* Shared list styles */
+.list-area{
+  position:absolute;top:110px;left:0;right:0;bottom:68px;overflow:hidden;background:#fff
+}
+
+.chapter-row{
+  position:absolute;left:40px;right:100px;
+  height:30px;border-radius:4px;
+  border:1px solid #aaa;background:#fff;
+  display:flex;align-items:center;padding:0 10px;
+  font-size:12px;color:#000;gap:10px
+}
+.chapter-row .num{opacity:.4;font-size:11px;min-width:24px}
+.chapter-row.selected{border:2px solid #000;background:#fff}
+
+.word-row{
+  position:absolute;left:40px;right:100px;
+  height:30px;border-radius:4px;
+  border:1px solid #959595;background:#fff;
+  display:flex;align-items:center;padding:0 10px;
+  font-size:12px;color:#000;gap:10px
+}
+.word-row.selected{background:#000;border-color:#444;color:#fff}
+
+.result-row{
+  position:absolute;left:40px;right:100px;
+  height:30px;border-radius:4px;
+  border:1px solid #aaa;background:#fff;
+  display:flex;align-items:center;padding:0 10px;
+  font-size:12px;color:#000;gap:10px
+}
+.result-row .ch-label{font-size:9px;color:#666;white-space:nowrap;min-width:32px;flex-shrink:0}
+.result-row .snippet{font-size:11px;color:#333;white-space:nowrap;overflow:hidden;font-family:Georgia,serif}
+
+.bottom-strip{
+  position:absolute;bottom:0;left:0;right:0;height:68px;
+  background:#fff;display:flex;align-items:center;justify-content:center
+}
+
+.open-btn{
+  height:34px;padding:0 50px;border-radius:17px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:700;letter-spacing:.5px
+}
+.open-btn.disabled{background:#ccc;color:#999}
+.open-btn.enabled{background:#000;color:#fff}
+
+.sb-track{
+  position:absolute;right:5px;top:0;width:20px;height:100%;
+  background:#D6D6D6;border-radius:10px
+}
+.sb-track .sb-thumb{
+  position:absolute;width:20px;
+  background:#959595;border-radius:10px
+}
+
+.arrow-col{
+  display:flex;flex-direction:column;align-items:center;
+  justify-content:center;padding:0 6px;flex-shrink:0;height:269px
+}
+.arrow-sym{font-size:16px;color:#aaa;line-height:1}
+.arrow-lbl{font-size:8px;color:#999;margin-top:3px;text-align:center;max-width:50px;line-height:1.3}
+
+.flow-sep{
+  width:1px;background:#ccc;margin:20px 18px;align-self:stretch;flex-shrink:0
+}
+
+.show-tt .tt{outline:2px dashed rgba(180,40,40,.55);outline-offset:-1px}
+
+.legend{
+  margin-top:28px;padding:16px 20px;border:1px solid #ddd;
+  background:#faf8f4;max-width:860px;margin-left:auto;margin-right:auto
+}
+.legend h2{font-size:11px;margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px;color:#555}
+.legend table{width:100%;border-collapse:collapse;font-size:10px}
+.legend td{padding:4px 8px;border-bottom:1px solid #eee;vertical-align:top}
+.legend td:first-child{font-weight:700;color:#555;white-space:nowrap;width:120px}
+
+.pros{color:#2a7a2a}
+.cons{color:#a03030}
+
+@media(max-width:1200px){
+  .flow{justify-content:flex-start}
+}
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>Single Header Redesign</h1>
+  <div class="sub">Kobo Libra Colour 1264 x 1680 | e-ink grayscale | hover screens to zoom</div>
+</div>
+
+<div class="toggle-bar">
+  <button class="toggle-btn" onclick="document.body.classList.toggle('show-tt');this.classList.toggle('on')">Show touch targets</button>
+</div>
+
+
+<!-- ==================== OPTION A ==================== -->
+<div class="option-header">
+  <div class="label">Option A: Back + Tabs + Close</div>
+  <div class="desc">Back button (left), tab pills (center), close button (right). The active tab replaces the title. Close always exits overlay. On results: back arrow pill replaces tabs, context text center, close exits.</div>
+</div>
+
+<div class="flow">
+<!-- A1: Chapters -->
+<div class="screen-col">
+  <div class="screen-label">A1. Chapters</div>
+  <div class="screen-frame">
+    <div class="screen-inner">
+      <div class="single-header">
+        <div class="back-btn tt"><span>&lt;</span></div>
+        <div style="position:absolute;left:119px;top:0;height:110px;display:flex;align-items:center;gap:8px;">
+          <div class="tab active tt">Chapters</div>
+          <div class="tab inactive tt">Words</div>
+        </div>
+        <div class="close-btn tt"><span>X</span></div>
+      </div>
+      <div class="list-area">
+        <div class="chapter-row tt" style="top:0"><span class="num">1.</span>Introduction</div>
+        <div class="chapter-row tt" style="top:35px"><span class="num">2.</span>Getting Started</div>
+        <div class="chapter-row selected tt" style="top:70px"><span class="num">3.</span>Core Concepts</div>
+        <div class="chapter-row tt" style="top:105px"><span class="num">4.</span>Data Structures</div>
+        <div class="chapter-row tt" style="top:140px"><span class="num">5.</span>Algorithms</div>
+        <div class="chapter-row tt" style="top:175px"><span class="num">6.</span>Networking</div>
+        <div class="chapter-row tt" style="top:210px"><span class="num">7.</span>Concurrency</div>
+        <div class="chapter-row tt" style="top:245px"><span class="num">8.</span>Conclusion</div>
+        <div class="sb-track"><div class="sb-thumb" style="top:0%;height:55%"></div></div>
+      </div>
+      <div class="bottom-strip">
+        <div class="open-btn enabled tt">Open</div>
+      </div>
+    </div>
+  </div>
+  <div class="state-note">Back = exit overlay<br>Close = exit overlay<br>Active tab = "Chapters"</div>
+</div>
+
+<div class="arrow-col">
+  <div class="arrow-sym">&rarr;</div>
+  <div class="arrow-lbl">tap<br>"Words"</div>
+</div>
+
+<!-- A2: Words -->
+<div class="screen-col">
+  <div class="screen-label">A2. Words</div>
+  <div class="screen-frame">
+    <div class="screen-inner">
+      <div class="single-header">
+        <div class="back-btn tt"><span>&lt;</span></div>
+        <div style="position:absolute;left:119px;top:0;height:110px;display:flex;align-items:center;gap:8px;">
+          <div class="tab inactive tt">Chapters</div>
+          <div class="tab active tt">Words</div>
+        </div>
+        <div class="close-btn tt"><span>X</span></div>
+      </div>
+      <div class="list-area">
+        <div class="word-row tt" style="top:0">algorithm</div>
+        <div class="word-row tt" style="top:35px">binary</div>
+        <div class="word-row tt" style="top:70px">cache</div>
+        <div class="word-row selected tt" style="top:105px">dawn</div>
+        <div class="word-row tt" style="top:140px">database</div>
+        <div class="word-row tt" style="top:175px">embedded</div>
+        <div class="word-row tt" style="top:210px">filesystem</div>
+        <div class="sb-track"><div class="sb-thumb" style="top:0%;height:55%"></div></div>
+      </div>
+      <div class="bottom-strip">
+        <div class="open-btn enabled tt">Open</div>
+      </div>
+    </div>
+  </div>
+  <div class="state-note">Back = exit overlay<br>Close = exit overlay<br>Active tab = "Words"</div>
+</div>
+
+<div class="arrow-col">
+  <div class="arrow-sym">&rarr;</div>
+  <div class="arrow-lbl">tap<br>"Open"</div>
+</div>
+
+<!-- A3: Results -->
+<div class="screen-col">
+  <div class="screen-label">A3. Results</div>
+  <div class="screen-frame">
+    <div class="screen-inner">
+      <div class="single-header">
+        <div class="back-btn tt"><span>&lt;</span></div>
+        <div class="context-title" style="left:119px;width:calc(100% - 430px);justify-content:center;">
+          "dawn" - 3 matches
+        </div>
+        <div class="close-btn tt"><span>X</span></div>
+      </div>
+      <div class="list-area">
+        <div class="result-row tt" style="top:0">
+          <span class="ch-label">Ch 1</span>
+          <span class="snippet">...the dawn of modern computing...</span>
+        </div>
+        <div class="result-row tt" style="top:35px">
+          <span class="ch-label">Ch 4</span>
+          <span class="snippet">...before dawn broke over the campus...</span>
+        </div>
+        <div class="result-row tt" style="top:70px">
+          <span class="ch-label">Ch 6</span>
+          <span class="snippet">...a new dawn in distributed systems...</span>
+        </div>
+        <div class="sb-track"><div class="sb-thumb" style="top:0%;height:55%"></div></div>
+      </div>
+      <div class="bottom-strip">
+        <div class="open-btn disabled tt">Open</div>
+      </div>
+    </div>
+  </div>
+  <div class="state-note">Back = back to word list<br>Close = exit overlay<br>Tabs replaced by context</div>
+</div>
+</div>
+
+<div class="legend">
+  <table>
+    <tr><td class="pros">Pro</td><td>Tabs are the primary way to switch. Close always exits. Back is context-aware (exit on lists, navigate-back on results). Every screen has a clear exit path.</td></tr>
+    <tr><td class="cons">Con</td><td>Back and close do the same thing on list views (both exit). Redundant but safe. Results view drops tabs, user must use back to return.</td></tr>
+  </table>
+</div>
+
+
+<!-- ==================== OPTION B ==================== -->
+<div class="option-header">
+  <div class="label">Option B: Back + Tabs (no close)</div>
+  <div class="desc">Back button (left), tab pills (center). No close button -- back always exits the overlay. On results: "< back" pill replaces tabs, context text to the right of it. Minimal chrome, one fewer button.</div>
+</div>
+
+<div class="flow">
+<!-- B1: Chapters -->
+<div class="screen-col">
+  <div class="screen-label">B1. Chapters</div>
+  <div class="screen-frame">
+    <div class="screen-inner">
+      <div class="single-header">
+        <div class="back-btn tt"><span>&lt;</span></div>
+        <div style="position:absolute;left:119px;top:0;height:110px;display:flex;align-items:center;gap:8px;">
+          <div class="tab active tt">Chapters</div>
+          <div class="tab inactive tt">Words</div>
+        </div>
+      </div>
+      <div class="list-area">
+        <div class="chapter-row tt" style="top:0"><span class="num">1.</span>Introduction</div>
+        <div class="chapter-row tt" style="top:35px"><span class="num">2.</span>Getting Started</div>
+        <div class="chapter-row selected tt" style="top:70px"><span class="num">3.</span>Core Concepts</div>
+        <div class="chapter-row tt" style="top:105px"><span class="num">4.</span>Data Structures</div>
+        <div class="chapter-row tt" style="top:140px"><span class="num">5.</span>Algorithms</div>
+        <div class="chapter-row tt" style="top:175px"><span class="num">6.</span>Networking</div>
+        <div class="chapter-row tt" style="top:210px"><span class="num">7.</span>Concurrency</div>
+        <div class="chapter-row tt" style="top:245px"><span class="num">8.</span>Conclusion</div>
+        <div class="sb-track"><div class="sb-thumb" style="top:0%;height:55%"></div></div>
+      </div>
+      <div class="bottom-strip">
+        <div class="open-btn enabled tt">Open</div>
+      </div>
+    </div>
+  </div>
+  <div class="state-note">Back = exit overlay<br>No close button</div>
+</div>
+
+<div class="arrow-col">
+  <div class="arrow-sym">&rarr;</div>
+  <div class="arrow-lbl">tap<br>"Words"</div>
+</div>
+
+<!-- B2: Words -->
+<div class="screen-col">
+  <div class="screen-label">B2. Words</div>
+  <div class="screen-frame">
+    <div class="screen-inner">
+      <div class="single-header">
+        <div class="back-btn tt"><span>&lt;</span></div>
+        <div style="position:absolute;left:119px;top:0;height:110px;display:flex;align-items:center;gap:8px;">
+          <div class="tab inactive tt">Chapters</div>
+          <div class="tab active tt">Words</div>
+        </div>
+      </div>
+      <div class="list-area">
+        <div class="word-row tt" style="top:0">algorithm</div>
+        <div class="word-row tt" style="top:35px">binary</div>
+        <div class="word-row tt" style="top:70px">cache</div>
+        <div class="word-row selected tt" style="top:105px">dawn</div>
+        <div class="word-row tt" style="top:140px">database</div>
+        <div class="sb-track"><div class="sb-thumb" style="top:0%;height:55%"></div></div>
+      </div>
+      <div class="bottom-strip">
+        <div class="open-btn enabled tt">Open</div>
+      </div>
+    </div>
+  </div>
+  <div class="state-note">Back = exit overlay<br>No close button</div>
+</div>
+
+<div class="arrow-col">
+  <div class="arrow-sym">&rarr;</div>
+  <div class="arrow-lbl">tap<br>"Open"</div>
+</div>
+
+<!-- B3: Results -->
+<div class="screen-col">
+  <div class="screen-label">B3. Results</div>
+  <div class="screen-frame">
+    <div class="screen-inner">
+      <div class="single-header">
+        <div class="back-btn tt"><span>&lt;</span></div>
+        <div style="position:absolute;left:119px;top:0;height:110px;display:flex;align-items:center;gap:8px;">
+          <div class="tab inactive tt">Words</div>
+          <div class="context-title" style="justify-content:flex-start;padding-left:12px;">"dawn" - 3 matches</div>
+        </div>
+      </div>
+      <div class="list-area">
+        <div class="result-row tt" style="top:0">
+          <span class="ch-label">Ch 1</span>
+          <span class="snippet">...the dawn of modern computing...</span>
+        </div>
+        <div class="result-row tt" style="top:35px">
+          <span class="ch-label">Ch 4</span>
+          <span class="snippet">...before dawn broke over the campus...</span>
+        </div>
+        <div class="result-row tt" style="top:70px">
+          <span class="ch-label">Ch 6</span>
+          <span class="snippet">...a new dawn in distributed systems...</span>
+        </div>
+      </div>
+      <div class="bottom-strip">
+        <div class="open-btn disabled tt">Open</div>
+      </div>
+    </div>
+  </div>
+  <div class="state-note">Back = back to word list<br>"Words" pill = back to word list<br>Context text = result count</div>
+</div>
+</div>
+
+<div class="legend">
+  <table>
+    <tr><td class="pros">Pro</td><td>Cleanest header. One button to exit (back). Tabs handle switching. "Words" pill in results gives a clear, familiar tap target to go back. Matches the existing tab bar language.</td></tr>
+    <tr><td class="cons">Con</td><td>Back exits on list views but navigates back on results -- dual behavior for one button. No explicit "close" affordance anywhere on results view. "Words" pill in results is a tab shape but acts as navigation, which could confuse.</td></tr>
+  </table>
+</div>
+
+
+<!-- ==================== OPTION C ==================== -->
+<div class="option-header">
+  <div class="label">Option C: Close (left) + Title + Tabs</div>
+  <div class="desc">Close button (left), context title (center), tab pills (right). Close always exits. On list views: title shows "Chapters" or "Words", tabs for switching. On results: title shows result count, tabs replaced by back arrow. Close is the universal exit.</div>
+</div>
+
+<div class="flow">
+<!-- C1: Chapters -->
+<div class="screen-col">
+  <div class="screen-label">C1. Chapters</div>
+  <div class="screen-frame">
+    <div class="screen-inner">
+      <div class="single-header">
+        <div class="close-btn tt" style="left:23px;right:auto;"><span>X</span></div>
+        <div class="context-title" style="left:119px;width:calc(100% - 530px);justify-content:center;">
+          Chapters
+        </div>
+        <div style="position:absolute;right:23px;top:0;height:110px;display:flex;align-items:center;gap:8px;">
+          <div class="tab active tt">Chapters</div>
+          <div class="tab inactive tt">Words</div>
+        </div>
+      </div>
+      <div class="list-area">
+        <div class="chapter-row tt" style="top:0"><span class="num">1.</span>Introduction</div>
+        <div class="chapter-row tt" style="top:35px"><span class="num">2.</span>Getting Started</div>
+        <div class="chapter-row selected tt" style="top:70px"><span class="num">3.</span>Core Concepts</div>
+        <div class="chapter-row tt" style="top:105px"><span class="num">4.</span>Data Structures</div>
+        <div class="chapter-row tt" style="top:140px"><span class="num">5.</span>Algorithms</div>
+        <div class="chapter-row tt" style="top:175px"><span class="num">6.</span>Networking</div>
+        <div class="chapter-row tt" style="top:210px"><span class="num">7.</span>Concurrency</div>
+        <div class="chapter-row tt" style="top:245px"><span class="num">8.</span>Conclusion</div>
+        <div class="sb-track"><div class="sb-thumb" style="top:0%;height:55%"></div></div>
+      </div>
+      <div class="bottom-strip">
+        <div class="open-btn enabled tt">Open</div>
+      </div>
+    </div>
+  </div>
+  <div class="state-note">Close = exit overlay<br>Title = "Chapters"<br>Tabs = right side</div>
+</div>
+
+<div class="arrow-col">
+  <div class="arrow-sym">&rarr;</div>
+  <div class="arrow-lbl">tap<br>"Words" tab</div>
+</div>
+
+<!-- C2: Words -->
+<div class="screen-col">
+  <div class="screen-label">C2. Words</div>
+  <div class="screen-frame">
+    <div class="screen-inner">
+      <div class="single-header">
+        <div class="close-btn tt" style="left:23px;right:auto;"><span>X</span></div>
+        <div class="context-title" style="left:119px;width:calc(100% - 530px);justify-content:center;">
+          Words
+        </div>
+        <div style="position:absolute;right:23px;top:0;height:110px;display:flex;align-items:center;gap:8px;">
+          <div class="tab inactive tt">Chapters</div>
+          <div class="tab active tt">Words</div>
+        </div>
+      </div>
+      <div class="list-area">
+        <div class="word-row tt" style="top:0">algorithm</div>
+        <div class="word-row tt" style="top:35px">binary</div>
+        <div class="word-row tt" style="top:70px">cache</div>
+        <div class="word-row selected tt" style="top:105px">dawn</div>
+        <div class="word-row tt" style="top:140px">database</div>
+        <div class="sb-track"><div class="sb-thumb" style="top:0%;height:55%"></div></div>
+      </div>
+      <div class="bottom-strip">
+        <div class="open-btn enabled tt">Open</div>
+      </div>
+    </div>
+  </div>
+  <div class="state-note">Close = exit overlay<br>Title = "Words"<br>Tabs = right side</div>
+</div>
+
+<div class="arrow-col">
+  <div class="arrow-sym">&rarr;</div>
+  <div class="arrow-lbl">tap<br>"Open"</div>
+</div>
+
+<!-- C3: Results -->
+<div class="screen-col">
+  <div class="screen-label">C3. Results</div>
+  <div class="screen-frame">
+    <div class="screen-inner">
+      <div class="single-header">
+        <div class="close-btn tt" style="left:23px;right:auto;"><span>X</span></div>
+        <div class="context-title" style="left:119px;width:calc(100% - 430px);justify-content:center;">
+          "dawn" - 3 matches
+        </div>
+        <div style="position:absolute;right:23px;top:0;height:110px;display:flex;align-items:center;">
+          <div class="tab inactive tt" style="cursor:pointer;">&lt;</div>
+        </div>
+      </div>
+      <div class="list-area">
+        <div class="result-row tt" style="top:0">
+          <span class="ch-label">Ch 1</span>
+          <span class="snippet">...the dawn of modern computing...</span>
+        </div>
+        <div class="result-row tt" style="top:35px">
+          <span class="ch-label">Ch 4</span>
+          <span class="snippet">...before dawn broke over the campus...</span>
+        </div>
+        <div class="result-row tt" style="top:70px">
+          <span class="ch-label">Ch 6</span>
+          <span class="snippet">...a new dawn in distributed systems...</span>
+        </div>
+        <div class="sb-track"><div class="sb-thumb" style="top:0%;height:55%"></div></div>
+      </div>
+      <div class="bottom-strip">
+        <div class="open-btn disabled tt">Open</div>
+      </div>
+    </div>
+  </div>
+  <div class="state-note">Close = exit overlay<br>Title = result count<br>"&lt;" pill = back to word list</div>
+</div>
+</div>
+
+<div class="legend">
+  <table>
+    <tr><td class="pros">Pro</td><td>Tabs live on the right, close is always on the left -- universal exit. Title provides context. On results, "<" back pill replaces tabs in the same position, so it's a predictable tap target. Close stays consistent across all views.</td></tr>
+    <tr><td class="cons">Con</td><td>Close button on the left is unusual (most apps put close/back on left AND close on right). Title + tabs is slightly redundant when title just repeats the active tab name. Right-side tabs are further from back/close, slightly harder thumb reach.</td></tr>
+  </table>
+</div>
+
+</body>
+</html>

@@ -254,6 +254,50 @@ pub(super) fn process_loop_callbacks(st: &mut LoopState, ctx: &mut LoopContext) 
         reader.set_chapter_overlay_active_tab(0);
     }
 
+    if overlay_now {
+        reader.set_chapter_overlay_results_active(st.search_results_active);
+        if st.search_results_active {
+            let title = st
+                .word_index
+                .words
+                .get(st.search_selected_word)
+                .map(|w| {
+                    let n = st
+                        .word_index
+                        .occurrences
+                        .get(st.search_selected_word)
+                        .map(|h| h.len())
+                        .unwrap_or(0);
+                    format!("{w} - {n} matches")
+                })
+                .unwrap_or_default();
+            reader.set_chapter_overlay_results_title(slint::SharedString::from(title));
+        }
+    }
+
+    if cb.overlay_tab_switch_cell.get() != -1 {
+        let tab = cb.overlay_tab_switch_cell.replace(-1);
+        match tab {
+            0 => {
+                st.chapter_tab = crate::loop_state::ChapterTab::Chapters;
+                st.chapter_scroll = 0;
+                st.search_word_selected = false;
+            }
+            1 => {
+                st.chapter_tab = crate::loop_state::ChapterTab::Words;
+                st.search_scroll = 0;
+            }
+            _ => {}
+        }
+        st.text_dirty = true;
+        ui_changed = true;
+    }
+
+    if cb.overlay_back_from_results_cell.replace(false) {
+        search::back_from_results(st);
+        st.text_dirty = true;
+    }
+
     jump::handle_jump_to_reading(st, reader, cb, cmd_tx, ctx);
 
     if let Some(rx) = st.font_download_rx.take() {

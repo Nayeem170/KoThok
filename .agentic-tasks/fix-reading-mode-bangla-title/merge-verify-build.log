@@ -1,0 +1,13 @@
+=== MERGE VERIFY BUILD ===
+=== HEAD: 83c3e2aa2529ad38f8ce015315dbaf360ca4401a | 2026-07-31T18:55:00+06:00 ===
+=== TREE: CLEAN ===
+=== TOTAL PASSED: 336 ===
+
+Merge: develop into fix/reading-mode-bangla-title - Already up to date (no conflicts)
+Build: cross build --target armv7-unknown-linux-musleabihf --release -p kothok-app
+Result: Finished `release` profile [optimized] target(s) in 2m 16s
+
+Test: cross test -p kothok-app --target armv7-unknown-linux-musleabihf
+Result: test result: ok. 336 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.34s
+
+Base drift check: tests_base_at_merge = 336 (same as tests_baseline = 336)

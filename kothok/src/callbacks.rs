@@ -36,6 +36,8 @@ pub struct Callbacks {
     pub skip_forward_cell: Rc<Cell<bool>>,
     pub skip_rewind_cell: Rc<Cell<bool>>,
     pub settings_cell: Rc<Cell<bool>>,
+    pub overlay_tab_switch_cell: Rc<Cell<i32>>,
+    pub overlay_back_from_results_cell: Rc<Cell<bool>>,
 }
 
 struct ChapterCells {
@@ -43,6 +45,8 @@ struct ChapterCells {
     select_cell: Rc<Cell<Option<usize>>>,
     word_open_cell: Rc<Cell<bool>>,
     jump_cell: Rc<Cell<bool>>,
+    tab_switch_cell: Rc<Cell<i32>>,
+    back_from_results_cell: Rc<Cell<bool>>,
 }
 
 fn register_chapter(reader: &Reader, panel_open_cell: &Rc<Cell<bool>>) -> ChapterCells {
@@ -50,6 +54,8 @@ fn register_chapter(reader: &Reader, panel_open_cell: &Rc<Cell<bool>>) -> Chapte
     let select_cell = Rc::new(Cell::new(None::<usize>));
     let word_open_cell = Rc::new(Cell::new(false));
     let jump_cell = Rc::new(Cell::new(false));
+    let tab_switch_cell = Rc::new(Cell::new(-1i32));
+    let back_from_results_cell = Rc::new(Cell::new(false));
 
     let cp_jtr = jump_cell.clone();
     let cp_jtr_panel = panel_open_cell.clone();
@@ -85,11 +91,23 @@ fn register_chapter(reader: &Reader, panel_open_cell: &Rc<Cell<bool>>) -> Chapte
         }
     });
 
+    let ts = tab_switch_cell.clone();
+    reader.on_tab_switch(move |tab: i32| {
+        ts.set(tab);
+    });
+
+    let bfr = back_from_results_cell.clone();
+    reader.on_back_from_results(move || {
+        bfr.set(true);
+    });
+
     ChapterCells {
         panel_cell,
         select_cell,
         word_open_cell,
         jump_cell,
+        tab_switch_cell,
+        back_from_results_cell,
     }
 }
 
@@ -250,5 +268,7 @@ pub fn register(reader: &Reader) -> Callbacks {
         lock_tap_cell,
         skip_forward_cell,
         skip_rewind_cell,
+        overlay_tab_switch_cell: chapter.tab_switch_cell,
+        overlay_back_from_results_cell: chapter.back_from_results_cell,
     }
 }

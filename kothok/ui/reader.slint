@@ -87,6 +87,8 @@ export component Reader inherits Window {
     in-out property <int> chapter-preview-idx: -1;
     in-out property <int> chapter-pending: -1;
     in-out property <int> chapter-overlay-active-tab: 0;
+    in-out property <bool> chapter-overlay-results-active: false;
+    in-out property <string> chapter-overlay-results-title: "";
     in-out property <bool> loading-visible: false;
     in-out property <int> loading-pct: 0;
 
@@ -102,6 +104,8 @@ export component Reader inherits Window {
     callback panel-close();
     callback chapter-selected(int, int);
     callback jump-to-reading();
+    callback tab-switch(int);
+    callback back-from-results();
 
     in-out property <bool> audio-mode: false;
     in-out property <float> chapter-progress: 0.0;
@@ -263,13 +267,18 @@ export component Reader inherits Window {
         text-primary: root.text-primary;
         text-secondary: root.text-secondary;
         brand-red: root.brand-red;
+        brand-green: root.brand-green;
         track-color: root.track-color;
-        active-tab: root.chapter-overlay-active-tab;
+        active-tab <=> root.chapter-overlay-active-tab;
+        results-active: root.chapter-overlay-results-active;
+        results-title: root.chapter-overlay-results-title;
         chapter-selected(i, tab) => { root.chapter-selected(i, tab); }
         close-to-book => {
             root.chapter-overlay-open = false;
             root.panel-close();
         }
+        tab-switch(tab) => { root.tab-switch(tab); }
+        back-from-results => { root.back-from-results(); }
     }
 
     loading-overlay := LoadingOverlay {
