@@ -8,19 +8,21 @@ The pipeline is defined across several files. When they disagree, this priority 
 
 | Priority | File | Scope |
 |----------|------|-------|
-| 1 (highest) | `.agentic/config.md` | Build commands, model IDs, deploy instructions |
-| 2 | `.agentic/orchestrator.md` | Project-specific overrides (build gate format, device test, git ops) |
-| 3 | `~/.config/kilo/agent/agentic-orchestrator.md` | Full pipeline flow, step definitions, relay protocol |
-| 4 | `.agentic/reviewer.md` | Severity spec, gate rules, review checklist |
+| 1 (highest) | `.agentic/config.md` | Build commands, model IDs, deploy instructions, pen_cli |
+| 2 | `.agentic/orchestrator.md` | Project-specific overrides only (device test, git ops, Agent Manager wiring) |
+| 3 | `~/.config/kilo/agent/agentic-orchestrator.md` | Full pipeline flow, step definitions, relay protocol, conduct rules (D01-D03, V01), pipeline rules (P##) |
+| 4 | `.agentic/reviewer.md` | Project review checklist and any declared severity/decision deltas |
 | 5 | `~/.config/kilo/SHARED_CONVENTIONS.md` | Commit style, AI cleanup, secrets, severity table |
-| 6 | `docs/REVIEW_RULES.md` | Auto-growing rule set (read by reviewer every iteration) |
+| 6 | `docs/REVIEW_RULES.md` | Project code rules (auto-growing, read by reviewer every iteration) |
 | 7 (lowest) | `AGENTS.md` | Project-wide facts, device constraints, build/deploy commands |
 
-Templates live in two locations. Project templates override global templates when both exist:
+No pipeline logic is duplicated between global and project files. The global orchestrator owns every step definition, the relay protocol, the conduct rules, and the pipeline rules. Project files carry only what is specific to this repo.
+
+Templates live in two locations. Project templates override global templates when both exist, whole-file -- there is no section-level inheritance, so a project template must be complete:
 
 | Location | Purpose | Example contents |
 |----------|---------|-----------------|
-| `~/.config/kilo/agent/task-template/` | Generic, project-agnostic | state.md, plan.md, final-summary.md |
+| `~/.config/kilo/agent/task-template/` | Generic, project-agnostic | state.md, plan.md, final-summary.md, iteration-review.md, iteration-response.md |
 | `.agentic/task-template/` | Project-specific only | mock.md (Kobo dimensions), definition-of-done.md (cross build) |
 
 ## What the pipeline does
@@ -46,15 +48,17 @@ User request -> [Orchestrator (current session) = Developer] --artifacts--> [Rev
 
 Use this for single tickets. Simpler, lower latency, full file access.
 
+In direct mode the orchestrator also reads `.agentic/developer.md` at startup if it exists -- that file governs its own implementation work (build gate, naming, testing conventions, build-latest.log format).
+
 ### Worktree mode
 
 The orchestrator becomes a coordinator. It spawns two Agent Manager sessions -- a developer in an isolated git worktree and a reviewer in the local session -- and relays between them and the user. The coordinator does not write code.
 
 ```
-                      [Developer (worktree)] --REVIEW_NEEDED--> [Coordinator]
+                       [Developer (worktree)] --REVIEW_NEEDED--> [Coordinator]
 [User] ---USER_NEEDED->                                                        |
-                      [Reviewer (local)] --ACCEPTED/FEEDBACK-->             |
-                       <--artifacts/review feedback--                   |
+                       [Reviewer (local)] --ACCEPTED/FEEDBACK-->             |
+                        <--artifacts/review feedback--                   |
 ```
 
 Use this for parallel work on multiple tickets. Each ticket gets its own worktree and reviewer. The coordinator presents pending user gates in order.
@@ -70,55 +74,47 @@ At startup, the pipeline inspects the user's command/request. If it mentions wor
 ## Startup sequence
 
 ```mermaid
+%%{init: {'theme': 'dark'}}%%
 flowchart TD
-    U["User picks agentic-orchestrator in VS Code"]
-    K["Kilo loads automatically"]
-    K --> S["SHARED_CONVENTIONS.md"]
-    K --> A["agentic-orchestrator.md"]
-    K --> C{".agentic/config.md exists?"}
-    C -- Yes --> PC["Project config (build commands, models, deploy, pen_cli)"]
-    C -- No --> F["AGENTS.md / CLAUDE.md (fallback)"]
-    U --> K
-    S --> ST["Startup"]
-    A --> ST
-    PC --> ST
-    F --> ST
-    ST --> D["Detect project type"]
-    ST --> BB["Determine base branch (prefer develop/dev, else main)"]
-    ST --> CL["Classify: feature or bug"]
-    CL -- feature --> BP["feat/ prefix"]
-    CL -- bug --> BP2["fix/ prefix"]
-    ST --> SL["Generate branch slug (replace / with -)"]
-    ST --> PM["Determine pipeline mode"]
-    PM --> MODE{"pipeline_mode?"}
-    MODE -- direct --> DIR["Direct: orchestrator = developer"]
-    MODE -- worktree --> WTM["Worktree: coordinator spawns dev + reviewer"]
-    ST --> PF["Preflight + test base branch"]
-    PF --> PF2{"Pass?"}
-    PF2 -- No --> FAIL["Stop: report to user"]
-    PF2 -- Yes --> BL["Record tests_baseline"]
-    BL --> DIR
-    BL --> WTM
+    U["User picks orchestrator"] --> K["Load config"]
+    K --> DEV["Read .agentic/developer.md"]
+    DEV --> T["Detect project type"]
+    T --> BR["Pick base branch"]
+    BR --> CL["Classify feature/bug"]
+    CL --> SL["Generate branch slug"]
+    SL --> MD["Detect mode from prompt"]
+    MD --> LL["Lessons learned injection"]
+    LL --> PF["Preflight + test base"]
+    PF --> BL["Record baseline"]
+    BL --> GO["Step 0"]
 ```
 
 At startup, the pipeline:
 1. Reads project config (`.agentic/config.md`) or falls back to `AGENTS.md`/`CLAUDE.md`
-2. Auto-detects project type from file structure (Cargo.toml, package.json, etc.)
-3. Determines the base branch (prefers `develop`/`dev`, else `main`)
-4. Classifies the ticket as feature or bug (sets branch prefix: `feat/` or `fix/`)
-5. Generates a branch slug (replace `/` with `-`, e.g. `feat/word-list-flow` becomes `feat-word-list-flow`)
-6. Reads `pipeline_mode` from config
-7. Reads model IDs: `reviewer_id` + `reviewer_variant` for the reviewer, `developer_id` + `developer_variant` for worktree mode
-8. Runs preflight, then tests the base branch, and records the test baseline
+2. Reads `.agentic/developer.md` if present (direct mode: governs its own work; worktree mode: prepended to the developer subagent prompt)
+3. Auto-detects project type from file structure (Cargo.toml, package.json, etc.)
+4. Determines the base branch (prefers `develop`/`dev`, else `main`)
+5. Classifies the ticket as feature or bug (sets branch prefix: `feat/` or `fix/`)
+6. Generates a branch slug (replace `/` with `-`, e.g. `feat/word-list-flow` becomes `feat-word-list-flow`)
+7. Detects the pipeline mode from the user's request (not from config)
+8. Reads model IDs: `reviewer_id` + `reviewer_variant` for the reviewer, `developer_id` + `developer_variant` for worktree mode
+9. Runs the lessons learned injection (below)
+10. Runs preflight if configured, then tests the base branch, and records the test baseline
+
+### Lessons learned injection (Step 0)
+
+Before any work starts, the pipeline scans the **last 3 completed tasks'** `final-summary.md` files (state.md phase S8, or ABORTED with a valid summary), extracts their "Preventive rules generated" and "Pipeline health" recommendations, and injects them as context: "Known pitfalls from previous tasks: ... Pipeline improvements: ...". If no prior completed task exists, the step is skipped.
+
+Reading three summaries rather than one means a single trivial ticket with an empty findings section cannot erase accumulated context.
 
 ### Step 0: Initialize
 
 This is the shared entry point. Steps 1-4 are the same in both modes. Steps 5+ differ.
 
 **Shared (all modes):**
-1. Run preflight. If it fails, stop and report to the user.
+1. Run preflight **if a `preflight` command exists in config**. If it fails, stop and report to the user. If none is configured, skip.
 2. Run the test command on the base branch. If tests fail, stop. A red base branch means every downstream test delta is unreliable. Do not record a failing baseline.
-3. If tests pass, parse TOTAL PASSED and record it as `tests_baseline`. This is the pre-ticket baseline for measuring test regressions.
+3. If tests pass, extract the passed count: parse `TOTAL PASSED: N` if present, else the framework-specific pattern (cargo `test result: ok. N passed`, dotnet `Passed: N`, pytest `N passed`). Record it as `tests_baseline`.
 4. Create the feature branch from the base branch.
 
 **Direct mode (steps 5-7):**
@@ -136,91 +132,35 @@ This is the shared entry point. Steps 1-4 are the same in both modes. Steps 5+ d
 ## Feature pipeline
 
 ```mermaid
+%%{init: {'theme': 'dark'}}%%
 flowchart TD
-    S0["S0: Initialize"]
-    S0 --> S0p{"Preflight OK?"}
-    S0p -- No --> STOP["Stop: report to user"]
-    S0p -- Yes --> S0t{"Base tests pass?"}
-    S0t -- No --> STOP
-    S0t -- Yes --> S0m{"pipeline_mode?"}
-    S0m -- direct --> S0d["Create branch + task dir + spawn reviewer + state.md"]
-    S0m -- worktree --> S0w["Create branch + task dir + spawn developer worktree + discover worktree_path + spawn reviewer + state.md"]
-    S0d --> S1
-    S0w --> S1
-
-    S1["S1: Requirement"]
-    S1 --> |"Explore codebase"| S1a["Ask user if unclear"]
-    S1a --> |"USER clarifies"| S1b["Write requirement.md"]
-    S1b --> S2
-
-    S2["S2: Design decisions"]
-    S2 --> S2r["Reviewer: feasibility filter"]
-    S2r --> S2u["USER: choose option"]
-    S2u --> S2w["Write design-decisions.md"]
-    S2w --> UI{"UI changes?"}
-    UI -- Yes --> S25
-    UI -- No --> S3
-
-    S25["S2.5: UI mock"]
-    S25 --> S25p["Read pen_cli from config"]
-    S25p --> S25g["Generate mock.pen + mock-preview.png via pen_cli"]
-    S25g --> S25r["Reviewer reviews mock (max 10)"]
-    S25r --> S25u["USER: approve mock"]
-    S25u --> S3
-
-    S3["S3: Plan + DoD"]
-    S3 --> S3w["Write plan.md + definition-of-done.md"]
-    S3w --> S3r["Reviewer reviews plan (max 10)"]
-    S3r --> S35
-
-    S35["S3.5: Test plan"]
-    S35 --> S35w["Write test-plan.md"]
-    S35w --> S35r["Reviewer reviews coverage (max 10)"]
-    S35r --> S4
-
-    S4["S4: Implementation"]
-    S4 --> S4i["Write code + tests"]
-    S4i --> S4b["Run build gate (preflight, build, test, lint, fmt)"]
-    S4b --> S4c["Commit + build-latest.log"]
-    S4c --> S4v{"Clean tree outside .agentic-tasks/?"}
-    S4v -- No --> S4b
-    S4v -- Yes --> S5
-
-    S5["S5: Code + test review"]
-    S5 --> S5r["Reviewer reads git diff + build-latest.log"]
-    S5r --> |"FEEDBACK"| S5f["Fix + rebuild + new log"]
-    S5f --> S5r
-    S5r --> |"ACCEPTED"| S6
-
-    S6["S6: DoD verification"]
-    S6 --> S6r["Reviewer checks each DoD item against source"]
-    S6r --> |"Items missing"| S5
-    S6r --> |"All pass"| S7
-
-    S7["S7: User acceptance"]
-    S7 --> S7t["Present summary + diff + build results"]
-    S7t --> S7u["USER tests on device"]
-    S7u --> R{"Result"}
-    R -- "New bug (this ticket)" --> SUB["Bug-fix sub-pipeline"]
-    R -- "Code bug (simple)" --> S5
-    R -- "Design flaw" --> S3
-    R -- "Abort" --> ABT["Abort path"]
-    R -- "Confirmed" --> S8
-
-    SUB --> |"After fix"| S7u
-
-    S8["S8: Merge + cleanup"]
-    S8 --> S8a["Pull latest base branch"]
-    S8a --> S8m["Merge base into feature (resolve conflicts)"]
-    S8m --> S8r["Rebuild + retest"]
-    S8r --> S8c["Reviewer reviews conflicts"]
-    S8c --> S8p["USER: confirm push"]
-    S8p --> S8g["Merge --no-ff + push"]
-    S8g --> S8l["Review rules lifecycle (read final-summary.md)"]
-    S8l --> S8s["Stop reviewer"]
-    S8w["worktree only: git worktree remove"] --> S8l
-    S8s --> S8w2["Write final-summary.md"]
+    S0["S0: Initialize"] --> S1["S1: Requirement"]
+    S1 --> S2["S2: Design decisions"]
+    S2 --> S25["S2.5: UI mock (if UI changes)"]
+    S25 --> S3["S3: Plan + DoD"]
+    S3 --> S35["S3.5: Test plan"]
+    S35 --> S4["S4: Implementation"]
+    S4 --> S5["S5: Code review"]
+    S5 --> S6["S6: DoD check"]
+    S6 --> S7["S7: User acceptance"]
+    S7 --> S75["S7.5: Pipeline health check"]
+    S75 --> S8["S8: Merge + cleanup"]
 ```
+
+| Step | What happens | Output | Passes when |
+|------|-------------|--------|-------------|
+| S0 | Lessons learned injected from last 3 tasks, preflight (if configured), base branch tested, branch created | Branch from develop, `tests_baseline` recorded | Preflight exits 0 and tests pass |
+| S1 | Developer reads codebase, asks user to clarify if needed | `requirement.md` | Developer writes it |
+| S2 | Developer proposes options, reviewer filters infeasible ones, user picks from what remains | `design-decisions.md` | User chose an option |
+| S2.5 | Developer generates UI mock (Pencil), **user approves visually first**, then reviewer checks consistency against design decisions | `mock.pen`, `mock-preview.png`, `mock.md` | Skipped if no UI changes. Else user approves, then reviewer accepts (max 10 rounds) |
+| S3 | Developer writes plan with architecture, files, risks, DoD. Reviewer reviews against actual source | `plan.md`, `definition-of-done.md` | Reviewer accepts plan (developer fixes feedback, max 10 rounds) |
+| S3.5 | Developer writes test scenarios (no code). Reviewer checks coverage completeness | `test-plan.md` | Reviewer accepts coverage (developer fixes feedback, max 10 rounds) |
+| S4 | Developer writes code + tests. Build gate runs (build, test, lint, fmt, gitleaks). Clean tree verified | Commit on branch, `build-latest.log` | All gates pass, tree clean outside `.agentic-tasks/` |
+| S5 | Reviewer reads git diff + build log + iteration history. Feedback loop: developer fixes, rebuilds, re-submits | `iterations/N-review.md`, `iterations/N-response.md` | Reviewer says ACCEPTED (max 10 feedback rounds) |
+| S6 | Reviewer reads source files and checks every DoD item against actual code | DoD verification result | Every item passes. Missing impl items go to S5; plan gaps go to S3 |
+| S7 | Deploy instruction printed. User deploys to device, tests | User verdict (bug sub / S5 / S3 / abort / confirmed) | User confirmed |
+| S7.5 | Pipeline scans its own iteration files for relay failures, avoidance patterns, enforcement gaps | "Pipeline health" section in the S7 summary | Always runs before S8 |
+| S8 | Merge base into feature, rebuild, retest, reviewer reviews conflicts, user confirms push, end-of-task analysis, review rules lifecycle | `final-summary.md`, `merge-verify-build.log`, develop updated, new rules | User confirmed push |
 
 ### Step-by-step walkthrough
 
@@ -228,54 +168,84 @@ flowchart TD
 
 **S2: Design decisions.** The developer researches implementation options, sends them to the reviewer for feasibility filtering (the reviewer reads actual source to verify claims), then presents the feasible options to the user. The user chooses. The chosen decisions are written to `design-decisions.md`. If the ticket involves UI changes, the pipeline routes to S2.5 next; otherwise, straight to S3.
 
-**S2.5: UI mock.** Only for tickets with UI changes. The developer writes `mock.md` describing the screens, device dimensions, interactive states, and approved design decisions. The Pencil CLI (`pen_cli` from config, default `pen`) generates `mock.pen` and a preview PNG. The reviewer checks the mock against the design decisions and device viewport. After reviewer acceptance, the user sees the mock and approves it visually before any code is written. If Pencil is unavailable, falls back to `mock.html`.
+**S2.5: UI mock.** Only for tickets with UI changes. The developer writes `mock.md` describing the screens, device dimensions, interactive states, and approved design decisions. The Pencil CLI (`pen_cli` from config, default `pen`) generates `mock.pen` and a preview PNG. **The user sees the rendered preview and approves it first** -- the user is the only party that can reliably see the image. After user approval, the reviewer checks the mock against the design decisions and device viewport (max 10 iterations). If Pencil is unavailable, falls back to `mock.html`, reviewed in the same order.
 
 **S3: Plan + DoD.** The developer writes `plan.md` with architecture, files to change, risks, and the definition of done (DoD). The DoD is extracted into `definition-of-done.md`. The reviewer checks the plan against actual source code. Each DoD item must have a pass/fail criterion.
 
 **S3.5: Test plan.** The developer writes `test-plan.md` with test scenarios (no code, just descriptions). The reviewer checks coverage completeness: happy path, edge cases, device-specific risks.
 
-**S4: Implementation.** The developer writes code and tests, runs the build gate (preflight, build, test, lint, fmt check), fixes all errors, commits, and dumps `build-latest.log`. The tree must be clean outside `.agentic-tasks/`. The build log records the HEAD SHA, tree status, and TOTAL PASSED count.
+**S4: Implementation.** The developer writes code and tests. The **orchestrator (direct mode) or coordinator (worktree mode) runs the build gate itself** -- preflight, build, test, lint, fmt check -- and captures the real command output into `build-latest.log` with the `HEAD`, `TREE`, and `TOTAL PASSED` header lines derived from actual `git status` and test output. It does not transcribe a developer self-report. The tree must be clean outside `.agentic-tasks/`.
 
-**S5: Code + test review.** The reviewer reads the full git diff and `build-latest.log`. Feedback loops up to 10 iterations per review step. Only BLOCKING, CRITICAL, and HIGH issues must be fixed; MEDIUM and SUGGESTION never gate.
+**S5: Code + test review.** The reviewer reads the full git diff and `build-latest.log`, and reads `.agentic-tasks/<branch-slug>/iterations/` off disk as the authoritative feedback history. Read-only git commands (`git status`, `git diff`, `git rev-parse`, `git show`, `git log`) are permitted and encouraged so the reviewer can verify the log's claims independently. Feedback loops up to 10 iterations per review step. Only BLOCKING, CRITICAL, and HIGH issues must be fixed; MEDIUM and SUGGESTION never gate.
 
-**S6: DoD verification.** The reviewer reads actual source files and checks every item in `definition-of-done.md`. If items are missing, the pipeline routes back to S5.
+**S6: DoD verification.** The reviewer reads actual source files and checks every item in `definition-of-done.md`. Routing depends on why an item failed: incomplete implementation routes back to S5; an item the **plan** omitted routes back to S3 for a replan.
 
 **S7: User acceptance.** The pipeline presents a summary, diff, and build results to the user. The user deploys to the device and tests. Feedback routes:
 - New bug caused by this ticket -> bug-fix sub-pipeline (S7-A through S7-E)
 - Simple code bug -> back to S5
 - Design flaw -> back to S3 (replan)
 - Abort -> abort path
-- Confirmed -> S8
+- Confirmed -> S7.5, then S8
 
-**S8: Merge + cleanup.** Pull latest base, merge base into feature (resolve conflicts), rebuild + retest, reviewer reviews conflicts, user confirms push, merge with `--no-ff`, run review rules lifecycle, stop sessions, write `final-summary.md`. In worktree mode, `git worktree remove` happens after stopping sessions but before any branch delete.
+**S7.5: Pipeline health check.** Before merging, the pipeline audits its own run by scanning every iteration file:
+- The same issue flagged 3+ times -> relay bug or developer avoidance. Flagged to the user.
+- The user had to repeat instructions the pipeline already received -> orchestrator context loss. Flagged to the user.
+- The reviewer re-flagged an already-fixed item -> V01 violation, logged for reviewer improvement.
+- The developer deferred a BLOCKING item -> D02 enforcement gap, logged for the next task.
+
+Findings appear as a "Pipeline health" section in the S7 acceptance summary, with self-healing suggestions ("the pipeline retried issue X three times; suggest rule R##"). S8 reuses these findings rather than re-scanning.
+
+**S8: Merge + cleanup.** See the merge sequence below.
+
+### S8 merge sequence (direct mode)
+
+1. `git fetch origin`, checkout and pull base. Re-run the test command on the updated base and write `tests_base_at_merge` to `state.md` **immediately** -- this detects test drift on base between S0 and merge, and survives a crash later in the sequence.
+2. Merge base into the feature branch, resolve conflicts.
+3. Rebuild + retest. Dump `merge-verify-build.log`. **If merge-verify fails, route to S5 with the failure log. Do not proceed to push.**
+4. Reviewer reviews the conflict resolutions.
+5. Ask the user for explicit confirmation before pushing (branch, commit count, build result).
+6. `git fetch origin` again and verify base has not moved since step 1. If it diverged, stop and report. If clean, `git merge --no-ff` and push.
+7. Write `state.md` with `phase = S8`.
+8. Create `final-summary.md` from the global template.
+9. End-of-task analysis (below).
+10. On user approval, write new rules: R##/D## to `docs/REVIEW_RULES.md`, P## to the "Pipeline rules" section of the global orchestrator.
+11. Review rules lifecycle.
+12. Stop the reviewer session. In worktree mode, `git worktree remove` runs after stopping sessions and before any branch delete.
+
+### End-of-task analysis (S8)
+
+The pipeline reuses the S7.5 findings and categorizes every feedback item from the run:
+
+| Category | Becomes | Written to |
+|----------|---------|-----------|
+| Recurring code pattern | R## | `docs/REVIEW_RULES.md` |
+| Developer conduct gap | D## | global orchestrator conduct rules |
+| Pipeline relay/orchestration issue | P## | global orchestrator "Pipeline rules" section |
+| Design gap | note | final-summary, feeds the next plan |
+
+Findings land in the `final-summary.md` "Feedback analysis", "Pipeline health", and "Preventive rules generated" sections -- the last of which is what the next task's lessons learned injection reads. **New rules are presented to the user and written only on approval.**
 
 ## Bug pipeline
 
 Bug tickets follow the same structure but replace S2 (design decisions) with S1.5 (reproduction). After S1.5 acceptance, if the fix changes UI layout or interaction, it routes through S2.5 (mock) before S3 -- this captures the before/after layout so the user can approve the visual change before code is written.
 
 ```mermaid
+%%{init: {'theme': 'dark'}}%%
 flowchart TD
-    S0B["S0: Initialize (fix/ prefix)"] --> S1B["S1: Requirement (describe bug, steps to reproduce)"]
-    S1B --> S15["S1.5: Bug reproduction"]
-    S15 --> R15{"Automated?"}
-    R15 -- Yes --> R15a["Write test that FAILS"]
-    R15 -- No --> R15b["Given/When/Then script"]
-    R15a --> R15r["Reviewer reviews (max 10)"]
-    R15b --> R15r
-    R15r --> UI2{"UI layout change?"}
-    UI2 -- Yes --> S25B["S2.5: UI mock (before/after)"]
-    UI2 -- No --> S3B
-    S25B --> S3B
-    S3B --> S4B["S4: Implement fix (reproduction must PASS)"]
-    S4B --> S5B["S5: Code + test review"]
-    S5B --> S6B["S6: DoD verification"]
+    S0B["S0: Initialize"] --> S1B["S1: Describe bug"]
+    S1B --> S15["S1.5: Write reproduction"]
+    S15 --> S25B["S2.5: Before/after mock (if UI change)"]
+    S25B --> S3B["S3: Root cause + fix plan"]
+    S3B --> S4B["S4: Implement fix"]
+    S4B --> S5B["S5: Code review"]
+    S5B --> S6B["S6: DoD check"]
     S6B --> S7B["S7: User acceptance"]
-    S7B --> S8B["S8: Merge + cleanup"]
+    S7B --> S8B["S8: Merge"]
 ```
 
 ### S1.5: Bug reproduction
 
-The developer writes a reproduction artifact based on bug type:
+The developer writes a reproduction artifact based on bug type (the rows below are illustrative -- use the project-appropriate equivalent):
 
 | Bug type | Reproduction | Automated? |
 |----------|-------------|------------|
@@ -298,26 +268,27 @@ After S1.5 acceptance (and optional S2.5 mock), the developer writes `plan.md` w
 
 ### S4: Implement fix
 
-The reproduction test must now PASS. For manual reproductions, the fix logic must address each step in `bug-reproduction.md`. Build gate runs, commit, build-latest.log dumped.
+The reproduction test must now PASS. For manual reproductions, the fix logic must address each step in `bug-reproduction.md`. Build gate runs, commit, build-latest.log captured by the orchestrator.
 
 ## Bug-fix sub-pipeline (within S7)
 
-When the user finds a new bug during device testing that was caused by this ticket's changes:
+Triggered when the user finds a new bug during device testing that was caused by this ticket's changes. Pre-existing bugs are logged but never fixed on the ticket branch.
 
 ```mermaid
+%%{init: {'theme': 'dark'}}%%
 flowchart TD
-    CLASSIFY["Classify: caused by this ticket?"]
-    CLASSIFY -- Yes --> S7A["S7-A: Reproduce (failing test/script, max 10 review)"]
-    CLASSIFY -- No --> LOG["Out-of-scope: log, do not fix on this branch"]
-    S7A --> S7B["S7-B: Plan (root cause + approach, max 10 review)"]
-    S7B --> S7C["S7-C: Fix (implement + build gate)"]
-    S7C --> S7D["S7-D: Review (code + test, max 10 review)"]
-    S7D --> S7E["S7-E: DoD re-check"]
-    S7E --> |"Items broken"| S7D
-    S7E --> |"All hold"| RETEST["User retests on device"]
+    BUG["User finds bug"] --> CLS["Caused by this ticket?"]
+    CLS --> A["S7-A: Reproduce (max 10)"]
+    CLS --> LOG["Out-of-scope: log only"]
+    A --> B["S7-B: Plan (max 10)"]
+    B --> C["S7-C: Fix + build gate"]
+    C --> D["S7-D: Review (max 10)"]
+    D --> E["S7-E: DoD re-check"]
+    E --> D
+    E --> RETEST["User retests on device"]
 ```
 
-Pre-existing bugs are logged but never fixed on the ticket branch. Finish the current pipeline first.
+Each sub-pipeline loop increments both its own counter (`bug_repro`, `bug_plan`, `bug_code`) and `global_iterations`.
 
 ## Review severity levels
 
@@ -332,20 +303,35 @@ Five severity levels, three behaviors:
 | SUGGESTION | No | Style, naming, minor clarity improvement | Log only. Does not gate. |
 
 ```mermaid
+%%{init: {'theme': 'dark'}}%%
 flowchart LR
-    I["Reviewer finds issues"] --> B{"Any BLOCKING, CRITICAL, or HIGH?"}
-    B -- Yes --> FIX["Fix those issues only (minimal, targeted)"]
-    FIX --> RE2["Re-review"]
-    B -- No --> LOG["Log MEDIUM + SUGGESTION to iterations/N-review.md"]
+    ISSUE["Issue found"] --> SEV{"BLOCKING, CRITICAL, or HIGH?"}
+    SEV --> FIX["Fix only those"]
+    FIX --> CHK["Re-review"]
+    CHK --> SEV
+    SEV --> LOG["Log MEDIUM + SUGGESTION"]
     LOG --> ACC["ACCEPTED"]
-    RE2 --> B
 ```
 
 Key rules:
 - No sweep rule. A blocking fix must be minimal and targeted, not bundled with unrelated changes.
 - MEDIUM and SUGGESTION never prevent acceptance. They are logged, and fixed only if cheap.
 - The reviewer responds with exactly one word: `ACCEPTED` or `FEEDBACK`. Never both.
-- When the project has `.agentic/reviewer.md`, it owns the severity spec and gate rules. The inline fallback only applies to projects without one.
+- The severity spec, gate rules, and decision criteria are **always** sent to the reviewer from the global orchestrator. `.agentic/reviewer.md` overrides only the sections it explicitly redefines; everything else applies as written.
+
+## Conduct rules
+
+Enforced globally on every project, unconditionally. Code rules (R##) are per-project and live in `docs/REVIEW_RULES.md`.
+
+| Rule | Applies to | What it requires |
+|------|-----------|-----------------|
+| D01 | Developer | Every feedback item gets a matching response with the changed `file:line`. Prior fixes referenced as "fixed in iteration N at file:line". |
+| D02 | Developer | BLOCKING items are never deferrable. SUGGESTION items deferrable only with explicit reviewer agreement. No unrelated refactoring as a substitute. |
+| D03 | Developer | Re-run the build gate and re-check the flagged `file:line` before resubmitting. |
+| V01 | Reviewer | No repeated feedback. Check prior iteration responses before flagging; if addressed, verify the fix rather than re-flagging. Audited by the orchestrator at S7.5. |
+| P## | Pipeline | Generated by end-of-task analysis, stored in the global orchestrator's "Pipeline rules" section, retired after 5+ quiet tasks. |
+
+The reviewer reads the iteration history from `.agentic-tasks/<branch-slug>/iterations/` on disk rather than trusting what a prompt included. This keeps V01 auditable and survives a restart that loses the reviewer session.
 
 ## Iteration limits
 
@@ -359,24 +345,9 @@ When a per-loop cap is hit, the pipeline stops the feedback loop and presents th
 2. **Abort** -- full pipeline abort
 3. **Override** -- reset the per-loop counter to 0, continue (increments global)
 
-When the global cap (50) is hit, the pipeline aborts unconditionally. No user override.
+**When the global cap (50) is hit, the pipeline stops and presents the same three choices.** It writes `state.md`, keeps the branch, and waits. It does not abort automatically and never force-deletes a branch on a counter breach -- branch deletion always requires explicit user confirmation.
 
 Limits are per-pipeline. When running multiple parallel pipelines in worktree mode, each has its own independent budget in its own `state.md`. A coordinator must never sum iterations across branches.
-
-```mermaid
-flowchart TD
-    REV["Review iteration"] --> CAP{"Per-loop >= 10?"}
-    CAP -- No --> CONT["Continue feedback loop"]
-    CONT --> REV
-    CAP -- Yes --> STOP["STOP: present feedback + best attempt to user"]
-    STOP --> USER{"User choice"}
-    USER -- "Accept as-is" --> NEXT["Phase complete, proceed"]
-    USER -- "Abort" --> ABORT["Pipeline abort"]
-    USER -- "Override" --> RESET["Reset per-loop counter, continue (increments global)"]
-    RESET --> REV
-    REV --> GLOB{"Global >= 50?"}
-    GLOB -- Yes --> ABORT
-```
 
 ## Iteration counters
 
@@ -397,38 +368,39 @@ phase_iterations:
 
 | Gate | Where | What it checks | Fails if |
 |------|-------|---------------|----------|
-| Preflight | S0 | Docker running (or whatever preflight command is) | Preflight command exits non-zero |
+| Preflight | S0 | Docker running (or whatever preflight command is), when configured | Preflight command exits non-zero |
 | Baseline tests | S0 | Base branch tests pass | Tests fail on base branch |
-| Build gate | S4 exit | preflight, build, test, lint, fmt check all pass | Any command fails |
+| Build gate | S4 exit | preflight, build, test, lint, fmt check all pass; output captured by the orchestrator | Any command fails |
 | Gitleaks | S4 commit | No hardcoded secrets in diff | Gitleaks finds a match |
 | Clean tree | S4 exit | No untracked/modified outside `.agentic-tasks/` | Dirty tree |
 | Reviewer ACCEPTED | Every review step | No BLOCKING, CRITICAL, or HIGH issues | Any gating severity found |
-| DoD verification | S6 | Every DoD item verified in actual source | Item not met |
+| DoD verification | S6 | Every DoD item verified in actual source | Item not met (routes to S5 or S3) |
 | Phase gate | Every transition | Phases cannot be skipped | Attempt to jump ahead |
+| Merge verify | S8 step 3 | Rebuild + retest after merging base | Build or tests fail (routes back to S5) |
+| Base unchanged | S8 step 6 | Base has not moved since the S8 pull | Base diverged (stop and report) |
 | Push confirmation | S8 | User must explicitly confirm before `git push` | Skipped |
-| Global cap | Any point | Pipeline aborts at 50 iterations | Budget exhausted |
+| Global cap | Any point | Pipeline stops at 50 iterations and asks the user | Budget exhausted |
 
 ## Review rules lifecycle (Step 8)
 
-After merging, the pipeline reads `final-summary.md` and extracts feedback patterns. If the same feedback recurred across review iterations, a new rule is added to `docs/REVIEW_RULES.md`. This is how the reviewer gets smarter over time.
+After merging, the pipeline reads `final-summary.md` and extracts feedback patterns. If the same feedback recurred across review iterations, a new rule is proposed. **Rules are written only after the user approves them.** This is how the reviewer gets smarter over time.
 
 ```mermaid
-flowchart TD
-    A["Read final-summary.md"] --> B["Extract patterns from 'Device-test bugs' + 'Patterns established'"]
-    B --> C["Cross-reference with iterations/*.md review files"]
-    C --> D["Add new rules for recurring patterns: task-name with counter 0"]
-    D --> E["Increment all active counters: source N -> N+1"]
-    E --> F["Reset triggered counters: source back to 0"]
-    F --> G{"Counter >= 5?"}
-    G -- Yes --> H["Archive rule (append ' at retirement')"]
-    G -- No --> I{"Active rules > 50?"}
-    I -- Yes --> J["Retire lowest-count rule"]
-    I -- No --> DONE["Done"]
-    H --> I
-    J --> DONE
+%%{init: {'theme': 'dark'}}%%
+flowchart LR
+    A["Read final-summary.md"] --> B["Extract recurring patterns"]
+    B --> C["Cross-reference iterations/*.md"]
+    C --> U["Present to user for approval"]
+    U --> D["Add new rules (counter = 0)"]
+    D --> E["Increment active counters"]
+    E --> F["Reset triggered counters to 0"]
+    F --> G{"Quiet for 5+ tasks?"}
+    G --> H["Archive rule"]
+    G --> DONE["Done"]
+    H --> DONE
 ```
 
-The reviewer reads only the active rules each iteration. Archived rules are kept for reference but not checked.
+Rules split by family: R## (project code rules) to `docs/REVIEW_RULES.md`, D## (developer conduct) and P## (pipeline) to the global orchestrator. The reviewer reads only the active rules each iteration. Archived rules are kept for reference but not checked.
 
 ## Final summary (final-summary.md)
 
@@ -438,21 +410,26 @@ Written at Step 8 using the template at `~/.config/kilo/agent/task-template/fina
 |-------|---------|
 | Commits | `git rev-list --count <base>..<branch>` |
 | Files/lines | `git diff --stat <base>..<branch>` |
-| Tests before | `tests_baseline` from `state.md` (captured at S0 on base branch) |
+| Tests at S0 | `tests_baseline` from `state.md` (captured at S0 on base branch) |
+| Tests at merge | `tests_base_at_merge` from `state.md` (re-captured from base at S8 step 1) |
 | Tests after | `TOTAL PASSED` from `build-latest.log` |
 | Tree clean | `git status --porcelain -- ':!.agentic-tasks'` |
 | Iterations | `phase_iterations` from `state.md` |
 | Elapsed | `started_at` -> last `phase_log` entry from `state.md` |
 
+The three test numbers exist so the delta is drift-aware: if base gained tests between S0 and merge, that shows up as `tests_base_at_merge` differing from `tests_baseline` rather than inflating the ticket's own delta.
+
 No token counts. Kilo does not expose a session token counter, so any token number would be fabricated. Iteration counts from `state.md` are the cost metric instead.
 
 Key sections in the summary:
 - **User-facing changes** -- what shipped (readable six months later)
-- **Device-test bugs found and fixed** -- root cause (specific file:line) and fix per bug
+- **Bugs found and fixed during acceptance testing** -- root cause (specific file:line) and fix per bug
 - **Patterns established** -- reusable patterns introduced
-- **Pipeline cost** -- iterations + elapsed time
-- **Per-phase elapsed** -- computed from `phase_log` entries
+- **Changes / Pipeline cost / Per-phase elapsed** -- measured metrics
 - **Ticket limitations** -- what this ticket left undone (scoped to this ticket, not project-wide)
+- **Feedback analysis** -- recurring code issues, developer gaps, reviewer inefficiencies, root causes by category
+- **Pipeline health** -- context retention, relay correctness, iteration efficiency
+- **Preventive rules generated** -- R##/D##/P## carried into the next task (read by the next run's Step 0)
 
 ## Worktree mode details
 
@@ -470,7 +447,7 @@ In worktree mode, the task directory lives in the main working directory (NOT th
 | definition-of-done.md | Coordinator | Extracted from plan.md by coordinator |
 | test-plan.md | Coordinator | From developer's S3.5 signal |
 | bug-reproduction.md | Coordinator | From developer's S1.5 signal |
-| build-latest.log | Coordinator | From developer's S4 BUILD_RESULT signal |
+| build-latest.log | Coordinator | Runs the build gate directly in the worktree path and captures the output. Does not transcribe a developer self-report. |
 | iterations/N-review.md | Coordinator | From reviewer feedback |
 | iterations/N-response.md | Coordinator | From developer's signal after feedback |
 | final-summary.md | Coordinator | After merge |
@@ -488,6 +465,8 @@ For each step, the coordinator sends a prompt containing:
 
 The coordinator waits for a signal, processes it, then sends the next step.
 
+When relaying reviewer feedback, the coordinator sends the current feedback **plus the full history of prior iterations in this loop**, so the developer can satisfy D01's back-reference requirement despite having no access to the task directory.
+
 ### Developer signals
 
 | Signal | Meaning | Content |
@@ -495,13 +474,40 @@ The coordinator waits for a signal, processes it, then sends the next step.
 | REVIEW_NEEDED | Artifact ready for review | Step ID + full artifact content inline in a code block |
 | USER_NEEDED | User decision needed | Step ID + question or options |
 | STEP_COMPLETE | Step finished (no artifact) | Step ID only |
-| BUILD_RESULT | Build finished | Pass/fail + full build-latest.log content inline |
+| BUILD_RESULT | Build finished | Pass/fail only -- the coordinator re-runs the gate and captures the log itself |
 
 For code reviews (S5), the developer also outputs the full `git diff <base>..<branch>` inline, so the coordinator can relay it to the reviewer.
 
-### Reviewer access in worktree mode
+### Reviewer access
 
-The reviewer reads source files from the worktree path (passed in the initial reviewer prompt). For code reviews, the coordinator also relays the git diff inline from the developer. This dual access (direct file reads + relayed diff) ensures the reviewer has full context.
+| Mode | Source access | Relayed content |
+|------|--------------|----------------|
+| Direct | Source files are in the current working directory; the reviewer reads them directly. The inline diff is a convenience. | Artifact + diff inline |
+| Worktree | Reads source files from `worktree_path`, passed in the initial prompt | Artifact + diff inline (the worktree filesystem may not be reachable) |
+
+In both modes the reviewer reads `iterations/` off disk and may run read-only git commands. This is what makes the build log's `HEAD` and `TREE` claims independently verifiable.
+
+```mermaid
+%%{init: {'theme': 'dark'}}%%
+sequenceDiagram
+    participant D as Developer (worktree)
+    participant C as Coordinator (session)
+    participant R as Reviewer (local)
+
+    D->>C: REVIEW_NEEDED + git diff
+    C->>C: Run build gate in worktree, write build-latest.log
+    C->>R: action: prompt + diff + log + worktree path
+    R->>R: Read diff, source files, iterations/ history
+    R->>C: ACCEPTED or FEEDBACK
+
+    alt FEEDBACK
+        C->>D: Relay feedback + prior iteration history
+        D->>C: REVIEW_NEEDED (revised)
+        C->>R: action: prompt (re-review)
+    end
+
+    C->>D: Accepted. Wrote artifact + state.md
+```
 
 ### Multiple pipelines
 
@@ -513,19 +519,24 @@ Step 2.5 runs for any ticket (feature or bug) that changes UI layout or interact
 
 Read `pen_cli` from `.agentic/config.md` for the binary name (default: `pen`). Requires `pen login` or `PEN_CLI_KEY` env var. PEN_CLI_KEY must only exist in the user environment, never committed to git.
 
+`mock.md` comes from the project template (`.agentic/task-template/mock.md`, Kobo dimensions) when present, else the global one.
+
 ```mermaid
+%%{init: {'theme': 'dark'}}%%
 flowchart TD
-    S25a["Write mock.md (device dimensions, prompt, design decisions, states)"]
-    S25a --> S25g["<pen_cli> --out mock.pen --prompt-file mock.md --enable-preview"]
-    S25g --> S25e["<pen_cli> --in mock.pen --export mock-preview.png --export-scale 2"]
-    S25e --> S25r["Reviewer reviews mock (max 10)"]
-    S25r --> |"FEEDBACK"| S25f["Update mock.md, regenerate to temp file"]
-    S25f --> S25r
-    S25r --> |"ACCEPTED"| S25u["USER: approve mock"]
-    S25u --> S3
-    S25g -.-> |"<pen_cli> not available"| FB["Fallback: mock.html with device dimensions"]
-    FB --> S25r
+    S25A["Write mock.md"] --> S25G["Generate mock.pen + PNG"]
+    S25G --> S25U["USER: visual approval"]
+    S25U --> S25F["Rejected: update mock.md, regenerate"]
+    S25F --> S25G
+    S25U --> S25R["Reviewer: consistency vs design decisions"]
+    S25R --> S25F2["Feedback: update + regenerate"]
+    S25F2 --> S25R
+    S25R --> S3["S3: Plan"]
+    S25G -.-> FB["Fallback: mock.html"]
+    FB --> S25U
 ```
+
+The user goes first because the user is the only party guaranteed to see the rendered image. Agent Manager prompts may not support image attachments; if the reviewer cannot see the PNG, it receives `mock.md` prose only and the visual judgment already happened at the user gate. This ordering also avoids burning up to 10 prose-only review rounds on a mock the user might reject on sight.
 
 On feedback, regenerate to a temp file first to avoid truncation (same-file read/write can corrupt if the tool opens output before reading input):
 ```
@@ -534,46 +545,49 @@ Move-Item -Force mock.new.pen mock.pen
 <pen_cli> --in mock.pen --export mock-preview.png --export-scale 2
 ```
 
-Note: agent_manager prompts may not support image attachments. If the reviewer cannot see the PNG, send `mock.md` (prose) only and defer visual review to user approval at step 6. The mock is still reviewed, just without the image.
-
 ## Abort path
 
 1. Stop the reviewer Agent Manager session (direct mode) or both developer and reviewer sessions (worktree mode)
 2. In worktree mode: `git worktree remove <worktree-path>` -- must happen before branch delete, because git refuses to delete a branch that is checked out in a worktree
-3. `git checkout <base_branch>` then `git branch -D <branch>`
-4. Write `state.md` with `phase = ABORTED`
-5. Write `final-summary.md` describing what was attempted and what failed
+3. Write `state.md` with `phase = ABORTED`
+4. Write `final-summary.md` describing what was attempted and what failed
+5. **Ask the user whether to delete the feature branch. Default is keep.** Only on explicit confirmation: `git checkout <base_branch> && git branch -D <branch>`
+
+Exceeding the global iteration cap does **not** run this path automatically -- see Iteration limits.
 
 ## Restart after interruption
 
 The pipeline can resume from where it left off by reading `state.md` in the task directory. The restart behavior depends on `pipeline_mode`:
 
 ```mermaid
+%%{init: {'theme': 'dark'}}%%
 flowchart TD
-    A["Read state.md: phase, pipeline_mode, ticket type, iteration counts"]
-    A --> B{pipeline_mode?}
-    B -- direct --> D["If reviewer stopped: spawn new reviewer"]
-    B -- worktree --> C
-    C["Read worktree_path from state.md"]
-    C --> W{"Worktree still exists?"}
-    W -- No --> W2["Re-create: git worktree add <path> <branch>, respawn developer with initial prompt + approved artifacts from task dir"]
-    W -- Yes --> W3["If developer session gone: respawn with initial prompt + approved artifacts for current phase"]
-    W2 --> R["If reviewer stopped: respawn reviewer"]
-    W3 --> R
-    R --> P{"Config pipeline_mode matches state.md?"}
-    P -- No --> P2["Use state.md value (mode pinned at Step 0, cannot change mid-ticket)"]
-    P -- Yes --> DONE["Resume from last completed step"]
-    P2 --> DONE
-    D --> DONE
+    A["Read state.md"] --> MODE{"pipeline_mode?"}
+
+    MODE --> D["If reviewer stopped: spawn new reviewer"]
+    D --> DONE["Resume from last step"]
+
+    MODE --> C["Read worktree_path"]
+    C --> WT{"Worktree exists?"}
+    WT --> RECREATE["Re-create worktree + respawn developer"]
+    WT --> REATTACH["Respawn developer with context"]
+    RECREATE --> R["If reviewer stopped: spawn new reviewer"]
+    REATTACH --> R
+    R --> PIN{"Config mode matches state.md?"}
+    PIN --> OVERRIDE["Use state.md (mode pinned at S0)"]
+    PIN --> DONE
+    OVERRIDE --> DONE
 ```
 
 The worktree recovery handles three failure modes: worktree removed (re-create and respawn), worktree exists but session crashed (respawn with context), or config edited mid-ticket (ignore config, use state.md).
+
+Iteration counts come from `state.md` and are authoritative -- the pipeline does not re-count iteration files. If a review loop was interrupted mid-iteration (feedback sent, no response yet), the stored counter is already correct: the incomplete iteration never completed, so it never counted. A respawned reviewer recovers the feedback history by reading `iterations/` off disk.
 
 ## Template locations
 
 ```
 ~/.config/kilo/agent/task-template/    (global, generic)
-  state.md                  (phase, iterations, branch, phase_log)
+  state.md                  (phase, iterations, baselines, branch, phase_log)
   requirement.md            (user request + classification)
   design-decisions.md      (options, trade-offs, chosen path)
   plan.md                  (architecture, files, risks, DoD)
@@ -582,13 +596,16 @@ The worktree recovery handles three failure modes: worktree removed (re-create a
   definition-of-done.md    (machine-checkable pass/fail items)
   build-latest.log         (HEAD, TREE, TOTAL PASSED + full output)
   mock.md                  (Pencil prompt context: dimensions, screens, states)
-  iteration-template.md    (review/response pair template)
-  final-summary.md         (measured metrics + key sections)
+  iteration-review.md      (reviewer feedback: items table, rules triggered, prior-iteration context)
+  iteration-response.md    (developer response: 1:1 item mapping, build verification)
+  final-summary.md         (measured metrics + feedback analysis + pipeline health + preventive rules)
 
 .agentic/task-template/               (project-specific only)
   mock.md                  (1264x1680 Kobo dimensions, e-ink waveform notes)
   definition-of-done.md    (cross build verification, audio sync check)
 ```
+
+A project template replaces the global one entirely. Anything a project template omits is simply gone -- so a project file must carry the full structure, not a subset.
 
 ## Task directory structure
 
@@ -609,8 +626,10 @@ The worktree recovery handles three failure modes: worktree removed (re-create a
   iterations/
     1-review.md                         (reviewer feedback for iteration 1)
     1-response.md                       (developer response for iteration 1)
-  final-summary.md                      (measured summary: metrics, cost, bugs, patterns)
+  final-summary.md                      (measured summary: metrics, cost, bugs, patterns, analysis)
 ```
+
+`iterations/` is created at Step 0 and is the authoritative feedback history the reviewer reads each round.
 
 ## State file format (state.md)
 
@@ -622,7 +641,8 @@ type: feature                       # feature or bug
 pipeline_mode: direct               # direct or worktree (fixed at S0, cannot change)
 worktree_path: null                  # worktree mode only; path to the git worktree
 global_iterations: 2                 # incremented after every review cycle
-tests_baseline: 336                  # TOTAL PASSED on base branch at S0
+tests_baseline: 336                  # passed count on base branch at S0
+tests_base_at_merge: null            # passed count on base branch at S8 step 1 (drift detection)
 phase_iterations:                    # per-review-loop counts
   bug_repro: 0                      # S1.5 reviews (features: always 0)
   bug_plan: 0                       # S7-B reviews (features: always 0)
