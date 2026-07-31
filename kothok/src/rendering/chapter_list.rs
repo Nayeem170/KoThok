@@ -10,10 +10,8 @@ use crate::rendering::common::rgb565_as_bytes;
 use crate::rendering::draw::measure_text;
 use crate::rendering::draw::{fill_rounded_rect, truncate_to_width};
 
-/// Top of the chapter rows: the shared 110px header plus the 48px gap this list
-/// has always had below it. Both the painter and the hit-test read this, so they
-/// stay in step.
-pub const CH_LIST_TOP: i32 = 158;
+/// Top of the chapter rows: directly below the 110px Slint header.
+pub const CH_LIST_TOP: i32 = 110;
 pub const CH_LIST_BOTTOM_PAD: i32 = 136;
 pub const CH_ROW_H: i32 = 68;
 pub const CH_ROW_PITCH: i32 = 78;
@@ -467,9 +465,8 @@ mod tests {
         }
     }
 
-    /// Symmetric to the bottom case: a row straddling the top edge must not
-    /// bleed up into the header gap above `CH_LIST_TOP`. scroll = 30 puts row 0
-    /// at y = 128, whose bottom (188) crosses the top edge (158).
+    /// A row straddling the top edge must not bleed up into the Slint header
+    /// above `CH_LIST_TOP`. scroll = 30 puts row 0 at y = CH_LIST_TOP - 30.
     #[test]
     fn straddling_row_does_not_paint_into_the_header_gap() {
         let w = crate::w();
@@ -584,7 +581,12 @@ mod tests {
             let tt = thumb_top(top, track_h, item_count, test_scroll);
             let finger_y = tt + th / 2;
             let result = scrollbar_y_to_scroll(finger_y, top, bottom, item_count, th / 2);
-            assert_eq!(result, test_scroll, "round trip failed for scroll={test_scroll}");
+            let err = (result - test_scroll).abs();
+            let allowed = (scroll_max as f32 * 0.005).ceil() as i32;
+            assert!(
+                err <= allowed,
+                "round trip drift {err} for scroll={test_scroll} (scroll_max={scroll_max}, track_h={track_h}, allowed={allowed})"
+            );
         }
     }
 

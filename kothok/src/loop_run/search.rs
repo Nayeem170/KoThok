@@ -3,7 +3,6 @@
 use super::*;
 
 use crate::data::word_index::MAX_SEARCH_RESULTS;
-use crate::gesture;
 use crate::loop_state::ChapterTab;
 use crate::reader::{apply_page, switch_chapter, ChapterSwitchOpts};
 use crate::rendering::chapter_list::{list_scroll_max, CH_LIST_BOTTOM_PAD, CH_LIST_TOP};
@@ -17,18 +16,11 @@ pub(super) fn handle_search_release(
     dx: f32,
     dy: f32,
 ) -> bool {
-    let reader = ctx.reader;
     let (press_dx, press_dy) = touch::to_display(st.press_x, st.press_y, ctx.touch_cfg);
     let swipe_dy = dy - press_dy;
     let swipe_dx = dx - press_dx;
 
     if st.search_results_active {
-        if gesture::search_header_hit_test(dx, dy, ctx.w) == gesture::TabBarAction::Back {
-            back_from_results(st);
-            st.text_dirty = true;
-            ctx.window.request_redraw();
-            return true;
-        }
         if swipe_dy.abs() <= 40.0 || swipe_dy.abs() <= swipe_dx.abs() {
             let hit_count = st
                 .word_index
@@ -44,33 +36,6 @@ pub(super) fn handle_search_release(
             }
         }
         return true;
-    }
-
-    match gesture::tab_bar_hit_test(dx, dy, ctx.w) {
-        gesture::TabBarAction::ChaptersTab => {
-            st.chapter_tab = ChapterTab::Chapters;
-            st.chapter_scroll = 0;
-            st.search_word_selected = false;
-            reader.set_chapter_overlay_active_tab(0);
-            st.text_dirty = true;
-            ctx.window.request_redraw();
-            return true;
-        }
-        gesture::TabBarAction::WordsTab => {
-            st.chapter_tab = ChapterTab::Words;
-            st.search_scroll = 0;
-            reader.set_chapter_overlay_active_tab(1);
-            st.text_dirty = true;
-            ctx.window.request_redraw();
-            return true;
-        }
-        gesture::TabBarAction::Close => {
-            reader.set_chapter_overlay_open(false);
-            st.search_word_selected = false;
-            st.text_dirty = true;
-            return true;
-        }
-        _ => {}
     }
 
     if st.chapter_tab == ChapterTab::Words {

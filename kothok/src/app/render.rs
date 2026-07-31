@@ -120,12 +120,10 @@ pub fn render_and_present(
         } else if chapter_overlay {
             if chapter_overlay != st.prev_chapter_overlay {
                 info!(
-                    "overlay: paint tab={:?} results={} words={} band={}..{}",
+                    "overlay: paint tab={:?} results={} words={}",
                     st.chapter_tab,
                     st.search_results_active,
                     st.word_index.words.len(),
-                    crate::rendering::word_list::TAB_BAR_TOP,
-                    crate::rendering::chapter_list::CH_LIST_TOP,
                 );
             }
             if st.search_results_active {
@@ -157,12 +155,6 @@ pub fn render_and_present(
                     },
                 );
             } else if st.chapter_tab == ChapterTab::Words {
-                crate::rendering::word_list::paint_tab_bar(
-                    &mut st.buffer,
-                    ctx.w,
-                    ctx.h,
-                    st.chapter_tab,
-                );
                 crate::rendering::word_list::paint_word_list(
                     &mut st.buffer,
                     &st.word_index.words,
@@ -176,12 +168,6 @@ pub fn render_and_present(
                     st.sb_dragging && st.sb_drag_tab == ChapterTab::Words,
                 );
             } else {
-                crate::rendering::word_list::paint_tab_bar(
-                    &mut st.buffer,
-                    ctx.w,
-                    ctx.h,
-                    st.chapter_tab,
-                );
                 let current_row =
                     crate::rendering::render::current_toc_row(&st.toc_rows, st.current_chapter)
                         .unwrap_or(0) as i32;

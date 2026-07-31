@@ -11,9 +11,12 @@ export component ChapterOverlay inherits Rectangle {
     in property <color> track-color: #d0d0d0;
 
     in-out property <int> active-tab: 0;
+    in-out property <bool> results-active: false;
 
     callback chapter-selected(int, int);
     callback close-to-book();
+    callback tab-switch(int);
+    callback back-from-results();
 
     visible: root.visible-flag;
     background: #ffffff;
@@ -30,6 +33,9 @@ export component ChapterOverlay inherits Rectangle {
         y: 0px; height: 110px; width: root.width;
         background: #ffffff;
 
+        // Back button (left). Dual purpose:
+        // - Normal mode: close overlay
+        // - Results mode: back from results (return to word list)
         ActionButton {
             x: 23px; y: 17px;
             width: 76px; height: 76px;
@@ -39,22 +45,92 @@ export component ChapterOverlay inherits Rectangle {
             clicked => {
                 root.chapter-preview-idx = -1;
                 root.chapter-pending = -1;
-                root.visible-flag = false;
-                root.close-to-book();
+                if root.results-active {
+                    root.back-from-results();
+                } else {
+                    root.visible-flag = false;
+                    root.close-to-book();
+                }
             }
         }
 
-        Text {
-            text: "Chapters";
-            color: root.text-secondary; font-size: 33px; font-weight: 700;
-            horizontal-alignment: center; vertical-alignment: center;
+        // Tab pills (center). Hidden in results mode.
+        if !root.results-active : HorizontalLayout {
             x: 119px; width: root.width - 238px; height: 110px;
+            alignment: center; spacing: 8px;
+
+            Rectangle {
+                width: 130px;
+                height: 36px;
+                border-radius: 18px;
+                background: root.active-tab == 0 ? #000000 : transparent;
+                border-width: root.active-tab == 0 ? 0px : 1px;
+                border-color: #2104;
+
+                chapters-touch := TouchArea {
+                    clicked => {
+                        if root.active-tab != 0 {
+                            root.active-tab = 0;
+                            root.tab-switch(0);
+                        }
+                    }
+                }
+                Text {
+                    text: "Chapters";
+                    color: root.active-tab == 0 ? #ffffff : #000000;
+                    font-size: 20px; font-weight: 600;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+
+            Rectangle {
+                width: 110px;
+                height: 36px;
+                border-radius: 18px;
+                background: root.active-tab == 1 ? #000000 : transparent;
+                border-width: root.active-tab == 1 ? 0px : 1px;
+                border-color: #2104;
+
+                words-touch := TouchArea {
+                    clicked => {
+                        if root.active-tab != 1 {
+                            root.active-tab = 1;
+                            root.tab-switch(1);
+                        }
+                    }
+                }
+                Text {
+                    text: "Words";
+                    color: root.active-tab == 1 ? #ffffff : #000000;
+                    font-size: 20px; font-weight: 600;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        // Results context title (center, shown only in results mode).
+        if root.results-active : Text {
+            x: 119px; width: root.width - 238px; height: 110px;
+            color: root.text-secondary; font-size: 24px; font-weight: 700;
+            horizontal-alignment: center; vertical-alignment: center;
             overflow: elide;
         }
 
-        Rectangle {
-            y: 107px; height: 3px; width: root.width;
-            background: root.track-color;
+        // Close button (right).
+        ActionButton {
+            x: root.width - 99px; y: 17px;
+            width: 76px; height: 76px;
+            icon: @image-url("assets/close.svg");
+            bg: root.brand-red;
+            radius: 38px;
+            clicked => {
+                root.chapter-preview-idx = -1;
+                root.chapter-pending = -1;
+                root.visible-flag = false;
+                root.close-to-book();
+            }
         }
     }
 

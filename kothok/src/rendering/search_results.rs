@@ -10,21 +10,16 @@ use crate::rendering::chapter_list::{
 use crate::rendering::common::rgb565_as_bytes;
 use crate::rendering::draw::fill_rounded_rect;
 use crate::rendering::text_render;
-use crate::rendering::word_list::{INK, TAB_BAR_TOP, TAB_BORDER, TAB_BTN_H};
+use crate::rendering::word_list::{INK, TAB_BORDER};
 
 const WHITE: u16 = 0xFFFF;
 const BORDER: u16 = 0x94B2;
-const BACK_W: i32 = 60;
-const BACK_X: i32 = 20;
-/// Same size the chapter rows and the tab labels use, so the band's type does
-/// not shrink when the overlay switches to results.
-const HEADER_PX: f32 = crate::rendering::chapter_list::CH_TITLE_PX;
 const SNIPPET_CHARS: usize = 40;
 const CH_LABEL_W: i32 = 60;
 
 pub fn paint_search_results(
     buf: &mut [Rgb565Pixel],
-    word: &str,
+    _word: &str,
     hits: &[WordHit],
     chapters: &[kobo_core::Chapter],
     scroll: i32,
@@ -35,37 +30,11 @@ pub fn paint_search_results(
     let w = crate::w();
     let h = crate::h();
     let list_bottom = h as i32 - CH_LIST_BOTTOM_PAD;
-    for y in TAB_BAR_TOP..CH_LIST_TOP {
-        let off = (y as usize) * w;
-        buf[off..off + w].fill(Rgb565Pixel(0xFFFF));
-    }
     for y in CH_LIST_TOP..list_bottom {
         let off = (y as usize) * w;
         buf[off..off + w].fill(Rgb565Pixel(0xFFFF));
     }
     let buf_bytes = rgb565_as_bytes(buf);
-    paint_back_arrow(buf_bytes, w, h);
-    let header = format!(
-        "\"{}\" - {} match{}",
-        word,
-        total_hits,
-        if total_hits == 1 { "" } else { "es" }
-    );
-    let hx = BACK_X + BACK_W + 10;
-    let lh = text_render::line_height(HEADER_PX) as i32;
-    let ty = (TAB_BAR_TOP + (CH_LIST_TOP - TAB_BAR_TOP - lh) / 2).max(0) as usize;
-    let max_hw = (w as i32 - hx - CH_ROW_X) as usize;
-    let truncated_header = crate::rendering::draw::truncate_to_width(&header, HEADER_PX, max_hw);
-    text_render::blit_rgb565(
-        buf_bytes,
-        w,
-        &truncated_header,
-        HEADER_PX,
-        hx as usize,
-        ty,
-        hx as usize + max_hw,
-        h,
-    );
     let display_count = hits.len().min(MAX_SEARCH_RESULTS);
     for (i, hit) in hits.iter().take(display_count).enumerate() {
         let y = CH_LIST_TOP + (i as i32) * CH_ROW_PITCH - scroll;
@@ -73,7 +42,11 @@ pub fn paint_search_results(
             continue;
         }
         let is_sel = selected != usize::MAX && i == selected;
-        let (fill, border) = if is_sel { (INK, TAB_BORDER) } else { (WHITE, BORDER) };
+        let (fill, border) = if is_sel {
+            (INK, TAB_BORDER)
+        } else {
+            (WHITE, BORDER)
+        };
         fill_rounded_rect(
             buf_bytes,
             w,
@@ -180,41 +153,6 @@ fn build_snippet(chapters: &[kobo_core::Chapter], hit: &WordHit) -> String {
     }
 }
 
-fn paint_back_arrow(buf_bytes: &mut [u8], w: usize, h: usize) {
-    let btn_y = (TAB_BAR_TOP + (CH_LIST_TOP - TAB_BAR_TOP - TAB_BTN_H) / 2) as usize;
-    let btn_w = BACK_W as usize;
-    // Same pill as the tab bar this screen replaces, so the band keeps one
-    // visual language across both states of the overlay.
-    fill_rounded_rect(
-        buf_bytes,
-        w,
-        h,
-        BACK_X as usize,
-        btn_y,
-        btn_w,
-        TAB_BTN_H as usize,
-        WHITE,
-        TAB_BORDER,
-        TAB_BTN_H as usize / 2,
-    );
-    let cx = BACK_X as usize + btn_w / 2;
-    let cy = btn_y + TAB_BTN_H as usize / 2;
-    let arm = 8;
-    for d in 0..arm {
-        for t in 0..2i32 {
-            let px = (cx as i32 - d).clamp(0, w as i32 - 1) as usize;
-            let py_up = (cy as i32 - d + t).clamp(0, h as i32 - 1) as usize;
-            let py_dn = (cy as i32 + d + t).clamp(0, h as i32 - 1) as usize;
-            for off in [py_up * w + px, py_dn * w + px] {
-                if off * 2 + 1 < buf_bytes.len() {
-                    buf_bytes[off * 2] = (INK & 0xFF) as u8;
-                    buf_bytes[off * 2 + 1] = (INK >> 8) as u8;
-                }
-            }
-        }
-    }
-}
-
 pub fn results_hit_test(tap_y: i32, scroll: i32, result_count: usize) -> Option<usize> {
     let h = crate::h() as i32;
     let list_bottom = h - CH_LIST_BOTTOM_PAD;
@@ -227,14 +165,6 @@ pub fn results_hit_test(tap_y: i32, scroll: i32, result_count: usize) -> Option<
     } else {
         None
     }
-}
-
-pub fn back_arrow_hit_test(dx: f32, dy: f32, _w: usize) -> bool {
-    let btn_y = (TAB_BAR_TOP + (CH_LIST_TOP - TAB_BAR_TOP - TAB_BTN_H) / 2) as f32;
-    dx >= BACK_X as f32
-        && dx < (BACK_X + BACK_W) as f32
-        && dy >= btn_y
-        && dy < btn_y + TAB_BTN_H as f32
 }
 
 #[cfg(test)]
