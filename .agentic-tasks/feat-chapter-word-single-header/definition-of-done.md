@@ -23,7 +23,7 @@
 ## Dead code removal
 - [ ] paint_tab_bar() removed from word_list.rs
 - [ ] paint_close_button() removed from word_list.rs
-- ] tab_btn_rects() removed from word_list.rs
+- [ ] tab_btn_rects() removed from word_list.rs
 - [ ] TabBtn, CloseBtn structs removed from word_list.rs
 - [ ] paint_back_arrow() removed from search_results.rs
 - [ ] back_arrow_hit_test() removed from search_results.rs

@@ -88,6 +88,7 @@ export component Reader inherits Window {
     in-out property <int> chapter-pending: -1;
     in-out property <int> chapter-overlay-active-tab: 0;
     in-out property <bool> chapter-overlay-results-active: false;
+    in-out property <string> chapter-overlay-results-title: "";
     in-out property <bool> loading-visible: false;
     in-out property <int> loading-pct: 0;
 
@@ -269,6 +270,7 @@ export component Reader inherits Window {
         track-color: root.track-color;
         active-tab: root.chapter-overlay-active-tab;
         results-active: root.chapter-overlay-results-active;
+        results-title: root.chapter-overlay-results-title;
         chapter-selected(i, tab) => { root.chapter-selected(i, tab); }
         close-to-book => {
             root.chapter-overlay-open = false;

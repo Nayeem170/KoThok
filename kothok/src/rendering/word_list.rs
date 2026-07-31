@@ -12,12 +12,8 @@ use crate::rendering::text_render;
 
 const WHITE: u16 = 0xFFFF;
 const BORDER: u16 = 0x94B2;
-/// Tabs speak the library picker's filter-pill language (`picker/paint.rs`):
-/// same border ink, fully rounded ends, and the active one inverted to a solid
-/// black fill with a white label. The old white-on-white pill with a 0x94B2
-/// hairline was theme-correct for a *row* (see `chapter_list.rs`) but reads as
-/// absent at this size on Kaleido, and a tab bar has to announce which tab is
-/// selected the way the picker's pills already do.
+/// Word list rows use the same ink/border palette as chapter rows.
+/// INK/TAB_BORDER are used for selected-row fill/border styling.
 pub const TAB_BORDER: u16 = 0x2104;
 pub const INK: u16 = 0x0000;
 

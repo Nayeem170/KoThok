@@ -12,6 +12,7 @@ export component ChapterOverlay inherits Rectangle {
 
     in-out property <int> active-tab: 0;
     in-out property <bool> results-active: false;
+    in-out property <string> results-title: "";
 
     callback chapter-selected(int, int);
     callback close-to-book();
@@ -113,6 +114,7 @@ export component ChapterOverlay inherits Rectangle {
         // Results context title (center, shown only in results mode).
         if root.results-active : Text {
             x: 119px; width: root.width - 238px; height: 110px;
+            text: root.results-title;
             color: root.text-secondary; font-size: 24px; font-weight: 700;
             horizontal-alignment: center; vertical-alignment: center;
             overflow: elide;
