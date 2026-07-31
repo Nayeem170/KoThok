@@ -267,8 +267,9 @@ export component Reader inherits Window {
         text-primary: root.text-primary;
         text-secondary: root.text-secondary;
         brand-red: root.brand-red;
+        brand-green: root.brand-green;
         track-color: root.track-color;
-        active-tab: root.chapter-overlay-active-tab;
+        active-tab <=> root.chapter-overlay-active-tab;
         results-active: root.chapter-overlay-results-active;
         results-title: root.chapter-overlay-results-title;
         chapter-selected(i, tab) => { root.chapter-selected(i, tab); }
