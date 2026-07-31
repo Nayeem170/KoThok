@@ -79,6 +79,17 @@ export component ContentArea inherits Rectangle {
             }
         }
 
+        Image {
+            source: root.book-title-img;
+            x: 119px;
+            width: root.width - 686px;
+            height: 76px;
+            y: 17px;
+            image-fit: contain;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            visible: root.book-title-img-h > 0;
+        }
         ScrollableText {
             txt: root.header-title;
             txt-color: root.text-secondary; font-size: 33px; bold: true;
