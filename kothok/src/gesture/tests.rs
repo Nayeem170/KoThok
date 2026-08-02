@@ -182,6 +182,26 @@ fn picker_hit_test_exit_zone() {
 }
 
 #[test]
+fn picker_hit_test_gear_zone() {
+    let sw = 1072.0f32;
+    let exit_x = sw - 76.0 - 23.0;
+    let gear_left = exit_x - 10.0 - 3.0 - 10.0 - 76.0;
+    let gear_center = gear_left + 38.0;
+    let target = picker_hit_test(gear_center, 55.0, &[], &[], sw, 1350.0, 1446.0);
+    assert_eq!(target, PickerTarget::Settings);
+}
+
+#[test]
+fn picker_hit_test_pipe_returns_none() {
+    let sw = 1072.0f32;
+    let exit_x = sw - 76.0 - 23.0;
+    let gear_left = exit_x - 10.0 - 3.0 - 10.0 - 76.0;
+    let pipe_x = gear_left + 76.0 + 10.0 + 1.0;
+    let target = picker_hit_test(pipe_x, 55.0, &[], &[], sw, 1350.0, 1446.0);
+    assert_eq!(target, PickerTarget::None);
+}
+
+#[test]
 fn picker_hit_test_book_cell() {
     let cells = vec![GridCell {
         x: 100,

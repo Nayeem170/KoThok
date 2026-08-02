@@ -90,8 +90,7 @@ pub(super) fn open_book_from_picker(
     let voice_before = cfg.tts_voice.clone();
     let lang_before = cfg.tts_lang.clone();
     apply_book_voice(cfg, book_lang.as_deref(), reader, Some(cmd_tx));
-    let book_settings =
-        load_book_settings(std::path::Path::new(BOOK_SETTINGS_FILE), &book_path);
+    let book_settings = load_book_settings(std::path::Path::new(BOOK_SETTINGS_FILE), &book_path);
     apply_book_settings(cfg, &book_settings);
     push_book_settings_to_ui(reader, cfg);
     if cfg.tts_voice != voice_before || cfg.tts_lang != lang_before {

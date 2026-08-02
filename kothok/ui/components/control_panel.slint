@@ -4,6 +4,7 @@ import { SelectorRow } from "selector.slint";
 
 export component ControlPanel inherits Rectangle {
     in property <bool> visible-flag: false;
+    in property <bool> picker-active: false;
     in property <int> brightness-val: 50;
     in property <int> tts-speed: 50;
     in property <int> font-size-val: 36;
@@ -82,12 +83,23 @@ export component ControlPanel inherits Rectangle {
             clicked => { root.panel-close(); }
         }
 
-        Text {
-            text: "Settings";
-            color: root.text-secondary; font-size: 33px; font-weight: 700;
-            horizontal-alignment: center; vertical-alignment: center;
+        HorizontalLayout {
             x: 119px; width: root.width - 238px; height: 110px;
-            overflow: elide;
+            alignment: center;
+            Text {
+                text: root.picker-active ? "Device" : (root.book-title != "" ? root.book-title : "Reader");
+                color: root.text-primary; font-size: 33px; font-weight: 700;
+                vertical-alignment: center;
+                horizontal-stretch: 0;
+                overflow: elide;
+                max-width: root.width - 420px;
+            }
+            Text {
+                text: " Settings";
+                color: root.text-secondary; font-size: 33px; font-weight: 700;
+                vertical-alignment: center;
+                horizontal-stretch: 0;
+            }
         }
 
         Rectangle {
@@ -96,9 +108,9 @@ export component ControlPanel inherits Rectangle {
         }
     }
 
-    VerticalLayout {
+    // Device mode: brightness, sleep, volume, wifi, bt.
+    if root.picker-active : VerticalLayout {
         padding-left: 24px; padding-right: 24px;
-        // Clears the 110px header + 14px gap.
         padding-top: 124px; padding-bottom: 24px;
         spacing: 14px;
 
@@ -131,16 +143,6 @@ export component ControlPanel inherits Rectangle {
             set-frac(f) => { root.panel-frac(0, f); }
         }
 
-        CompactSlider {
-            name: "Font";
-            text-primary: root.text-primary;
-            text-hint: root.text-hint;
-            track-color: root.track-color;
-            value-text: root.font-size-val + "px";
-            fill-frac: (root.font-size-val - 20) / 40.0;
-            set-frac(f) => { root.panel-frac(2, f); }
-        }
-
         SelectorRow {
             label: "Sleep: " + root.sleep-label;
             on-state: true;
@@ -171,29 +173,6 @@ export component ControlPanel inherits Rectangle {
                     background: root.separator;
                 }
             }
-        }
-
-        SelectorRow {
-            label: root.tts-voice-label;
-            on-state: true;
-            connected: true;
-            center-toggle: false;
-            brand-green: root.brand-green;
-            brand-red: root.brand-red;
-            bg-off: root.bg-off;
-            bg-pressed: root.bg-pressed;
-            prev => { root.panel-voice("prev"); }
-            next => { root.panel-voice("next"); }
-        }
-
-        CompactSlider {
-            name: "Speed";
-            text-primary: root.text-primary;
-            text-hint: root.text-hint;
-            track-color: root.track-color;
-            value-text: (root.tts-speed == 50 ? "1.0x" : (root.tts-speed > 50 ? "+" : "") + (root.tts-speed - 50) * 2 + "%");
-            fill-frac: root.tts-speed / 100.0;
-            set-frac(f) => { root.panel-frac(1, f); }
         }
 
         CompactSlider {
@@ -261,11 +240,98 @@ export component ControlPanel inherits Rectangle {
 
         Rectangle { vertical-stretch: 1; }
 
-        Rectangle {
-            height: 2px; background: root.separator;
+        Text {
+            text: "Swipe up to close";
+            color: root.text-secondary; font-size: 18px;
+            horizontal-alignment: left;
+        }
+    }
+
+    // Book mode: font, voice, speed.
+    if !root.picker-active : VerticalLayout {
+        padding-left: 24px; padding-right: 24px;
+        padding-top: 124px; padding-bottom: 24px;
+        spacing: 14px;
+
+        HorizontalLayout {
+            height: 24px;
+            spacing: 10px;
+            Text {
+                text: "DISPLAY";
+                color: root.text-hint; font-size: 20px; font-weight: 700;
+                vertical-alignment: center;
+            }
+            Rectangle {
+                horizontal-stretch: 1;
+                height: 24px;
+                Rectangle {
+                    y: (parent.height - 2px) / 2;
+                    height: 2px; width: 100%;
+                    background: root.separator;
+                }
+            }
+        }
+
+        CompactSlider {
+            name: "Font";
+            text-primary: root.text-primary;
+            text-hint: root.text-hint;
+            track-color: root.track-color;
+            value-text: root.font-size-val + "px";
+            fill-frac: (root.font-size-val - 20) / 40.0;
+            set-frac(f) => { root.panel-frac(2, f); }
         }
 
         HorizontalLayout {
+            height: 24px;
+            spacing: 10px;
+            Text {
+                text: "AUDIO";
+                color: root.text-hint; font-size: 20px; font-weight: 700;
+                vertical-alignment: center;
+            }
+            Rectangle {
+                horizontal-stretch: 1;
+                height: 24px;
+                Rectangle {
+                    y: (parent.height - 2px) / 2;
+                    height: 2px; width: 100%;
+                    background: root.separator;
+                }
+            }
+        }
+
+        SelectorRow {
+            label: root.tts-voice-label;
+            on-state: true;
+            connected: true;
+            center-toggle: false;
+            brand-green: root.brand-green;
+            brand-red: root.brand-red;
+            bg-off: root.bg-off;
+            bg-pressed: root.bg-pressed;
+            prev => { root.panel-voice("prev"); }
+            next => { root.panel-voice("next"); }
+        }
+
+        CompactSlider {
+            name: "Speed";
+            text-primary: root.text-primary;
+            text-hint: root.text-hint;
+            track-color: root.track-color;
+            value-text: (root.tts-speed == 50 ? "1.0x" : (root.tts-speed > 50 ? "+" : "") + (root.tts-speed - 50) * 2 + "%");
+            fill-frac: root.tts-speed / 100.0;
+            set-frac(f) => { root.panel-frac(1, f); }
+        }
+
+        Rectangle { vertical-stretch: 1; }
+
+        Rectangle {
+            Rectangle {
+                height: 2px; width: 100%; background: root.separator;
+            }
+
+            HorizontalLayout {
             spacing: 16px;
 
             Image {
@@ -370,13 +436,6 @@ export component ControlPanel inherits Rectangle {
                         visible: root.chapter-name-img-h > 0;
                     }
                 }
-                // `wrap` is not decoration here. A Text without it is no-wrap,
-                // and a no-wrap Text reports its *entire* string as its minimum
-                // width -- so a long chapter title ("Interpretable Features and
-                // Sparse Autoencoders") widened this column past the panel and
-                // cropped the page badge and progress bar above it. That is the
-                // same breakage a too-wide title raster caused, arriving by a
-                // different route, which is why it hit English books too.
                 Text {
                     text: (root.chapter-name != "" ? root.chapter-name : "-");
                     color: root.text-secondary; font-size: 19px;
@@ -388,9 +447,10 @@ export component ControlPanel inherits Rectangle {
         }
 
         Text {
-            text: "swipe: pages - swipe down: menu - double-tap: play";
-            color: root.text-secondary; font-size: 18px; wrap: word-wrap;
+            text: "Swipe up to close";
+            color: root.text-secondary; font-size: 18px;
             horizontal-alignment: left;
         }
+    }
     }
 }
