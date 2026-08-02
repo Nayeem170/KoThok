@@ -6,7 +6,9 @@ use slint::platform::software_renderer::{MinimalSoftwareWindow, Rgb565Pixel};
 use crate::capabilities::KoboCapabilities;
 use crate::data::config::{self, AppConfig};
 use crate::data::library::{self, EpubEntry};
-use crate::data::persistence::{self, load_book_settings, apply_book_settings, push_book_settings_to_ui, POSITIONS_FILE};
+use crate::data::persistence::{
+    self, apply_book_settings, load_book_settings, push_book_settings_to_ui, POSITIONS_FILE,
+};
 use crate::data::word_index::WordIndex;
 use crate::rendering::common::rgb565_as_bytes_ref;
 use crate::rendering::fb::{Fb, WAVE_GC16};
@@ -126,17 +128,16 @@ pub(super) fn init_book(
     let lang_before = setup.cfg.tts_lang.clone();
     apply_book_voice(&mut setup.cfg, book_lang.as_deref(), reader, None);
 
-    let book_settings = load_book_settings(
-        std::path::Path::new(config::BOOK_SETTINGS_FILE),
-        &book_path,
-    );
+    let book_settings =
+        load_book_settings(std::path::Path::new(config::BOOK_SETTINGS_FILE), &book_path);
     apply_book_settings(&mut setup.cfg, &book_settings);
     push_book_settings_to_ui(reader, &setup.cfg);
 
     if book_settings.font_size.is_some() {
         setup.body_px = setup.cfg.font_size as f32;
         setup.head_px = setup.cfg.font_size as f32 * crate::rendering::layout::HEADING_SCALE;
-        setup.line_h = (setup.cfg.font_size as f32 * crate::rendering::layout::LINE_HEIGHT_SCALE) as i32;
+        setup.line_h =
+            (setup.cfg.font_size as f32 * crate::rendering::layout::LINE_HEIGHT_SCALE) as i32;
     }
     if setup.cfg.tts_voice != voice_before || setup.cfg.tts_lang != lang_before {
         config::save_book_settings(&book_path, &setup.cfg);

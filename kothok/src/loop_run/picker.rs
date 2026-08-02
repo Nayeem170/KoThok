@@ -103,6 +103,45 @@ pub(super) fn handle_picker(st: &mut LoopState, ctx: &mut LoopContext) -> LoopFl
                         st.prev_buffer.copy_from_slice(&st.buffer);
                         return LoopFlow::Continue;
                     }
+                    gesture::PickerTarget::Settings => {
+                        st.tap_xy = None;
+                        st.exit_armed = false;
+                        st.panel_open = true;
+                        cb.panel_open_cell.set(true);
+                        reader.set_panel_open(true);
+                        reader.set_battery_pct(caps.battery_pct());
+                        reader.set_clock(SharedString::from(caps.current_clock()));
+                        reader.set_sleep_label(
+                            crate::panel::callbacks::sleep::sleep_label(
+                                ctx.cfg.reading_auto_sleep_secs,
+                            )
+                            .into(),
+                        );
+                        let wifi = caps.network_available();
+                        let bt = caps.audio_sink_available();
+                        reader.set_wifi_on(wifi);
+                        if !crate::device::bt_reconnect_busy() {
+                            reader.set_bt_on(bt);
+                            if bt {
+                                st.bt_fail_count = 0;
+                            }
+                            if let Some(n) = caps.bt_name() {
+                                reader.set_bt_connected_name(SharedString::from(n));
+                            }
+                        }
+                        reader.set_play_enabled(wifi && bt);
+                        if let Some(n) = caps.wifi_name() {
+                            reader.set_wifi_connected_name(SharedString::from(n));
+                        }
+                        if let Some(ref path) = ctx.fl_path {
+                            if let Some(hw) = frontlight_get(path) {
+                                reader.set_brightness_val(hw as i32);
+                            }
+                        }
+                        st.text_dirty = true;
+                        crate::debug_log::log("picker: panel OPEN (gear tap)");
+                        return LoopFlow::Continue;
+                    }
                     gesture::PickerTarget::Logo => {
                         st.tap_xy = None;
                         st.picker_last_tap_idx = None;

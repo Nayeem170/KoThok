@@ -28,6 +28,7 @@ pub enum HeaderZone {
 pub enum PickerTarget {
     None,
     Logo,
+    Settings,
     Exit,
     Book(usize),
     Filter(LibraryFilter),
@@ -181,6 +182,14 @@ pub fn picker_hit_test(
         let exit_right = screen_w - EXIT_PAD;
         if dx >= exit_left && dx < exit_right && (EXIT_TOP..EXIT_TOP + EXIT_BTN_PX).contains(&dy) {
             return PickerTarget::Exit;
+        }
+        const GEAR_GAP: f32 = 10.0;
+        const PIPE_W: f32 = 3.0;
+        const GEAR_BTN_PX: f32 = 76.0;
+        let gear_left = exit_left - GEAR_GAP - PIPE_W - GEAR_GAP - GEAR_BTN_PX;
+        let gear_right = gear_left + GEAR_BTN_PX;
+        if dx >= gear_left && dx < gear_right && (EXIT_TOP..EXIT_TOP + GEAR_BTN_PX).contains(&dy) {
+            return PickerTarget::Settings;
         }
         const LOGO_PX: f32 = 76.0;
         const LOGO_X: f32 = 23.0;

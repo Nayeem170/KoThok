@@ -88,16 +88,13 @@ pub fn apply_book_settings(cfg: &mut crate::data::config::AppConfig, settings: &
     }
 }
 
-pub fn push_book_settings_to_ui(
-    reader: &crate::Reader,
-    cfg: &crate::data::config::AppConfig,
-) {
+pub fn push_book_settings_to_ui(reader: &crate::Reader, cfg: &crate::data::config::AppConfig) {
     reader.set_font_size_val(cfg.font_size);
     reader.set_tts_speed(cfg.tts_rate);
     reader.set_tts_voice(slint::SharedString::from(&cfg.tts_voice));
-    reader.set_tts_voice_label(slint::SharedString::from(
-        crate::panel::voice_label(&cfg.tts_voice),
-    ));
+    reader.set_tts_voice_label(slint::SharedString::from(crate::panel::voice_label(
+        &cfg.tts_voice,
+    )));
 }
 
 #[cfg(test)]
@@ -209,11 +206,7 @@ mod tests {
     #[test]
     fn book_settings_clamps_out_of_range() {
         let p = tmp_path("clamp");
-        std::fs::write(
-            &p,
-            "/mnt/onboard/A.epub|font_size=999|tts_rate=abc\n",
-        )
-        .unwrap();
+        std::fs::write(&p, "/mnt/onboard/A.epub|font_size=999|tts_rate=abc\n").unwrap();
         let loaded = load_book_settings(Path::new(&p), "/mnt/onboard/A.epub");
         assert_eq!(loaded.font_size, Some(60));
         assert_eq!(loaded.tts_rate, None);

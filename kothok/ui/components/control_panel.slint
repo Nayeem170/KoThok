@@ -4,6 +4,7 @@ import { SelectorRow } from "selector.slint";
 
 export component ControlPanel inherits Rectangle {
     in property <bool> visible-flag: false;
+    in property <bool> picker-active: false;
     in property <int> brightness-val: 50;
     in property <int> tts-speed: 50;
     in property <int> font-size-val: 36;
@@ -139,6 +140,7 @@ export component ControlPanel inherits Rectangle {
             value-text: root.font-size-val + "px";
             fill-frac: (root.font-size-val - 20) / 40.0;
             set-frac(f) => { root.panel-frac(2, f); }
+            visible: !root.picker-active;
         }
 
         SelectorRow {
@@ -184,6 +186,7 @@ export component ControlPanel inherits Rectangle {
             bg-pressed: root.bg-pressed;
             prev => { root.panel-voice("prev"); }
             next => { root.panel-voice("next"); }
+            visible: !root.picker-active;
         }
 
         CompactSlider {
@@ -194,6 +197,7 @@ export component ControlPanel inherits Rectangle {
             value-text: (root.tts-speed == 50 ? "1.0x" : (root.tts-speed > 50 ? "+" : "") + (root.tts-speed - 50) * 2 + "%");
             fill-frac: root.tts-speed / 100.0;
             set-frac(f) => { root.panel-frac(1, f); }
+            visible: !root.picker-active;
         }
 
         CompactSlider {
@@ -259,13 +263,16 @@ export component ControlPanel inherits Rectangle {
             toggle => { root.panel-bt-toggle(); }
         }
 
-        Rectangle { vertical-stretch: 1; }
+        Rectangle { vertical-stretch: 1; visible: !root.picker-active; height: 0; }
 
         Rectangle {
-            height: 2px; background: root.separator;
-        }
+            visible: !root.picker-active;
 
-        HorizontalLayout {
+            Rectangle {
+                height: 2px; width: 100%; background: root.separator;
+            }
+
+            HorizontalLayout {
             spacing: 16px;
 
             Image {
@@ -391,6 +398,15 @@ export component ControlPanel inherits Rectangle {
             text: "swipe: pages - swipe down: menu - double-tap: play";
             color: root.text-secondary; font-size: 18px; wrap: word-wrap;
             horizontal-alignment: left;
+            visible: !root.picker-active;
+        }
+
+        Text {
+            text: "swipe up: close";
+            color: root.text-secondary; font-size: 18px;
+            horizontal-alignment: left;
+            visible: root.picker-active;
+        }
         }
     }
 }

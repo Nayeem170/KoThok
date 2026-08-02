@@ -11,6 +11,7 @@ use super::layout::PICKER_HEADER_H;
 
 const LOGO_PNG: &[u8] = include_bytes!("../../../ui/kothok-logo.png");
 const EXIT_PNG: &[u8] = include_bytes!("../../../ui/components/assets/exit.png");
+const GEAR_PNG: &[u8] = include_bytes!("../../../ui/components/assets/gear.png");
 const WORDMARK_PNG: &[u8] = include_bytes!("../../../ui/kothok-wordmark.png");
 
 const NAV_BORDER_COLOR: u16 = 0x1082;
@@ -24,6 +25,9 @@ const HEADER_ICON_PX: usize = 38;
 const HEADER_TEXT_PX: f32 = BODY_PX * 0.92;
 const HEADER_SEP_H: usize = 3;
 const HEADER_SEP_COLOR: u16 = 0xD6BA;
+const GEAR_GAP: usize = 10;
+const GEAR_PIPE_W: usize = 3;
+const GEAR_PIPE_H: usize = 50;
 
 pub fn header_exit_x(screen_w: usize) -> usize {
     screen_w - HEADER_BTN_PX - HEADER_LOGO_X
@@ -89,8 +93,10 @@ fn header_assets() -> &'static (
     Option<DecodedRgba>,
     Option<DecodedRgba>,
     Option<DecodedRgba>,
+    Option<DecodedRgba>,
 ) {
     static CACHE: OnceLock<(
+        Option<DecodedRgba>,
         Option<DecodedRgba>,
         Option<DecodedRgba>,
         Option<DecodedRgba>,
@@ -102,6 +108,7 @@ fn header_assets() -> &'static (
             text_render::decode_image_rgba(LOGO_PNG, HEADER_LOGO_PX, HEADER_LOGO_PX),
             text_render::decode_image_rgba(WORDMARK_PNG, wordmark_w, wordmark_h),
             text_render::decode_image_rgba(EXIT_PNG, HEADER_ICON_PX, HEADER_ICON_PX),
+            text_render::decode_image_rgba(GEAR_PNG, HEADER_ICON_PX, HEADER_ICON_PX),
         )
     })
 }
@@ -159,6 +166,43 @@ pub(super) fn paint_library_header(buf_bytes: &mut [u8], screen_w: usize, screen
         screen_h,
     );
     let exit_x = header_exit_x(screen_w);
+    let gear_x = exit_x - GEAR_GAP - GEAR_PIPE_W - GEAR_GAP - HEADER_BTN_PX;
+    const GEAR_GREEN: u16 = crate::rendering::common::BRAND_GREEN_RGB565;
+    fill_rounded_rect(
+        buf_bytes,
+        screen_w,
+        screen_h,
+        gear_x,
+        HEADER_BTN_Y,
+        HEADER_BTN_PX,
+        HEADER_BTN_PX,
+        GEAR_GREEN,
+        GEAR_GREEN,
+        HEADER_BTN_PX / 2,
+    );
+    if let Some(img) = assets.3.as_ref() {
+        let icon_x = gear_x + (HEADER_BTN_PX - img.width) / 2;
+        let icon_y = HEADER_BTN_Y + (HEADER_BTN_PX - img.height) / 2;
+        text_render::blit_rgb565_image_alpha(
+            buf_bytes, screen_w, &img.rgba, img.width, img.height, icon_x, icon_y, screen_w,
+            screen_h,
+        );
+    }
+    let pipe_x = gear_x + HEADER_BTN_PX + GEAR_GAP;
+    let pipe_y = (header_h.saturating_sub(GEAR_PIPE_H)) / 2;
+    for py in pipe_y..pipe_y + GEAR_PIPE_H {
+        if py >= screen_h {
+            break;
+        }
+        for px_off in 0..GEAR_PIPE_W {
+            let off = (py * screen_w + pipe_x + px_off) * 2;
+            if off + 2 > buf_bytes.len() {
+                break;
+            }
+            buf_bytes[off] = (HEADER_SEP_COLOR & 0xff) as u8;
+            buf_bytes[off + 1] = (HEADER_SEP_COLOR >> 8) as u8;
+        }
+    }
     const EXIT_RED: u16 = crate::rendering::common::BRAND_RED_RGB565;
     fill_rounded_rect(
         buf_bytes,
