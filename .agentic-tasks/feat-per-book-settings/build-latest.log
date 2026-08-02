@@ -1,0 +1,23 @@
+HEAD: 48056e1ed01973c03479c02a186cb63bde23297f
+BRANCH: feat/per-book-settings
+BASE: develop
+
+TREE:
+ 13 files changed, 393 insertions(+), 33 deletions(-)
+ kothok/src/data/config.rs                    |  17 +
+ kothok/src/data/persistence.rs               |   2 +
+ kothok/src/data/persistence/book_settings.rs | 227 +
+ kothok/src/loop_run.rs                       |   5 -
+ kothok/src/loop_run/picker/open_book.rs      |   9 +
+ kothok/src/loop_run/power.rs                 |   5 +
+ kothok/src/loop_run/status.rs                 |   5 +
+ kothok/src/meta.rs                           |   8 -
+ kothok/src/panel/callbacks.rs                |   8 +
+ kothok/src/panel/callbacks/font.rs           |   4 -
+ kothok/src/panel/callbacks/sleep.rs          |   5 +
+ kothok/src/panel/callbacks/sliders.rs        |   6 +
+ kothok/src/panel/callbacks/voice.rs          |   4 -
+
+TOTAL PASSED: 341 (baseline 334 + 7 new book_settings tests)
+FAILURES: 0
+WARNINGS: 0 (clean build)

@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Control Panel - DISPLAY section mock</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #333; display: flex; justify-content: center; padding: 40px; font-family: -apple-system, system-ui, sans-serif; }
+
+/* Kobo device frame */
+.device {
+  width: 505px;  /* 1264px at ~0.4x */
+  background: #fff;
+  border-radius: 12px;
+  padding: 44px;  /* 110px at 0.4x */
+  position: relative;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+}
+
+/* Header */
+.device::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: #006A4E;
+  border-radius: 12px 12px 0 0;
+}
+
+.header-back {
+  width: 30px; height: 30px;
+  border-radius: 15px;
+  background: #F42A41;
+  position: absolute;
+  top: 7px; left: 9px;
+  display: flex; align-items: center; justify-content: center;
+}
+.header-back::after {
+  content: '';
+  display: block;
+  width: 10px; height: 10px;
+  border-left: 2px solid #fff;
+  border-bottom: 2px solid #fff;
+  transform: rotate(45deg);
+  margin-left: 3px;
+}
+.header-title {
+  text-align: center;
+  font-size: 13px; font-weight: 700;
+  color: #666;
+  margin-bottom: 2px;
+}
+.header-line {
+  height: 1px;
+  background: #d0d0d0;
+  margin-bottom: 10px;
+}
+
+/* Section label */
+.section {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+.section-label {
+  font-size: 8px; font-weight: 700;
+  color: #999;
+  letter-spacing: 1px;
+}
+.section-line {
+  flex: 1;
+  height: 1px;
+  background: #999;
+}
+
+/* Slider rows */
+.slider {
+  margin-bottom: 6px;
+}
+.slider-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.slider-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #111;
+}
+.slider-value {
+  font-size: 12px;
+  color: #111;
+  font-weight: 600;
+}
+.slider-track {
+  width: 100%;
+  height: 8px;
+  border-radius: 4px;
+  background: #d0d0d0;
+  position: relative;
+}
+.slider-fill {
+  height: 100%;
+  border-radius: 4px;
+  background: #111;
+}
+.slider-thumb {
+  width: 20px; height: 20px;
+  border-radius: 10px;
+  background: #111;
+  position: absolute;
+  top: -6px;
+  transform: translateX(-50%);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+/* Selector row (Sleep) */
+.selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid #999;
+  border-radius: 6px;
+  margin-bottom: 6px;
+}
+.selector-btn {
+  width: 26px; height: 26px;
+  border-radius: 4px;
+  background: #1a1a1a;
+  color: #fff;
+  font-size: 14px;
+  display: flex; align-items: center; justify-content: center;
+}
+.selector-label {
+  flex: 1;
+  font-size: 11px;
+  color: #111;
+}
+
+/* NEW marker */
+.new {
+  position: relative;
+}
+.new::after {
+  content: 'NEW';
+  position: absolute;
+  top: -2px; right: -28px;
+  font-size: 7px;
+  color: #006A4E;
+  font-weight: 700;
+  background: #e6f5f0;
+  padding: 1px 3px;
+  border-radius: 2px;
+}
+
+/* Footer info */
+.footnote {
+  margin-top: 16px;
+  font-size: 8px;
+  color: #666;
+  text-align: center;
+}
+</style>
+</head>
+<body>
+
+<div class="device">
+  <div class="header-back"></div>
+  <div class="header-title">Settings</div>
+  <div class="header-line"></div>
+
+  <div class="section">
+    <span class="section-label">DISPLAY</span>
+    <div class="section-line"></div>
+  </div>
+
+  <!-- Brightness -->
+  <div class="slider">
+    <div class="slider-row">
+      <span class="slider-name">Brightness</span>
+      <span class="slider-value">50%</span>
+    </div>
+    <div class="slider-track">
+      <div class="slider-fill" style="width: 50%"></div>
+      <div class="slider-thumb" style="left: 50%"></div>
+    </div>
+  </div>
+
+  <!-- Font -->
+  <div class="slider">
+    <div class="slider-row">
+      <span class="slider-name">Font</span>
+      <span class="slider-value">36px</span>
+    </div>
+    <div class="slider-track">
+      <div class="slider-fill" style="width: 40%"></div>
+      <div class="slider-thumb" style="left: 40%"></div>
+    </div>
+  </div>
+
+  <!-- Line (NEW) -->
+  <div class="slider new">
+    <div class="slider-row">
+      <span class="slider-name">Line</span>
+      <span class="slider-value">140%</span>
+    </div>
+    <div class="slider-track">
+      <div class="slider-fill" style="width: 33.3%"></div>
+      <div class="slider-thumb" style="left: 33.3%"></div>
+    </div>
+  </div>
+
+  <!-- Margin (NEW) -->
+  <div class="slider new">
+    <div class="slider-row">
+      <span class="slider-name">Margin</span>
+      <span class="slider-value">24px</span>
+    </div>
+    <div class="slider-track">
+      <div class="slider-fill" style="width: 18.2%"></div>
+      <div class="slider-thumb" style="left: 18.2%"></div>
+    </div>
+  </div>
+
+  <!-- Sleep -->
+  <div class="selector">
+    <div class="selector-btn">&lt;</div>
+    <div class="selector-label">Sleep: Off</div>
+    <div class="selector-btn">&gt;</div>
+  </div>
+
+  <div class="section" style="margin-top: 6px">
+    <span class="section-label">AUDIO</span>
+    <div class="section-line"></div>
+  </div>
+
+  <div class="slider">
+    <div class="slider-row">
+      <span class="slider-name">Speed</span>
+      <span class="slider-value">1.0x</span>
+    </div>
+    <div class="slider-track">
+      <div class="slider-fill" style="width: 50%"></div>
+      <div class="slider-thumb" style="left: 50%"></div>
+    </div>
+  </div>
+
+  <div class="slider">
+    <div class="slider-row">
+      <span class="slider-name">Volume</span>
+      <span class="slider-value">100%</span>
+    </div>
+    <div class="slider-track">
+      <div class="slider-fill" style="width: 100%"></div>
+      <div class="slider-thumb" style="left: 100%"></div>
+    </div>
+  </div>
+
+  <div class="footnote">Kobo Libra Colour 1264x1680 | DISPLAY section only</div>
+</div>
+
+</body>
+</html>

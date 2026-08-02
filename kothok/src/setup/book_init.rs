@@ -4,9 +4,9 @@ use kobo_core::{Capabilities, Chapter};
 use slint::platform::software_renderer::{MinimalSoftwareWindow, Rgb565Pixel};
 
 use crate::capabilities::KoboCapabilities;
-use crate::data::config::AppConfig;
+use crate::data::config::{self, AppConfig};
 use crate::data::library::{self, EpubEntry};
-use crate::data::persistence::{self, POSITIONS_FILE};
+use crate::data::persistence::{self, load_book_settings, apply_book_settings, push_book_settings_to_ui, POSITIONS_FILE};
 use crate::data::word_index::WordIndex;
 use crate::rendering::common::rgb565_as_bytes_ref;
 use crate::rendering::fb::{Fb, WAVE_GC16};
@@ -122,7 +122,25 @@ pub(super) fn init_book(
     let toc_rows = library::toc_rows(&toc_tree, &chapters);
     let current_book_path = book_path.clone();
     render::set_rtl(is_rtl(book_lang.as_deref()));
+    let voice_before = setup.cfg.tts_voice.clone();
+    let lang_before = setup.cfg.tts_lang.clone();
     apply_book_voice(&mut setup.cfg, book_lang.as_deref(), reader, None);
+
+    let book_settings = load_book_settings(
+        std::path::Path::new(config::BOOK_SETTINGS_FILE),
+        &book_path,
+    );
+    apply_book_settings(&mut setup.cfg, &book_settings);
+    push_book_settings_to_ui(reader, &setup.cfg);
+
+    if book_settings.font_size.is_some() {
+        setup.body_px = setup.cfg.font_size as f32;
+        setup.head_px = setup.cfg.font_size as f32 * crate::rendering::layout::HEADING_SCALE;
+        setup.line_h = (setup.cfg.font_size as f32 * crate::rendering::layout::LINE_HEIGHT_SCALE) as i32;
+    }
+    if setup.cfg.tts_voice != voice_before || setup.cfg.tts_lang != lang_before {
+        config::save_book_settings(&book_path, &setup.cfg);
+    }
     if let Some(b) = all_books.iter().find(|b| b.path == book_path) {
         set_book_meta(reader, &b.title, b.author.as_deref().unwrap_or(""));
         reader.set_book_cover_img(render::cover_image(b.cover_bytes.as_deref(), 200, 300));

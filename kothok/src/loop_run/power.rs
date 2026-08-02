@@ -234,6 +234,11 @@ pub(super) fn handle_power_button(st: &mut LoopState, ctx: &mut LoopContext) -> 
                     st.prev_buffer.copy_from_slice(&st.buffer);
                     st.picker_active = true;
                     reader.set_picker_active(true);
+                    {
+                        let device_font = (ctx.w as i32 / 38).clamp(20, 60);
+                        *ctx.cfg = load_config_from_base(CONFIG_FILE, device_font);
+                        push_book_settings_to_ui(reader, ctx.cfg);
+                    }
                     if let Some(ref path) = fl_path {
                         crate::device::power::restore_frontlight(path, st.saved_brightness);
                     }

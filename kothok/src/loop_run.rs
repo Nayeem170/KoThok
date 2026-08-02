@@ -18,11 +18,12 @@ use crate::audio::{Cmd, Event};
 use crate::book_session;
 use crate::callbacks::Callbacks;
 use crate::capabilities::KoboCapabilities;
-use crate::data::config::AppConfig;
+use crate::data::config::{load_config_from_base, save_settings_for, AppConfig, BOOK_SETTINGS_FILE, CONFIG_FILE};
 use crate::data::library::open_book;
 use crate::data::library::EpubEntry;
 use crate::data::persistence::{
-    self, load_position, save_position, ReadingPosition, POSITIONS_FILE,
+    self, load_book_settings, apply_book_settings, push_book_settings_to_ui,
+    load_position, save_position, ReadingPosition, POSITIONS_FILE,
 };
 use crate::device::{fonts, input, touch};
 use crate::loop_state::{LoopContext, LoopState};

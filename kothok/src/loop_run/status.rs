@@ -158,6 +158,11 @@ pub(super) fn handle_quit_button(st: &mut LoopState, ctx: &mut LoopContext) -> L
         st.picker_active = true;
         st.panel_open = false;
         reader.set_panel_open(false);
+        {
+            let device_font = (ctx.w as i32 / 38).clamp(20, 60);
+            *ctx.cfg = load_config_from_base(CONFIG_FILE, device_font);
+            push_book_settings_to_ui(reader, ctx.cfg);
+        }
         st.picker_entered = Some(std::time::Instant::now());
         st.picker_cells = picker_scroll_cells(ctx.all_books, st.picker_scroll, st.library_filter);
         st.prev_buffer.copy_from_slice(&st.buffer);
