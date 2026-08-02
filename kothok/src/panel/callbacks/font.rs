@@ -7,7 +7,7 @@ use slint::platform::software_renderer::Rgb565Pixel;
 
 use crate::audio::Cmd;
 use crate::callbacks::Callbacks;
-use crate::data::config::{save_config, AppConfig};
+use crate::data::config::{save_settings_for, AppConfig};
 use crate::loop_state::LoopState;
 use crate::reader::apply_page;
 use crate::rendering::layout::{build_state, estimate_chapter_offsets, spawn_offset_computation};
@@ -30,7 +30,7 @@ pub(super) fn handle_font_slider(
         if (20..=60).contains(&new_val) && new_val != cfg.font_size {
             cfg.font_size = new_val;
             reader.set_font_size_val(new_val);
-            save_config(cfg);
+            save_settings_for(&st.current_book_path, cfg, st.picker_active);
             cb.font_pending_val.set(Some(new_val));
             cb.font_last_change.set(Some(Instant::now()));
         }

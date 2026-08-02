@@ -8,7 +8,7 @@ use slint::SharedString;
 
 use crate::audio::glue::best_effort_send;
 use crate::audio::Cmd;
-use crate::data::config::{save_config, AppConfig};
+use crate::data::config::AppConfig;
 use crate::Reader;
 
 use super::super::{voice_label, voices_for_lang};
@@ -18,17 +18,17 @@ pub(super) fn handle_voice_cycle(
     cmd_tx: &Sender<Cmd>,
     cfg: &mut AppConfig,
     panel_voice_cell: &std::cell::Cell<i32>,
-) {
+) -> bool {
     let dir = panel_voice_cell.replace(0);
     if dir == 0 {
-        return;
+        return false;
     }
     let voices = voices_for_lang(&cfg.tts_lang);
     // cfg.tts_lang is config-derived (untrusted file); an unknown/empty lang can
     // yield zero voices, and the cycle math below would underflow / div-by-zero.
     if voices.is_empty() {
         warn!("voice-cycle: no voices for lang={}, skipping", cfg.tts_lang);
-        return;
+        return false;
     }
     let current = cfg.tts_voice.clone();
     let idx = voices.iter().position(|v| v.id() == current).unwrap_or(0);
@@ -61,5 +61,5 @@ pub(super) fn handle_voice_cycle(
         Cmd::Voice(new_voice.to_string())
     };
     best_effort_send(cmd_tx, cmd);
-    save_config(cfg);
+    true
 }

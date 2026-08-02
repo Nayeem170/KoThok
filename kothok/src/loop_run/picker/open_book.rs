@@ -87,7 +87,16 @@ pub(super) fn open_book_from_picker(
         show_status(reader, window, fb, w, h, st, &status);
     }
     log::info!("perf: ensure_font {}ms", t1.elapsed().as_millis());
+    let voice_before = cfg.tts_voice.clone();
+    let lang_before = cfg.tts_lang.clone();
     apply_book_voice(cfg, book_lang.as_deref(), reader, Some(cmd_tx));
+    let book_settings =
+        load_book_settings(std::path::Path::new(BOOK_SETTINGS_FILE), &book_path);
+    apply_book_settings(cfg, &book_settings);
+    push_book_settings_to_ui(reader, cfg);
+    if cfg.tts_voice != voice_before || cfg.tts_lang != lang_before {
+        save_settings_for(&book_path, cfg, false);
+    }
     st.chapter_count = st.chapters.len();
     reader.set_chapter_count(st.chapter_count as i32);
     reader.set_toc_row_count(st.toc_rows.len().max(1) as i32);

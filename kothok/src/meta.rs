@@ -4,7 +4,7 @@ use slint::SharedString;
 
 use crate::audio::glue::best_effort_send;
 use crate::audio::Cmd;
-use crate::data::config::{save_config, AppConfig};
+use crate::data::config::AppConfig;
 use crate::Reader;
 
 pub const LANG_AUTO: &str = "auto";
@@ -23,7 +23,7 @@ pub fn apply_book_voice(
     book_lang: Option<&str>,
     reader: &Reader,
     cmd_tx: Option<&std::sync::mpsc::Sender<Cmd>>,
-) {
+) -> bool {
     let lang = book_lang.unwrap_or(LANG_EN_US);
     let mapped = crate::panel::normalize_lang(lang);
     let voices = crate::panel::voices_for_lang(mapped);
@@ -55,9 +55,7 @@ pub fn apply_book_voice(
         };
         best_effort_send(tx, cmd);
     }
-    if voice_changed || lang_changed {
-        save_config(cfg);
-    }
+    voice_changed || lang_changed
 }
 
 pub const SAMPLE_CHAPTER: &str = r#"<html><body>

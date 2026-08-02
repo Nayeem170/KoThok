@@ -1,231 +1,155 @@
 # Plan: feat-per-book-settings
 
-Remember font size, line spacing and margins **per book** instead of one global value.
+All existing settings remembered per book. Global values become defaults for new books. No new UI.
 
 ## Current state (verified in source)
 
-| Setting | Today | Storage |
+| Setting | Storage | Slider handler |
 |---|---|---|
-| Font size | global slider, 20..60 step 2 | `AppConfig.font_size` in `/mnt/onboard/.adds/config` ([config.rs:28](kothok/src/data/config.rs#L28)) |
-| Line spacing | **not a setting** - hardcoded `LINE_HEIGHT_SCALE = 1.4` ([layout.rs:35](kothok/src/rendering/layout.rs#L35)) | - |
-| Margins | **not a setting** - hardcoded `PAD_LEFT = 24`, baked into `text_w()` at `init_layout()` in a `OnceLock` ([layout.rs:114-126](kothok/src/rendering/layout.rs#L114-L126)) | - |
+| Font size | `AppConfig.font_size` | `panel/callbacks/font.rs:33` calls `save_config(cfg)` |
+| Brightness | `AppConfig.brightness` | `panel/callbacks/sliders.rs:28` calls `save_config(cfg)` |
+| Volume | `AppConfig.volume` | `panel/callbacks/sliders.rs:43` calls `save_config(cfg)` |
+| TTS rate | `AppConfig.tts_rate` | `panel/callbacks/sliders.rs:58` calls `save_config(cfg)` |
+| TTS voice | `AppConfig.voices[lang]` | `panel/callbacks/voice.rs:64` calls `save_config(cfg)` |
+| TTS lang | `AppConfig.tts_lang` | `meta.rs:58-60` calls `save_config(cfg)` via `apply_book_voice` |
+| Natural scroll | `AppConfig.natural_scroll` | stored in config |
+| Panel transition | `AppConfig.panel_transition` | stored in config |
+| Reading auto sleep | `AppConfig.reading_auto_sleep_secs` | `panel/callbacks/sleep.rs:35` calls `save_config(cfg)` |
 
-Per-book data already exists: `positions` file keyed by book path
-([position.rs](kothok/src/data/persistence/position.rs)), and the offset cache is keyed
-`{book_hash}_{font_size}.bin` ([cache.rs:23](kothok/src/data/persistence/cache.rs#L23)).
-
-So this feature is two jobs, not one:
-
-1. **Make line spacing and margins settings at all** (new sliders + dynamic layout).
-2. **Key all three per book** (new store + load on open + save on change).
-
-Job 2 alone is small. Job 1 is where the real work is, because `text_w()` is currently a
-write-once global.
+Every slider handler calls `save_config(cfg)` which writes the single global file. `apply_book_voice` at `meta.rs:58-60` also writes global config when voice/lang changes during book open. Per-book positions are already separate (`positions` file at `config.rs:20`).
 
 ## Design decisions
 
-**D1 - Global values become defaults, per-book values are overrides.**
-A book with no saved entry opens at the current global `AppConfig` values (which stay as
-the "new book" default). Adjusting a slider while a book is open writes the per-book
-entry *only* - it no longer touches `AppConfig`. This keeps existing installs behaving
-identically on first open of each book, and matches KOReader/Kobo convention.
-Rejected: per-book-only with no global (first open of every book would jump to a
-hardcoded default and lose the user's calibrated font size).
-
-**D2 - Separate `booksettings` file, not extra fields on the `positions` line.**
-`positions` is rewritten on every page turn / cursor commit; style is written on slider
-release. One responsibility per file (§1). Format tolerates unknown keys so future
-settings append without a migration.
-
-**D3 - Side margins only.** `PAD_TOP = 110` is the header band height shared with
-`content.slint`; making it settable means moving Slint geometry too. Out of scope -
-noted in "Out of scope" below.
-
-**D4 - Style is part of the offset-cache key.** Line spacing and margins repaginate just
-like font size does, so `cache_path` must include them or page numbers go wrong after a
-change. Filename becomes `{hash}_{font:04}_{line:03}_{margin:03}.bin`.
+- **D1**: Global values become defaults; slider writes per-book only while book open.
+- **D2**: Separate `booksettings` file, not fields on `positions`.
+- **D3**: Store adjustable settings as pipe-delimited key=value, same keys as config.
+- **D4**: Cache key unchanged (font_size already in `{hash}_{font}.bin`).
+- **D5**: Save per-book when book open, save global when in picker.
+- **D6**: `tts_lang` is NOT stored per-book. `apply_book_voice` already sets it per-book based on book language detection. Storing it per-book would fight with that auto-detection.
 
 ## Data model
 
-New `kothok/src/data/persistence/book_style.rs`:
+New `kothok/src/data/persistence/book_settings.rs`:
 
 ```rust
-/// Per-book layout style. `line_pct` is line height as a percentage of the body
-/// font size (140 == the old `LINE_HEIGHT_SCALE` of 1.4); `margin_px` is the
-/// outer side pad (24 == the old `PAD_LEFT`). Both defaults reproduce the
-/// pre-feature layout exactly, so an untouched book paginates identically.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct BookStyle {
-    pub font_size: i32, // 20..=60, even
-    pub line_pct: i32,  // 110..=200, step 5
-    pub margin_px: i32, // 8..=96, step 8
+/// Per-book settings override. Only the adjustable fields -- not
+/// onboarding_version (app state), voices (language-level map, not book-level),
+/// or tts_lang (auto-detected from book language by apply_book_voice).
+pub struct BookSettings {
+    pub font_size: Option<i32>,
+    pub brightness: Option<i32>,
+    pub volume: Option<i32>,
+    pub tts_rate: Option<i32>,
+    pub tts_voice: Option<String>,
+    pub natural_scroll: Option<bool>,
+    pub reading_auto_sleep_secs: Option<u32>,
+    pub panel_transition: Option<String>, // stored as key string, converted via PanelTransition::from_key()
 }
 ```
 
-File `/mnt/onboard/.adds/bookstyles`, one line per book, same
-read-filter-append-rewrite shape as `save_position`:
+Using `Option` so missing keys fall back to the global default. A book with no entry at all gets `None` for everything -> global config as-is.
+
+File `/mnt/onboard/.adds/booksettings`, one line per book:
 
 ```
-/mnt/onboard/books/Foo.epub|font=42|line=150|margin=32
+/mnt/onboard/books/Foo.epub|font_size=42|brightness=60|volume=80|tts_rate=55|tts_voice=Emma (English)|natural_scroll=1|reading_auto_sleep=300|panel_transition=reagl
 ```
 
 API mirroring `position.rs`:
 
 ```rust
-pub fn load_book_style(file: &Path, book_path: &str) -> Option<BookStyle>;
-pub fn save_book_style(file: &Path, book_path: &str, style: &BookStyle);
+pub fn load_book_settings(file: &Path, book_path: &str) -> BookSettings;
+pub fn save_book_settings(file: &Path, book_path: &str, cfg: &AppConfig);
 ```
 
-Unknown `key=` pairs are skipped, missing keys fall back to the passed defaults - the
-same forward/backward tolerance `load_position` already has for field 8.
+`load_book_settings` returns a `BookSettings` with `None` for missing keys or missing file.
+`save_book_settings` rewrites the book's line (same filter-append pattern as `save_position`), writing all adjustable fields from the current `AppConfig`.
 
-## Making margins dynamic
+`apply_book_settings(cfg: &mut AppConfig, settings: &BookSettings)` overwrites each `cfg.field` with `settings.field` when `Some`. For `panel_transition`, converts the stored key string via `PanelTransition::from_key()` before assigning.
 
-The blocker: `PAD_LEFT` is a `const` and `text_w()` reads a write-once `OnceLock`.
-
-Change [layout.rs](kothok/src/rendering/layout.rs):
-
-```rust
-/// Default side margin. Also the fixed margin for non-book screens (splash,
-/// picker) - only the reading column follows the per-book value.
-pub const MARGIN_DEFAULT_PX: usize = 24;
-static MARGIN_PX: AtomicUsize = AtomicUsize::new(MARGIN_DEFAULT_PX);
-
-pub fn pad_left() -> usize { MARGIN_PX.load(Ordering::Relaxed) }
-pub fn set_margin_px(px: usize);          // clamped 8..=96
-pub fn text_w() -> usize { fb_w() - 2 * (pad_left() + GUTTER_W + GUTTER_PAD) }
-```
-
-`init_layout` keeps `fb_w`/`fb_h` in the `OnceLock` instead of the derived `text_w`.
-`content_h()` is unchanged.
-
-Call sites of the `PAD_LEFT` const to convert to `pad_left()` - all reading-column
-geometry:
-
-- [text_overlay.rs:38](kothok/src/rendering/text_overlay.rs#L38), `:70`, `:160`, `:543`, `:579`
-- [touch_dispatch.rs:20](kothok/src/loop_run/touch_dispatch.rs#L20) (progress-bar x)
-
-Call sites that must stay pinned to `MARGIN_DEFAULT_PX` (not book content):
-
-- [splash.rs:68](kothok/src/rendering/splash.rs#L68) `SPLASH_MARGIN` (const-evaluated, and
-  `splash/tests.rs` asserts against it)
-
-`text_w()` is read on the main thread only. The offset worker takes a `ScreenLayout`
-snapshot ([offsets.rs:33](kothok/src/rendering/layout/state/offsets.rs#L33)) and calls
-`count_chapter_pages`, never the global - so no locking is needed. **`set_margin_px` MUST
-be called before `screen_layout()` is snapshotted** for the worker, otherwise the worker
-paginates at the old width.
+`BOOK_SETTINGS_FILE: &str = "/mnt/onboard/.adds/booksettings"` added to `config.rs`.
 
 ## Implementation phases
 
 ### Phase 1 - storage (no behaviour change)
 
-1. `data/persistence/book_style.rs` + `BookStyle` with `Default` = `{36, 140, 24}` and a
-   `clamped()` constructor; re-export from `data/persistence.rs`.
-2. `BookStyle::from_config(&AppConfig)` - the D1 default path.
-3. `cache_path(book_path, &BookStyle)` - new filename. Update the two callers
-   ([book_session.rs:114](kothok/src/book_session.rs#L114),
-   [offsets.rs:39](kothok/src/rendering/layout/state/offsets.rs#L39)) and
-   `spawn_offset_computation`'s `font_size: i32` param -> `style: BookStyle`.
-   `load_any_offset_cache` already matches on the `{hash}_` prefix and picks the newest
-   file, so old-format caches stay harmless (they simply never win once a new one exists).
-4. Tests: roundtrip, unknown-key tolerance, multiple books, missing file, clamping.
+1. `data/persistence/book_settings.rs` + `BookSettings` struct with `Option` fields.
+2. `load_book_settings`, `save_book_settings`, `apply_book_settings` functions.
+3. Re-export from `data/persistence.rs`.
+4. Add `BOOK_SETTINGS_FILE` constant to `config.rs`.
+5. Tests: roundtrip, missing file returns all-None, multiple books, overwrite, unknown keys ignored, partial fields (only font_size saved, rest None).
 
-### Phase 2 - dynamic layout globals
+### Phase 2 - load on book open
 
-5. `MARGIN_PX` atomic + `pad_left()` + `text_w()` rework, `set_margin_px`.
-6. Convert the `PAD_LEFT` call sites listed above; leave splash pinned.
-7. Derive `line_h` from `line_pct` everywhere it is currently
-   `font_size * LINE_HEIGHT_SCALE`: [setup.rs:249](kothok/src/setup.rs#L249),
-   [font.rs:68](kothok/src/panel/callbacks/font.rs#L68). Add
-   `fn line_h_for(style: &BookStyle) -> i32` in `layout` so there is one home for the
-   formula (§4). Keep `LINE_HEIGHT_SCALE` as the documented default only.
-8. Test: `build_state` at margin 8 / 24 / 96 and line_pct 110 / 140 / 200 all produce
-   non-empty pages and monotonically wider/narrower rows (extends the existing
-   `line_h` loop at [layout/tests.rs:203](kothok/src/rendering/layout/tests.rs#L203)).
+6. `open_book_from_picker` (`loop_run/picker/open_book.rs:98`): after `load_position`, call `load_book_settings` + `apply_book_settings` to overlay per-book values on `cfg`. Push the updated values to the UI (font_size_val, brightness_val, tts_speed, volume_val, etc.).
+7. `init_reader_and_config` (`setup.rs:243`): for the startup path (last book auto-open), same load + apply before the initial `body_px`/`head_px`/`line_h` computation at `setup.rs:247-249`.
+8. **NEW CODE** in picker-return path (`loop_run/status.rs:158` and `loop_run/power.rs:235`): after `st.picker_active = true`, reload global config via `load_config_from_base(CONFIG_FILE, device_default_font)` and apply the restored values to the UI properties (font_size_val, brightness_val, volume_val, tts_speed, etc.). This is the only way to restore the "new book defaults" when returning from a book that had different settings.
 
-### Phase 3 - load per book on open
+### Phase 3 - save on change
 
-9. `LoopState` gains `pub style: BookStyle` (replacing the implicit
-   `body_px`/`head_px`/`line_h` source of truth; those three stay as derived cache
-   fields, recomputed by one `fn apply_style(st: &mut LoopState)`).
-10. `open_book_from_picker` ([picker/open_book.rs:98](kothok/src/loop_run/picker/open_book.rs#L98)):
-    next to `load_position`, load the style, fall back to `BookStyle::from_config(cfg)`,
-    then `set_margin_px` + `apply_style` **before** `open_book_session`.
-11. Same in the startup path: [setup/book_init.rs](kothok/src/setup/book_init.rs) /
-    `init_reader_and_config` - the initial `body_px`/`head_px`/`line_h` at
-    [setup.rs:247-249](kothok/src/setup.rs#L247-L249) must come from the resolved book
-    style, not `cfg.font_size`, or the first paint uses the global and then reflows.
-12. Push the values to the UI on open: `reader.set_font_size_val`, plus the two new
-    properties, so the panel sliders show the book's values.
-13. Returning to the picker / opening another book re-resolves; closing a book restores
-    `MARGIN_DEFAULT_PX` before picker paint.
+9. Each slider handler that currently calls `save_config(cfg)` instead calls a new `save_settings_for_current_book(st, cfg)` that writes per-book when `!st.picker_active`, or global when in picker.
+10. Font slider (`panel/callbacks/font.rs:33`): replace `save_config(cfg)` with `save_settings_for_current_book`.
+11. Brightness slider (`panel/callbacks/sliders.rs:28`): same.
+12. Volume slider (`panel/callbacks/sliders.rs:43`): same.
+13. TTS rate slider (`panel/callbacks/sliders.rs:58`): same.
+14. Voice cycle (`panel/callbacks/voice.rs:64`): same.
+15. Sleep cycle (`panel/callbacks/sleep.rs:35`): same.
+16. `apply_book_voice` (`meta.rs:58-60`): replace `save_config(cfg)` with per-book save. This fires during book open (`open_book.rs:90`) and would otherwise write book-specific voice to global config.
+17. Connectivity toggles (WiFi, BT): these are hardware state, not book content. They stay global-only. `save_config(cfg)` for those stays unchanged.
 
-### Phase 4 - UI + write on change
+### Helper function
 
-14. `control_panel.slint`: two `CompactSlider`s under "Font" -
-    `Line` (`value-text: line-pct + "%"`, `panel-frac(4, f)`) and
-    `Margin` (`value-text: margin-px + "px"`, `panel-frac(5, f)`).
-    New `in property <int>`s on `ControlPanel` + `reader.slint` root, forwarded like
-    `font-size-val` ([reader.slint:212](kothok/ui/reader.slint#L212)).
-15. `callbacks.rs` `on_panel_frac`: route `4`/`5` into new cells alongside
-    `font_frac_in` ([callbacks.rs:157-164](kothok/src/callbacks.rs#L157-L164)).
-    `SLIDER_LINE: i32 = 4`, `SLIDER_MARGIN: i32 = 5` (0/1/2/3 are taken by
-    brightness/tts-rate/font/volume).
-16. Generalise [panel/callbacks/font.rs](kothok/src/panel/callbacks/font.rs) into
-    `handle_style_sliders`: all three sliders share one debounce
-    (`FONT_DEBOUNCE_MS`), one pending value, and one `apply_style_reflow` - which is
-    today's `apply_font_reflow` with the anchor logic unchanged, plus
-    `set_margin_px` before `build_state`.
-17. On slider commit: `save_book_style(...)` for the open book. **Do not** call
-    `save_config` for these three any more; `AppConfig.font_size` is now only the
-    new-book default. Keep writing `cfg.font_size` when no book is open (picker).
-18. Audio reload contract (AGENTS.md): `apply_style_reflow` must keep the existing
-    `page_utterances` -> `Cmd::Reload` -> `Cmd::Seek` tail. Margin/line changes
-    repaginate exactly like font, so this is non-negotiable.
+```rust
+fn save_settings_for_current_book(st: &LoopState, cfg: &AppConfig) {
+    if st.picker_active {
+        save_config(cfg);
+    } else {
+        save_book_settings(
+            Path::new(BOOK_SETTINGS_FILE),
+            &st.current_book_path,
+            cfg,
+        );
+    }
+}
+```
 
-## Test plan
+Placed in `data/config.rs` alongside `save_config`, accessible by all slider handlers.
 
-Unit (desktop, `cargo test -p kothok-app`):
+## Files to change
 
-- `book_style_roundtrip`, `book_style_unknown_keys_ignored`,
-  `book_style_missing_file_returns_none`, `book_style_multiple_books`,
-  `book_style_clamps_out_of_range`
-- `book_style_save_overwrites_previous`
-- `cache_path_differs_per_style` - three styles, three distinct paths
-- `default_style_reproduces_legacy_layout` - `build_state` with
-  `{36,140,24}` equals the pre-feature `build_state(ch, 36.0, 28.08, 50)` pagination
-- `text_w_tracks_margin` - `set_margin_px(8)` widens `text_w()` by exactly 32 vs 24
-- `line_h_for` boundaries at 110 / 200
+| File | Change |
+|---|---|
+| `data/persistence/book_settings.rs` | **NEW** - BookSettings struct, load, save, apply |
+| `data/persistence.rs` | Re-export book_settings module |
+| `data/config.rs` | Add `BOOK_SETTINGS_FILE` constant, add `save_settings_for_current_book` helper |
+| `meta.rs` | Replace `save_config(cfg)` at line 59 with per-book save in `apply_book_voice` |
+| `loop_run/picker/open_book.rs` | Load per-book settings after position load, push to UI |
+| `loop_run/status.rs` | Reload global config on picker return (new code at line 158) |
+| `setup.rs` | Load per-book settings in startup path |
+| `panel/callbacks/font.rs` | Replace `save_config(cfg)` with per-book save |
+| `panel/callbacks/sliders.rs` | Replace `save_config(cfg)` with per-book save |
+| `panel/callbacks/voice.rs` | Replace `save_config(cfg)` with per-book save |
+| `panel/callbacks/sleep.rs` | Replace `save_config(cfg)` with per-book save |
 
-Device (per `device-test-workflow`):
+## What stays unchanged
 
-- Open book A, set font 48 / line 180 / margin 48. Back to picker. Open book B - shows
-  the global default, not A's values. Reopen A - A's values restored, same page.
-- Change margin mid-chapter: page count updates, reading position anchor holds (the
-  `apply_font_reflow` anchor path), TTS resumes on the right sentence.
-- Reboot after a change (`sync` gotcha - see `deploy-sync-gotcha`), reopen: values persist.
+- `PAD_LEFT` stays const (no dynamic margins)
+- `LINE_HEIGHT_SCALE` stays const (no line spacing setting)
+- Cache key stays `{hash}_{font_size}.bin`
+- All Slint UI files (no new sliders, no new properties)
+- `positions` file format
+- Connectivity handlers (WiFi, BT) -- global only
 
 ## Risks
 
-- **Repagination cost.** Margin/line changes rerun `spawn_offset_computation` exactly
-  like a font change, so a long book shows the loading percentage again. Same cost as
-  today's font slider - acceptable, but the debounce must cover all three sliders or a
-  drag spawns a worker per tick.
-- **Cache dir growth.** The style-keyed name multiplies possible cache files per book.
-  Each is `4 * (chapters+1)` bytes - tens of KB worst case. Not pruning for now; if it
-  matters, prune to the newest 4 per `{hash}_` prefix on book open.
-- **Stale offsets from an in-flight worker.** Already handled by the existing pattern:
-  replacing `st.offset_rx` drops the old receiver, and the old worker writes to the old
-  style's cache path. The new cache key is what keeps that write from poisoning the new
-  style.
-- **`PAD_LEFT` misses.** Any call site left on the const silently draws at the old
-  margin while wrapping at the new one (ragged/overflowing lines). The const is deleted
-  and replaced by `MARGIN_DEFAULT_PX` + `pad_left()`, so the compiler finds every site.
+- **Brightness jumping on book switch.** If book A has brightness 30 and book B has brightness 80, switching books changes frontlight visibly. This matches the requirement (each book has its own settings). If it proves annoying, brightness can be made global-only in a follow-up.
+- **File growth.** One line per book opened, same as positions. Negligible.
+- **Crash during save.** Same filter-append-rewrite pattern as positions. Worst case: one book's settings lost, global config untouched.
 
 ## Out of scope
 
-- Top/bottom margins (`PAD_TOP` is the Slint header band - D3).
-- Per-book font *face*, justification, hyphenation.
-- Per-book TTS voice - already handled separately by `apply_book_voice`.
-- A "save as default / apply to all books" action. Worth a follow-up once per-book lands.
+- Per-book font face, justification, hyphenation
+- Per-book line spacing, margins (no UI to set them)
+- Dynamic margins (PAD_LEFT stays const)
+- "Apply to all books" action
+- Per-book TTS language (`apply_book_voice` already handles this via book language detection)

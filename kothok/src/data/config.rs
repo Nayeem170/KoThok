@@ -18,6 +18,7 @@ pub const DEVICE_BOOK: &str = "/mnt/onboard/.adds/book.epub";
 pub const GUIDE_PATH: &str = "/mnt/onboard/books/KoThok - Getting Started.epub";
 pub const BOOK_CACHE_DIR: &str = "/mnt/onboard/.adds/bookcache";
 pub const POSITIONS_FILE: &str = "/mnt/onboard/.adds/positions";
+pub const BOOK_SETTINGS_FILE: &str = "/mnt/onboard/.adds/booksettings";
 pub const CACHE_DIR: &str = "/mnt/onboard/.adds/cache";
 pub const ELABEL_PATH_FILTER: &str = "/.kobo/eLabel/";
 pub const VOICE_CACHE_FILE: &str = "/mnt/onboard/.adds/kothok/voices.json";
@@ -172,6 +173,22 @@ pub fn save_config_to(cfg: &AppConfig, path: &str) {
 
 pub fn save_config(cfg: &AppConfig) {
     save_config_to(cfg, CONFIG_FILE);
+}
+
+pub fn save_book_settings(book_path: &str, cfg: &AppConfig) {
+    crate::data::persistence::save_book_settings(
+        std::path::Path::new(BOOK_SETTINGS_FILE),
+        book_path,
+        cfg,
+    );
+}
+
+pub fn save_settings_for(book_path: &str, cfg: &AppConfig, picker_active: bool) {
+    if picker_active {
+        save_config(cfg);
+    } else {
+        save_book_settings(book_path, cfg);
+    }
 }
 
 #[cfg(test)]

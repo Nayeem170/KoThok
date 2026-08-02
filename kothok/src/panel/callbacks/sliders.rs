@@ -4,7 +4,7 @@ use std::sync::mpsc::Sender;
 
 use crate::audio::glue::best_effort_send;
 use crate::audio::Cmd;
-use crate::data::config::{save_config, AppConfig};
+use crate::data::config::AppConfig;
 use crate::device::power::frontlight_set;
 use crate::Reader;
 
@@ -17,7 +17,7 @@ pub(super) fn handle_brightness(
     cfg: &mut AppConfig,
     fl_path: &Option<std::path::PathBuf>,
     frac_opt: &Option<(i32, f32)>,
-) {
+) -> bool {
     if let Some((SLIDER_BRIGHTNESS, frac)) = frac_opt {
         let new_val = (frac * 100.0).round() as i32;
         reader.set_brightness_val(new_val);
@@ -25,8 +25,9 @@ pub(super) fn handle_brightness(
         if let Some(ref path) = fl_path {
             frontlight_set(path, new_val as u32);
         }
-        save_config(cfg);
+        return true;
     }
+    false
 }
 
 pub(super) fn handle_volume(
@@ -34,14 +35,15 @@ pub(super) fn handle_volume(
     cmd_tx: &Sender<Cmd>,
     cfg: &mut AppConfig,
     frac_opt: &Option<(i32, f32)>,
-) {
+) -> bool {
     if let Some((SLIDER_VOLUME, frac)) = frac_opt {
         let new_val = (frac * 100.0).round() as i32;
         cfg.volume = new_val;
         reader.set_volume_val(new_val);
         best_effort_send(cmd_tx, Cmd::Volume(new_val as u32));
-        save_config(cfg);
+        return true;
     }
+    false
 }
 
 pub(super) fn handle_tts_rate(
@@ -49,12 +51,13 @@ pub(super) fn handle_tts_rate(
     cmd_tx: &Sender<Cmd>,
     cfg: &mut AppConfig,
     frac_opt: &Option<(i32, f32)>,
-) {
+) -> bool {
     if let Some((SLIDER_TTS_RATE, frac)) = frac_opt {
         let new_val = (frac * 100.0).round() as i32;
         cfg.tts_rate = new_val;
         reader.set_tts_speed(new_val);
         best_effort_send(cmd_tx, Cmd::Rate(crate::data::config::rate_string(new_val)));
-        save_config(cfg);
+        return true;
     }
+    false
 }
