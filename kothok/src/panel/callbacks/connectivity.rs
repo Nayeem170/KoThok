@@ -38,7 +38,8 @@ pub(super) fn ensure_wifi_bt_lists(st: &mut LoopState, reader: &Reader) {
                     reader.set_bt_name(SharedString::from(name.as_str()));
                     if connected_idx.is_none() && reader.get_bt_on() {
                         let (_, path) = &st.bt_list[st.bt_list_idx];
-                        bt_connect_device(path);
+                        let p = path.clone();
+                        std::thread::spawn(move || bt_connect_device(&p));
                     }
                 } else {
                 }
@@ -125,8 +126,8 @@ pub(super) fn handle_wifi(
         Some(true) => {
             st.wifi_user_on = true;
             if st.wifi_list_ids_valid && !st.wifi_list.is_empty() {
-                let (_, id) = &st.wifi_list[st.wifi_list_idx];
-                wifi_select_network(*id);
+                let id = st.wifi_list[st.wifi_list_idx].1;
+                std::thread::spawn(move || wifi_select_network(id));
             }
             if !st.wifi_list_ids_valid {
                 st.wifi_list_fetched = false;

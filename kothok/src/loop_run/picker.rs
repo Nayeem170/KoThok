@@ -50,10 +50,10 @@ pub(super) fn handle_picker(st: &mut LoopState, ctx: &mut LoopContext) -> LoopFl
         let in_debounce = st.picker_entered.is_some_and(|t| {
             t.elapsed() <= std::time::Duration::from_millis(PICKER_ENTER_DEBOUNCE_MS)
         });
-        if in_debounce {
+        if in_debounce || st.panel_open {
             st.tap_xy = None;
         }
-        if !in_debounce {
+        if !in_debounce && !st.panel_open {
             if let Some((dx, dy)) = st.tap_xy.take() {
                 if st.about_open {
                     about::handle_about_close(
