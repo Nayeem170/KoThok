@@ -103,7 +103,7 @@ fn header_assets() -> &'static (
     )> = OnceLock::new();
     CACHE.get_or_init(|| {
         let wordmark_h = 44usize;
-        let wordmark_w = wordmark_h * 658 / 158;
+        let wordmark_w = wordmark_h * 554 / 140;
         (
             text_render::decode_image_rgba(LOGO_PNG, HEADER_LOGO_PX, HEADER_LOGO_PX),
             text_render::decode_image_rgba(WORDMARK_PNG, wordmark_w, wordmark_h),

@@ -14,8 +14,25 @@ use crate::rendering::word_list::{INK, TAB_BORDER};
 
 const WHITE: u16 = 0xFFFF;
 const BORDER: u16 = 0x94B2;
-const SNIPPET_CHARS: usize = 40;
-const CH_LABEL_W: i32 = 60;
+const SNIPPET_CHARS: usize = 70;
+const SNIPPET_LEAD: usize = 15;
+const MUTED: u16 = 0x632C;
+
+/// Type size of the chapter line above each quote.
+const CHAPTER_PX: f32 = 14.0;
+
+/// Ceiling on the quote's type size.
+///
+/// A result row is a fixed `CH_ROW_H` tall and already spends its top on the
+/// chapter line, so the reader's body size (20-60) cannot be honoured here.
+/// A line box is about 1.36x its type size on Noto, so at the default 36 the
+/// quote alone would be 49px and run past the row into the one below it.
+/// `search_result_rows_fit_their_row_box` pins the arithmetic.
+const SNIPPET_PX_MAX: f32 = 25.0;
+
+/// Padding above the chapter line, and the gap between the two lines.
+const ROW_PAD_TOP: i32 = 6;
+const ROW_LINE_GAP: i32 = 4;
 
 pub fn paint_search_results(
     buf: &mut [Rgb565Pixel],
@@ -26,6 +43,7 @@ pub fn paint_search_results(
     body_px: f32,
     total_hits: usize,
     selected: usize,
+    dragging: bool,
 ) {
     let w = crate::w();
     let h = crate::h();
@@ -36,6 +54,12 @@ pub fn paint_search_results(
     }
     let buf_bytes = rgb565_as_bytes(buf);
     let display_count = hits.len().min(MAX_SEARCH_RESULTS);
+    let more_row = if total_hits > MAX_SEARCH_RESULTS {
+        1
+    } else {
+        0
+    };
+    let scroll_item_count = display_count + more_row;
     for (i, hit) in hits.iter().take(display_count).enumerate() {
         let y = CH_LIST_TOP + (i as i32) * CH_ROW_PITCH - scroll;
         if y < CH_LIST_TOP || y + CH_ROW_H > list_bottom {
@@ -59,41 +83,42 @@ pub fn paint_search_results(
             border,
             8,
         );
-        let fg: u16 = if is_sel { WHITE } else { INK };
         let ch_label = if let Some(ch) = chapters.get(hit.chapter as usize) {
             crate::data::library::chapter_display_title(ch, hit.chapter as usize)
         } else {
-            format!("Ch{}", hit.chapter + 1)
+            format!("Ch {}", hit.chapter + 1)
         };
-        let ch_trunc =
-            crate::rendering::draw::truncate_to_width(&ch_label, 16.0, CH_LABEL_W as usize);
-        let ch_lh = text_render::line_height(16.0) as i32;
-        let ch_y = (y + (CH_ROW_H - ch_lh) / 2).max(0) as usize;
+        let ch_font = CHAPTER_PX;
+        let ch_lh = text_render::line_height(ch_font) as i32;
+        let ch_y = (y + ROW_PAD_TOP).max(0) as usize;
+        let ch_fg: u16 = if is_sel { WHITE } else { MUTED };
+        let ch_max_w = w - 2 * CH_ROW_X as usize - 20 - SB_ROW_SHRINK as usize;
+        let ch_trunc = crate::rendering::draw::truncate_to_width(&ch_label, ch_font, ch_max_w);
         text_render::blit_rgb565_color(
             buf_bytes,
             w,
             &ch_trunc,
-            16.0,
+            ch_font,
             (CH_ROW_X + 10) as usize,
             ch_y,
-            fg,
-            (CH_ROW_X + 10 + CH_LABEL_W) as usize,
+            ch_fg,
+            CH_ROW_X as usize + 10 + ch_max_w,
             h,
         );
         let snippet = build_snippet(chapters, hit);
-        let snippet_x = (CH_ROW_X + CH_LABEL_W + 10) as usize;
-        let snippet_max = (w as i32 - CH_ROW_X - CH_LABEL_W - 30 - SB_ROW_SHRINK) as usize;
-        let snippet_lh = text_render::line_height(body_px) as i32;
-        let snip_y = (y + (CH_ROW_H - snippet_lh) / 2).max(0) as usize;
+        let snip_x = (CH_ROW_X + 10) as usize;
+        let snip_max = w - 2 * CH_ROW_X as usize - 20 - SB_ROW_SHRINK as usize;
+        let snip_y = (y + ROW_PAD_TOP + ch_lh + ROW_LINE_GAP).max(0) as usize;
+        let fg: u16 = if is_sel { WHITE } else { INK };
         text_render::blit_rgb565_color(
             buf_bytes,
             w,
             &snippet,
-            body_px,
-            snippet_x,
+            snippet_px(body_px),
+            snip_x,
             snip_y,
             fg,
-            snippet_x + snippet_max,
+            snip_x + snip_max,
             h,
         );
     }
@@ -115,7 +140,16 @@ pub fn paint_search_results(
             );
         }
     }
-    paint_scrollbar(buf_bytes, w, h, display_count, scroll, false);
+    paint_scrollbar(buf_bytes, w, h, scroll_item_count, scroll, dragging);
+}
+
+/// The quote's type size for a reader body size of `body_px`.
+///
+/// Tracks the reader's choice while it fits, then stops. Rows are a fixed
+/// height, so past the ceiling the only thing a larger size buys is a quote
+/// drawn over the next result.
+fn snippet_px(body_px: f32) -> f32 {
+    body_px.min(SNIPPET_PX_MAX)
 }
 
 fn build_snippet(chapters: &[kobo_core::Chapter], hit: &WordHit) -> String {
@@ -126,31 +160,35 @@ fn build_snippet(chapters: &[kobo_core::Chapter], hit: &WordHit) -> String {
     if body.is_empty() {
         return String::new();
     }
-    let start = hit.byte_offset as usize;
-    let start = if let Some(s) = body.is_char_boundary(start).then_some(start) {
-        s
+    let hit_pos = if body.is_char_boundary(hit.byte_offset as usize) {
+        hit.byte_offset as usize
     } else {
-        body.floor_char_boundary(start)
+        body.floor_char_boundary(hit.byte_offset as usize)
     };
-    if start >= body.len() {
+    if hit_pos >= body.len() {
         return String::new();
     }
-    let tail = &body[start..];
-    let end = tail
+    let start = body[..hit_pos]
         .char_indices()
-        .nth(SNIPPET_CHARS * 2)
-        .map_or(body.len(), |(i, _)| start + i);
-    let window = &body[start..end];
-    let trimmed = window.trim();
-    let safe_end = trimmed
+        .rev()
+        .nth(SNIPPET_LEAD.saturating_sub(1))
+        .map(|(i, _)| i)
+        .unwrap_or(0);
+    let window = &body[start..];
+    let end = window
         .char_indices()
         .nth(SNIPPET_CHARS)
-        .map_or(trimmed.len(), |(i, _)| i);
-    if safe_end < trimmed.len() {
-        format!("...{}...", &trimmed[..safe_end])
-    } else {
-        trimmed.to_string()
+        .map_or(window.len(), |(i, _)| i);
+    let snippet = &window[..end];
+    let mut out = String::with_capacity(SNIPPET_CHARS + 8);
+    if start > 0 {
+        out.push_str("...");
     }
+    out.push_str(snippet);
+    if end < window.len() {
+        out.push_str("...");
+    }
+    out
 }
 
 pub fn results_hit_test(tap_y: i32, scroll: i32, result_count: usize) -> Option<usize> {
@@ -184,5 +222,34 @@ mod tests {
     #[test]
     fn results_hit_test_respects_scroll() {
         assert_eq!(results_hit_test(CH_LIST_TOP, CH_ROW_PITCH, 5), Some(1));
+    }
+
+    /// Both lines of a result must sit inside the row box for every body size
+    /// the reader can pick. The quote used to be drawn at `body_px` directly,
+    /// so at the default 36 it already ran 10px past the row and at 60 it was
+    /// painted over the next result entirely.
+    #[test]
+    fn search_result_rows_fit_their_row_box() {
+        let ch_lh = text_render::line_height(CHAPTER_PX) as i32;
+        for body_px in 20..=60 {
+            let snip_lh = text_render::line_height(snippet_px(body_px as f32)) as i32;
+            let bottom = ROW_PAD_TOP + ch_lh + ROW_LINE_GAP + snip_lh;
+            assert!(
+                bottom <= CH_ROW_H,
+                "body_px {body_px}: two lines reach {bottom}px in a {CH_ROW_H}px row"
+            );
+        }
+    }
+
+    /// The cap has to bind somewhere below the default, or it is not doing
+    /// anything -- and the reader's smaller sizes must still be honoured.
+    #[test]
+    fn snippet_size_tracks_the_reader_until_it_stops_fitting() {
+        assert_eq!(snippet_px(20.0), 20.0, "small sizes pass through");
+        assert_eq!(snippet_px(60.0), SNIPPET_PX_MAX, "large sizes clamp");
+        assert!(
+            SNIPPET_PX_MAX < 36.0,
+            "the cap must bind at the default size"
+        );
     }
 }

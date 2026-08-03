@@ -49,14 +49,14 @@ const QR_MATRIX: [&str; 25] = [
     "1111111010111000111001001",
 ];
 
-const WORDMARK_PNG: &[u8] = include_bytes!("../../ui/kothok-wordmark-ink.png");
+const WORDMARK_PNG: &[u8] = include_bytes!("../../ui/kothok-wordmark.png");
 
 #[inline]
 fn sc(n: f32, s: f32) -> usize {
     (n * s).round().max(0.0) as usize
 }
 
-pub fn show_about(fb: &Fb, buffer: &mut [Rgb565Pixel], device_model: &str) {
+pub fn show_about(fb: &Fb, buffer: &mut [Rgb565Pixel]) {
     let w = crate::w();
     let h = crate::h();
     let s = w as f32 / DESIGN_W;
@@ -80,23 +80,10 @@ pub fn show_about(fb: &Fb, buffer: &mut [Rgb565Pixel], device_model: &str) {
         TAGLINE,
     );
     draw_version_pill(buf, w, h, cx, s);
-    if let Some(new_ver) = crate::update_check::pending_update() {
-        let msg = format!("Update available: {new_ver}");
-        let px = 20.0 * s;
-        let tw = measure_text(&msg, px);
-        text_render::blit_rgb565_color(
-            buf,
-            w,
-            &msg,
-            px,
-            cx.saturating_sub(tw / 2),
-            sc(694.0, s),
-            BRAND_RED_RGB565,
-            w,
-            h,
-        );
-    }
-    draw_info_column(buf, w, h, device_model, s);
+    // The update banner and the "RUNNING ON <model>" block both moved to the
+    // device settings panel, where the check is a button the reader presses
+    // rather than a line that appears on a page they opened for other reasons.
+    draw_info_column(buf, w, h, s);
     draw_author_card(buf, w, h, s);
     draw_qr_section(buf, w, h, s);
     draw_footer(buf, w, h, cx, s);
@@ -246,21 +233,88 @@ fn draw_logo_mark(buf: &mut [u8], w: usize, h: usize, s: f32) {
     );
 }
 
+/// The 8-bit colour an RGB565 constant expands to.
+///
+/// Lets a blend against a filled area be derived from the fill's own constant
+/// instead of restating it as a literal, which is how the two drift apart.
+const fn rgb565_to_rgb8(v: u16) -> (u8, u8, u8) {
+    let r = ((v >> 11) & 0x1f) as u8;
+    let g = ((v >> 5) & 0x3f) as u8;
+    let b = (v & 0x1f) as u8;
+    // Replicate the high bits into the low ones so full-scale stays full-scale.
+    (
+        (r << 3) | (r >> 2),
+        (g << 2) | (g >> 4),
+        (b << 3) | (b >> 2),
+    )
+}
+
 fn draw_wordmark(buf: &mut [u8], w: usize, h: usize, s: f32) {
-    let wm_w = sc(620.0, s);
     let wm_h = sc(148.0, s);
-    if let Some(img) = text_render::decode_image_rgba(WORDMARK_PNG, wm_w, wm_h) {
-        text_render::blit_rgb565_image_alpha(
-            buf,
-            w,
-            &img.rgba,
-            img.width,
-            img.height,
-            sc(322.0, s),
-            sc(392.0, s),
-            w,
-            h,
-        );
+    let wm_w = (wm_h as f32 * 554.0 / 140.0).round() as usize;
+    let Some(img) = text_render::decode_image_rgba(WORDMARK_PNG, wm_w, wm_h) else {
+        return;
+    };
+    // Centred on the panel, not placed at a design-space x. The old x was tuned
+    // for the width the *previous* wordmark asset rendered to; the master this
+    // now draws is a tighter crop, so the same x left it sitting short of centre
+    // under a logo mark and above a tagline that are both centred.
+    let ox = (w / 2).saturating_sub(img.width / 2);
+    let oy = sc(392.0, s);
+    // BAND_INK fills the top band with a near-black, and the wordmark master is
+    // black ink on alpha -- blitting it as-is paints black on black. The master
+    // is a monochrome mask, so the colour is ours to choose: tint it white and
+    // blend against the band it sits on.
+    blit_tinted(
+        buf,
+        w,
+        h,
+        &img,
+        ox,
+        oy,
+        (255, 255, 255),
+        rgb565_to_rgb8(BAND_INK),
+    );
+}
+
+/// Composite a monochrome alpha mask against a solid background, tinting each
+/// pixel with `fg`. Used to render the wordmark master (black on alpha) as
+/// white text on the dark about-page band without shipping a second raster.
+fn blit_tinted(
+    buf: &mut [u8],
+    w: usize,
+    h: usize,
+    img: &text_render::DecodedRgba,
+    ox: usize,
+    oy: usize,
+    fg: (u8, u8, u8),
+    bg: (u8, u8, u8),
+) {
+    for ry in 0..img.height {
+        let py = oy + ry;
+        if py >= h {
+            break;
+        }
+        for rx in 0..img.width {
+            let px = ox + rx;
+            if px >= w {
+                break;
+            }
+            let a = img.rgba[(ry * img.width + rx) * 4 + 3] as u32;
+            if a == 0 {
+                continue;
+            }
+            let mix =
+                |f: u8, b: u8| -> u16 { ((f as u32 * a + b as u32 * (255 - a)) / 255) as u16 };
+            let (r, g, b) = (mix(fg.0, bg.0), mix(fg.1, bg.1), mix(fg.2, bg.2));
+            let v = ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3);
+            let off = (py * w + px) * 2;
+            if off + 2 > buf.len() {
+                continue;
+            }
+            buf[off] = (v & 0xff) as u8;
+            buf[off + 1] = (v >> 8) as u8;
+        }
     }
 }
 
@@ -299,31 +353,80 @@ fn draw_version_pill(buf: &mut [u8], w: usize, h: usize, cx: usize, s: f32) {
     );
 }
 
-fn draw_info_column(buf: &mut [u8], w: usize, h: usize, device_model: &str, s: f32) {
-    let lx = sc(64.0, s);
-    let lbl = 22.0 * s;
-    let val = 30.0 * s;
-    let sml = 26.0 * s;
-    let mut txt = |t: &str, px: f32, dy: f32, c: u16| {
-        text_render::blit_rgb565_color(buf, w, t, px, lx, sc(dy, s), c, w, h);
-    };
-    txt("PRIVACY", lbl, 790.0, LABEL_CLR);
-    txt("Everything stays on this device", val, 830.0, INK_TXT);
-    txt("VOICE", lbl, 940.0, LABEL_CLR);
-    txt("Plain text only, sent to", val, 980.0, INK_TXT);
-    txt("Microsoft Edge TTS", val, 1020.0, INK_TXT);
-    txt("BUILT WITH", lbl, 1140.0, LABEL_CLR);
-    txt("Rust + Slint", val, 1180.0, INK_TXT);
-    txt("Free for personal use", sml, 1220.0, MUTED);
-    txt("RUNNING ON", lbl, 1340.0, LABEL_CLR);
-    txt(device_model, val, 1380.0, INK_TXT);
-    txt("CONTACT", lbl, 1470.0, LABEL_CLR);
-    txt("KoThok@bitops.bd", sml, 1510.0, INK_TXT);
-    txt("github.com/Nayeem170/KoThok", sml, 1550.0, INK_TXT);
+/// Body size of the library header's "Library" title on the design panel, so
+/// this page reads as part of the same app rather than a separate design.
+///
+/// Scaled by `s` at use, unlike the header's own raw constant. Every position
+/// on this page is design-space and shrinks with the panel; a type size that
+/// did not shrink with them stopped fitting the gaps it was spaced for, and on
+/// the 1072-wide panels the two "VOICE" lines overlapped by 4px. The page's
+/// contract is that the whole composition scales together.
+const INFO_VALUE_PX: f32 = crate::rendering::layout::BODY_PX * 0.92;
+
+/// Type class of an information row, resolved to a size per panel.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum InfoSize {
+    Label,
+    Value,
+    Small,
+}
+
+fn info_px(size: InfoSize, s: f32) -> f32 {
+    match size {
+        InfoSize::Label => 22.0 * s,
+        InfoSize::Value => INFO_VALUE_PX * s,
+        InfoSize::Small => INFO_VALUE_PX * 0.85 * s,
+    }
+}
+
+/// The left information column: design-space y, type class, text, colour.
+///
+/// A table rather than a run of draw calls so the spacing can be checked for
+/// every panel in the fleet without painting a frame -- these rows are placed
+/// at fixed y values but sized from the body font, so whether they collide is
+/// arithmetic that has to be verified rather than eyeballed on one device.
+///
+/// "RUNNING ON <model>" moved to the device settings panel; the rows below are
+/// respaced into the gap it left rather than leaving a hole.
+const INFO_ROWS: &[(f32, InfoSize, &str, u16)] = &[
+    (790.0, InfoSize::Label, "PRIVACY", LABEL_CLR),
+    (
+        834.0,
+        InfoSize::Value,
+        "Everything stays on this device",
+        INK_TXT,
+    ),
+    (960.0, InfoSize::Label, "VOICE", LABEL_CLR),
+    (1004.0, InfoSize::Value, "Plain text only, sent to", INK_TXT),
+    (1052.0, InfoSize::Value, "Microsoft Edge TTS", INK_TXT),
+    (1178.0, InfoSize::Label, "BUILT WITH", LABEL_CLR),
+    (1222.0, InfoSize::Value, "Rust + Slint", INK_TXT),
+    (1270.0, InfoSize::Small, "Free for personal use", MUTED),
+    (1396.0, InfoSize::Label, "CONTACT", LABEL_CLR),
+    (1440.0, InfoSize::Small, "KoThok@bitops.bd", INK_TXT),
+    (
+        1484.0,
+        InfoSize::Small,
+        "github.com/Nayeem170/KoThok",
+        INK_TXT,
+    ),
+];
+
+/// Left edge of the column, and of the author card it must not reach, in
+/// design space. Shared with the tests so one cannot be moved without the
+/// other noticing.
+const INFO_COL_X: f32 = 64.0;
+const RIGHT_COL_X: f32 = 712.0;
+
+fn draw_info_column(buf: &mut [u8], w: usize, h: usize, s: f32) {
+    let lx = sc(INFO_COL_X, s);
+    for &(dy, size, text, colour) in INFO_ROWS {
+        text_render::blit_rgb565_color(buf, w, text, info_px(size, s), lx, sc(dy, s), colour, w, h);
+    }
 }
 
 fn draw_author_card(buf: &mut [u8], w: usize, h: usize, s: f32) {
-    let card_x = sc(712.0, s);
+    let card_x = sc(RIGHT_COL_X, s);
     let card_y = sc(790.0, s);
     fill_rect(
         buf,
@@ -359,7 +462,7 @@ fn draw_author_card(buf: &mut [u8], w: usize, h: usize, s: f32) {
 }
 
 fn draw_qr_section(buf: &mut [u8], w: usize, h: usize, s: f32) {
-    let card_x = sc(712.0, s);
+    let card_x = sc(RIGHT_COL_X, s);
     let card_y = sc(1190.0, s);
     fill_rounded_rect(
         buf,
@@ -455,4 +558,102 @@ fn text_center(
     let x = cx.saturating_sub(tw / 2);
     text_render::blit_rgb565_color(buf, w, text, px, x, y, color, w, h);
     text_render::line_height(px) as usize
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every panel KoThok runs on, matching `splash::tests::FLEET`. The about
+    /// page is a scaled design canvas, so "it looks right on the Libra" says
+    /// nothing about the panel that is 600px wide.
+    const FLEET: &[(&str, usize, usize)] = &[
+        ("Touch/Mini", 600, 800),
+        ("Glo/Aura/Nia", 758, 1024),
+        ("Clara", 1072, 1448),
+        ("Aura H2O", 1080, 1430),
+        ("Libra", 1264, 1680),
+        ("Elipsa", 1404, 1872),
+        ("Forma/Sage", 1440, 1920),
+    ];
+
+    /// The information rows sit at fixed design-space y values but are sized
+    /// from the body font, so nothing structural stops one from being drawn
+    /// over the next. It happened: while `INFO_VALUE_PX` was used unscaled,
+    /// "Plain text only, sent to" ran 4px into "Microsoft Edge TTS" on every
+    /// 1072-wide panel, and was clear only on the panel it was designed on.
+    #[test]
+    fn info_rows_never_overlap_on_any_panel() {
+        for &(name, w, _h) in FLEET {
+            let s = w as f32 / DESIGN_W;
+            for pair in INFO_ROWS.windows(2) {
+                let (dy, size, text, _) = pair[0];
+                let (next_dy, ..) = pair[1];
+                let bottom = sc(dy, s) + text_render::line_height(info_px(size, s));
+                assert!(
+                    bottom <= sc(next_dy, s),
+                    "{name}: {text:?} reaches {bottom}px, next row starts at {}px",
+                    sc(next_dy, s)
+                );
+            }
+        }
+    }
+
+    /// The author card and QR card share these rows' vertical band, so a row
+    /// that grows past the gutter runs into artwork rather than into margin.
+    #[test]
+    fn info_rows_stay_clear_of_the_right_column() {
+        for &(name, w, _h) in FLEET {
+            let s = w as f32 / DESIGN_W;
+            let lx = sc(INFO_COL_X, s);
+            let limit = sc(RIGHT_COL_X, s);
+            for &(_, size, text, _) in INFO_ROWS {
+                let right = lx + measure_text(text, info_px(size, s));
+                assert!(
+                    right <= limit,
+                    "{name}: {text:?} ends at {right}px, right column starts at {limit}px"
+                );
+            }
+        }
+    }
+
+    /// The logo mark above the wordmark and the tagline below it are both
+    /// centred on the panel, so the wordmark has to be too. It was placed at a
+    /// fixed design-space x tuned for the width of a *previous* asset; swapping
+    /// in the tighter master left it 17px short of centre on the Libra.
+    #[test]
+    fn wordmark_is_centred_under_the_logo_mark() {
+        for &(name, w, h) in FLEET {
+            let s = w as f32 / DESIGN_W;
+            let wm_h = sc(148.0, s);
+            let wm_w = (wm_h as f32 * 554.0 / 140.0).round() as usize;
+            let img = text_render::decode_image_rgba(WORDMARK_PNG, wm_w, wm_h)
+                .unwrap_or_else(|| panic!("{name}: wordmark failed to decode"));
+            let ox = (w / 2).saturating_sub(img.width / 2);
+            let centre = ox + img.width / 2;
+            assert!(
+                centre.abs_diff(w / 2) <= 1,
+                "{name}: wordmark centre {centre}px vs panel centre {}px",
+                w / 2
+            );
+            // A white-tinted mark blended against BAND_INK only reads as white
+            // while it is on the band; past its bottom edge the page is white.
+            let bottom = sc(392.0, s) + img.height;
+            let band = sc(720.0, s);
+            assert!(
+                bottom <= band && band <= h,
+                "{name}: wordmark reaches {bottom}px, band ends at {band}px"
+            );
+        }
+    }
+
+    /// The blend background is derived from `BAND_INK` rather than restated, so
+    /// changing the band cannot leave the wordmark's anti-aliased edges blended
+    /// against a colour that is no longer there.
+    #[test]
+    fn band_ink_expands_to_its_eight_bit_colour() {
+        assert_eq!(rgb565_to_rgb8(BAND_INK), (16, 16, 16));
+        assert_eq!(rgb565_to_rgb8(WHITE), (255, 255, 255));
+        assert_eq!(rgb565_to_rgb8(0), (0, 0, 0));
+    }
 }

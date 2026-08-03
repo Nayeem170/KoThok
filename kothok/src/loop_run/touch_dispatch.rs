@@ -17,7 +17,7 @@ pub(super) fn poll_and_dispatch_touch(st: &mut LoopState, ctx: &mut LoopContext)
     let cb = ctx.cb;
     let to_display = |rx: i32, ry: i32| -> (f32, f32) { touch::to_display(rx, ry, ctx.touch_cfg) };
     let pbar_y: f32 = ctx.h as f32 - layout::FOOTER_H_F;
-    let pbar_x: f32 = (layout::PAD_LEFT + layout::GUTTER_W + layout::GUTTER_PAD) as f32 + 8.0;
+    let pbar_x: f32 = (layout::pad_left() + layout::GUTTER_W + layout::GUTTER_PAD) as f32 + 8.0;
     let pbar_w: f32 = ctx.w as f32 - 200.0;
     let pbar_right: f32 = pbar_x + pbar_w;
     let pp_zone_x: f32 = pbar_right;
@@ -182,7 +182,14 @@ pub(super) fn poll_and_dispatch_touch(st: &mut LoopState, ctx: &mut LoopContext)
                         st.tap_xy = Some((dx, dy));
                         st.last_tap_time = now;
                         st.last_tap_y = st.frame_y;
-                        if !st.picker_active {
+                        // The control panel is a Slint overlay in *both* reading
+                        // and library mode, so its presses have to reach Slint
+                        // even while the (Rust-drawn) picker owns the screen.
+                        // Gating the whole dispatch on `!picker_active` left
+                        // every row of the device-settings panel dead: WiFi, BT,
+                        // sleep, the sliders and the back button all hang off
+                        // Slint TouchAreas that never saw a pointer event.
+                        if !st.picker_active || st.panel_open {
                             if audio_mode {
                                 st.press_dispatched = true;
                                 ctx.window.window().dispatch_event(
@@ -196,20 +203,23 @@ pub(super) fn poll_and_dispatch_touch(st: &mut LoopState, ctx: &mut LoopContext)
                             } else if reader.get_chapter_overlay_open() {
                                 let list_top = CH_LIST_TOP;
                                 let list_bottom = ctx.h as i32 - CH_LIST_BOTTOM_PAD;
-                                let item_count =
-                                    if st.chapter_tab == crate::loop_state::ChapterTab::Words {
-                                        st.word_index.words.len()
-                                    } else {
-                                        st.toc_rows.len()
-                                    };
+                                let (item_count, cur_scroll) = if st.search_results_active {
+                                    let hc = st
+                                        .word_index
+                                        .occurrences
+                                        .get(st.search_selected_word)
+                                        .map(|h| {
+                                            h.len().min(crate::data::word_index::MAX_SEARCH_RESULTS)
+                                        })
+                                        .unwrap_or(0);
+                                    (hc, st.search_results_scroll)
+                                } else if st.chapter_tab == crate::loop_state::ChapterTab::Words {
+                                    (st.word_index.words.len(), st.search_scroll)
+                                } else {
+                                    (st.toc_rows.len(), st.chapter_scroll)
+                                };
                                 let sb_dx = dx as i32;
                                 let sb_dy = dy as i32;
-                                let cur_scroll =
-                                    if st.chapter_tab == crate::loop_state::ChapterTab::Words {
-                                        st.search_scroll
-                                    } else {
-                                        st.chapter_scroll
-                                    };
                                 if let Some(zone) = scrollbar_hit_test(
                                     ctx.w,
                                     list_top,
@@ -236,7 +246,10 @@ pub(super) fn poll_and_dispatch_touch(st: &mut LoopState, ctx: &mut LoopContext)
                                                 item_count,
                                                 st.sb_grab_offset,
                                             );
-                                            if st.chapter_tab
+                                            if st.search_results_active {
+                                                st.search_results_scroll = new_scroll;
+                                                st.press_search_results_scroll = new_scroll;
+                                            } else if st.chapter_tab
                                                 == crate::loop_state::ChapterTab::Words
                                             {
                                                 st.search_scroll = new_scroll;
@@ -261,7 +274,10 @@ pub(super) fn poll_and_dispatch_touch(st: &mut LoopState, ctx: &mut LoopContext)
                                                 );
                                             if tap_y < list_top + track_h / 2 {
                                                 let new_scroll = (cur_scroll - delta).max(0);
-                                                if st.chapter_tab
+                                                if st.search_results_active {
+                                                    st.search_results_scroll = new_scroll;
+                                                    st.press_search_results_scroll = new_scroll;
+                                                } else if st.chapter_tab
                                                     == crate::loop_state::ChapterTab::Words
                                                 {
                                                     st.search_scroll = new_scroll;
@@ -272,7 +288,10 @@ pub(super) fn poll_and_dispatch_touch(st: &mut LoopState, ctx: &mut LoopContext)
                                                 }
                                             } else {
                                                 let new_scroll = (cur_scroll + delta).min(sm);
-                                                if st.chapter_tab
+                                                if st.search_results_active {
+                                                    st.search_results_scroll = new_scroll;
+                                                    st.press_search_results_scroll = new_scroll;
+                                                } else if st.chapter_tab
                                                     == crate::loop_state::ChapterTab::Words
                                                 {
                                                     st.search_scroll = new_scroll;

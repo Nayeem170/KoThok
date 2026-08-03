@@ -153,6 +153,7 @@ pub fn render_and_present(
                     } else {
                         usize::MAX
                     },
+                    st.sb_dragging && st.search_results_active,
                 );
             } else if st.chapter_tab == ChapterTab::Words {
                 crate::rendering::word_list::paint_word_list(
