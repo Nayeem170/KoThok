@@ -16,10 +16,10 @@ const WHITE: u16 = 0xFFFF;
 const BORDER: u16 = 0x94B2;
 const SNIPPET_CHARS: usize = 70;
 const SNIPPET_LEAD: usize = 15;
-const MUTED: u16 = 0x632C;
+const MUTED: u16 = 0x3186;
 
 /// Type size of the chapter line above each quote.
-const CHAPTER_PX: f32 = 14.0;
+const CHAPTER_PX: f32 = 20.0;
 
 /// Ceiling on the quote's type size.
 ///
@@ -28,7 +28,7 @@ const CHAPTER_PX: f32 = 14.0;
 /// A line box is about 1.36x its type size on Noto, so at the default 36 the
 /// quote alone would be 49px and run past the row into the one below it.
 /// `search_result_rows_fit_their_row_box` pins the arithmetic.
-const SNIPPET_PX_MAX: f32 = 25.0;
+const SNIPPET_PX_MAX: f32 = 22.0;
 
 /// Padding above the chapter line, and the gap between the two lines.
 const ROW_PAD_TOP: i32 = 6;
@@ -83,11 +83,7 @@ pub fn paint_search_results(
             border,
             8,
         );
-        let ch_label = if let Some(ch) = chapters.get(hit.chapter as usize) {
-            crate::data::library::chapter_display_title(ch, hit.chapter as usize)
-        } else {
-            format!("Ch {}", hit.chapter + 1)
-        };
+        let ch_label = chapter_label(chapters, hit.chapter as usize);
         let ch_font = CHAPTER_PX;
         let ch_lh = text_render::line_height(ch_font) as i32;
         let ch_y = (y + ROW_PAD_TOP).max(0) as usize;
@@ -150,6 +146,43 @@ pub fn paint_search_results(
 /// drawn over the next result.
 fn snippet_px(body_px: f32) -> f32 {
     body_px.min(SNIPPET_PX_MAX)
+}
+
+/// Words of the chapter's own opening carried into the label after its title.
+const CHAPTER_LEAD_WORDS: usize = 10;
+
+/// The chapter line of a result row.
+///
+/// `display_title` alone is not enough to identify a chapter. It returns the
+/// declared NCX title, else the first heading, else the first useful line, else
+/// `"Chapter N"` -- and since `toc_rows` merges the spine in, most rows of a
+/// book with a one-entry NCX have no declared title and land on `"Chapter N"`.
+/// A bare position label says nothing about which chapter a hit came from,
+/// which is the one question this line exists to answer.
+///
+/// So the label is always title *and* opening words, not one or the other. The
+/// opening is skipped past the title when the two start the same, which they do
+/// whenever the title came from the chapter's own first heading.
+fn chapter_label(chapters: &[kobo_core::Chapter], idx: usize) -> String {
+    let Some(ch) = chapters.get(idx) else {
+        return format!("Ch {}", idx + 1);
+    };
+    let title = crate::data::library::chapter_display_title(ch, idx);
+    let lead = chapter_lead(&ch.body, &title);
+    if lead.is_empty() {
+        title
+    } else {
+        format!("{title} - {lead}")
+    }
+}
+
+/// The first `CHAPTER_LEAD_WORDS` words of `body`, past `title` if the body
+/// opens with it.
+fn chapter_lead(body: &str, title: &str) -> String {
+    let rest = body.trim_start();
+    let rest = rest.strip_prefix(title.trim()).unwrap_or(rest);
+    let words: Vec<&str> = rest.split_whitespace().take(CHAPTER_LEAD_WORDS).collect();
+    words.join(" ")
 }
 
 fn build_snippet(chapters: &[kobo_core::Chapter], hit: &WordHit) -> String {
@@ -239,6 +272,39 @@ mod tests {
                 "body_px {body_px}: two lines reach {bottom}px in a {CH_ROW_H}px row"
             );
         }
+    }
+
+    /// A chapter with no declared title used to render as a bare "Chapter 3",
+    /// which does not identify anything. The label must carry words from the
+    /// chapter itself.
+    #[test]
+    fn chapter_lead_adds_words_from_the_chapter() {
+        let lead = chapter_lead(
+            "The morning the letter arrived, Tamara was still asleep upstairs in the old house.",
+            "Chapter 3",
+        );
+        assert_eq!(lead.split_whitespace().count(), CHAPTER_LEAD_WORDS);
+        assert!(lead.starts_with("The morning the letter"), "got {lead:?}");
+    }
+
+    /// When the title came from the chapter's own first heading the body starts
+    /// with it, and repeating it would spend the line saying the same thing
+    /// twice.
+    #[test]
+    fn chapter_lead_skips_a_repeated_title() {
+        let lead = chapter_lead(
+            "Prologue The house had been empty for years before they came.",
+            "Prologue",
+        );
+        assert!(!lead.starts_with("Prologue"), "title repeated: {lead:?}");
+        assert!(lead.starts_with("The house"), "got {lead:?}");
+    }
+
+    /// An empty chapter must not produce a dangling separator.
+    #[test]
+    fn chapter_lead_of_empty_body_is_empty() {
+        assert_eq!(chapter_lead("", "Chapter 1"), "");
+        assert_eq!(chapter_lead("   ", "Chapter 1"), "");
     }
 
     /// The cap has to bind somewhere below the default, or it is not doing
