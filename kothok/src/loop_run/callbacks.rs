@@ -4,7 +4,7 @@ use super::*;
 use crate::Reader;
 
 mod audio;
-mod bookmark;
+pub(super) mod bookmark;
 mod jump;
 mod mode_toggle;
 mod navigation;
@@ -297,7 +297,7 @@ pub(super) fn process_loop_callbacks(st: &mut LoopState, ctx: &mut LoopContext) 
             crate::loop_state::ChapterTab::Marks => 2,
         };
         reader.set_chapter_overlay_active_tab(tab_int);
-        let (seg_w, gap, font_px) = crate::rendering::tab_bar_geom(ctx.w);
+        let (seg_w, gap, font_px) = crate::rendering::tab_bar_geom::tab_bar_geom(ctx.w);
         reader.set_tab_seg_w(seg_w as f32);
         reader.set_tab_gap(gap as f32);
         reader.set_tab_font_px(font_px);
@@ -340,6 +340,7 @@ pub(super) fn process_loop_callbacks(st: &mut LoopState, ctx: &mut LoopContext) 
                 st.chapter_tab = crate::loop_state::ChapterTab::Marks;
                 st.marks_scroll = 0;
             }
+            _ => {}
         }
         st.text_dirty = true;
         ui_changed = true;

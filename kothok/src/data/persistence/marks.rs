@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (c) 2026 Nayeem Bin Ahsan
+#![allow(dead_code)]
 use std::fs;
 use std::path::Path;
 
@@ -59,7 +60,7 @@ pub fn save_marks(marks_file: &Path, book_path: &str, marks: &[crate::data::mark
 }
 
 pub fn migrate_bookmark(
-    marks_file: &Path,
+    _marks_file: &Path,
     positions_file: &Path,
     book_path: &str,
     chapter_count: usize,

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (c) 2026 Nayeem Bin Ahsan
+#![allow(dead_code)]
 use slint::platform::software_renderer::Rgb565Pixel;
 
 use crate::data::mark::{Mark, MarkKind};
@@ -81,6 +82,8 @@ pub fn paint_marks_list(
             CH_ROW_X as usize + KIND_BAR_PX + 4,
             text_y,
             ch_fg,
+            w,
+            h,
         );
         let ch_label = format!("Ch {} - p {}", m.chapter + 1, m.page_hint + 1);
         let ch_max_w = w - CH_ROW_X as usize - 20 - SB_ROW_SHRINK as usize;
@@ -93,6 +96,8 @@ pub fn paint_marks_list(
             CH_ROW_X as usize + KIND_BAR_PX + 4,
             text_y + lh as usize,
             ch_fg,
+            w,
+            h,
         );
         if is_armed {
             let del_w = crate::rendering::draw::measure_text(DELETE_LABEL, body_px);
@@ -107,6 +112,8 @@ pub fn paint_marks_list(
                 del_x.max(min_x),
                 (y + (CH_ROW_H - lh) / 2).max(0) as usize,
                 WHITE,
+                w,
+                h,
             );
         }
         paint_kind_marker(
@@ -163,8 +170,8 @@ fn paint_empty_message(buf: &mut [Rgb565Pixel], w: usize, h: usize, msg: &str) {
     let x = (w.saturating_sub(text_w)) / 2;
     let y = ((CH_LIST_TOP as usize + (h as i32 - CH_LIST_BOTTOM_PAD) as usize) / 2)
         .max(CH_LIST_TOP as usize);
-    let buf_bytes = unsafe { &mut *(buf.as_mut_ptr() as *mut [u8]) };
-    text_render::blit_rgb565_color(buf_bytes, w, msg, lh, x, y, INK);
+    let buf_bytes = rgb565_as_bytes(buf);
+    text_render::blit_rgb565_color(buf_bytes, w, msg, lh, x, y, INK, w, h);
 }
 
 pub fn marks_list_hit_test(tap_y: i32, scroll: i32, count: usize) -> Option<usize> {

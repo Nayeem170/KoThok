@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (c) 2026 Nayeem Bin Ahsan
+#![allow(dead_code)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MarkKind {
     Bookmark,
@@ -24,13 +25,35 @@ pub fn add_mark(marks: &mut Vec<Mark>, m: Mark) -> Result<(), &'static str> {
     if marks.len() >= MAX_MARKS_PER_BOOK {
         return Err("Marks limit reached (200/book)");
     }
-    if let Some(merged) = merge_if_overlapping(marks, &m) {
-        marks.retain(|x| x != &merged);
+    if m.kind == MarkKind::Highlight {
+        let chapter = m.chapter;
+        let overlapping: Vec<(usize, usize)> = marks
+            .iter()
+            .filter(|x| {
+                x.kind == MarkKind::Highlight
+                    && x.chapter == chapter
+                    && x.start <= m.end
+                    && m.start <= x.end
+            })
+            .map(|x| (x.start, x.end))
+            .collect();
+        let mut merged = m;
+        for (s, e) in &overlapping {
+            merged.start = merged.start.min(*s);
+            merged.end = merged.end.max(*e);
+        }
+        marks.retain(|x| {
+            !(x.kind == MarkKind::Highlight
+                && x.chapter == chapter
+                && x.start <= merged.end
+                && merged.start <= x.end)
+        });
         marks.push(merged);
+        marks.sort_by_key(|m| m.start);
     } else {
         marks.push(m);
+        marks.sort_by_key(|m| m.start);
     }
-    marks.sort_by_key(|m| m.start);
     Ok(())
 }
 
@@ -64,27 +87,4 @@ pub fn toggle_bookmark(
         });
     }
     marks.len()
-}
-
-fn merge_if_overlapping(marks: &[Mark], new: &Mark) -> Option<Mark> {
-    if new.kind != MarkKind::Highlight {
-        return None;
-    }
-    let mut merged = new.clone();
-    let mut changed = false;
-    for m in marks.iter().filter(|m| {
-        m.kind == MarkKind::Highlight
-            && m.chapter == new.chapter
-            && m.start <= new.end
-            && new.start <= m.end
-    }) {
-        merged.start = merged.start.min(m.start);
-        merged.end = merged.end.max(m.end);
-        changed = true;
-    }
-    if changed {
-        Some(merged)
-    } else {
-        None
-    }
 }

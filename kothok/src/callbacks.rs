@@ -131,6 +131,9 @@ fn register_chapter(reader: &Reader, panel_open_cell: &Rc<Cell<bool>>) -> Chapte
         jump_cell,
         tab_switch_cell,
         back_from_results_cell,
+        requested_tab_cell,
+        mark_jump_cell,
+        mark_jump_idx_cell,
     }
 }
 

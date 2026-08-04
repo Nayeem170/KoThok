@@ -1,23 +1,32 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (c) 2026 Nayeem Bin Ahsan
+use kobo_core::rendering::draw::measure_text;
+
+const TAB_LABELS: &[&str] = &["Chapters", "Words", "Marks"];
+const PAD_PX: usize = 16;
+
 pub fn tab_bar_geom(w: usize) -> (usize, usize, f32) {
     let s = w as f32 / 1264.0;
     let font_px = (33.0 * s).round().max(22.0);
-    let seg_w_cap = (240.0 * font_px / 33.0).round() as usize;
     let gap = (16.0 * s).round().max(8.0) as usize;
-    let run_max = if w > 99 + 23 + 16 + 2 * gap {
-        (w - 99 - 23 - 16 - 2 * gap) / 3
+    let label_w: usize = TAB_LABELS
+        .iter()
+        .map(|l| measure_text(l, font_px) as usize)
+        .max()
+        .unwrap_or(0);
+    let overhead = label_w + PAD_PX + 2 * gap;
+    let seg_w = if w > overhead + gap {
+        (w - overhead - gap) / 3
     } else {
-        0
+        label_w
     };
-    let seg_w = seg_w_cap.min(run_max);
+    let seg_w = seg_w.min((240.0 * font_px / 33.0).round() as usize);
     (seg_w, gap, font_px)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kobo_core::rendering::draw::measure_text;
 
     const FLEET: &[(&str, usize)] = &[
         ("Touch/Mini", 600),
@@ -33,19 +42,15 @@ mod tests {
     fn fleet_measure_text() {
         for &(name, w) in FLEET {
             let (seg_w, gap, font_px) = tab_bar_geom(w);
-            let trailing_gap = if w > 99 + 23 + 16 + 2 * gap + 3 * seg_w {
-                w - 99 - 23 - 16 - 2 * gap - 3 * seg_w
-            } else {
-                0
-            };
-            let label_w = measure_text("Chapters", font_px);
-            assert!(
-                trailing_gap >= 16,
-                "{name} (w={w}): trailing_gap={trailing_gap} < 16 (seg_w={seg_w}, gap={gap})"
-            );
+            let label_w = measure_text("Chapters", font_px) as usize;
+            let trailing_gap = w.saturating_sub(label_w + PAD_PX + 2 * gap + 3 * seg_w);
             assert!(
                 label_w <= seg_w,
                 "{name} (w={w}): \"Chapters\" ({label_w}px) does not fit seg_w ({seg_w}px)"
+            );
+            assert!(
+                trailing_gap >= gap,
+                "{name} (w={w}): trailing_gap={trailing_gap} < gap={gap} (seg_w={seg_w})"
             );
         }
     }

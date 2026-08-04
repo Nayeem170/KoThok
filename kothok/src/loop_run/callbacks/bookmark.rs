@@ -187,11 +187,11 @@ pub(super) fn page_for_bookmark(st: &LoopState, bm: &crate::Bookmark) -> usize {
 }
 
 /// Index of the page whose rows cover `offset`, if any.
-pub(super) fn page_for_offset(st: &LoopState, offset: usize) -> Option<usize> {
+pub(crate) fn page_for_offset(st: &LoopState, offset: usize) -> Option<usize> {
     st.state.page_for_offset(offset)
 }
 
-pub(super) fn restore_cursor_line(st: &LoopState, reader: &Reader, offset: usize) -> bool {
+pub(crate) fn restore_cursor_line(st: &LoopState, reader: &Reader, offset: usize) -> bool {
     let mut restored = false;
     if let Some((s, e)) = st.state.pages.get(st.current_page) {
         if let Some(rows) = st.state.all_rows.get(*s..*e) {

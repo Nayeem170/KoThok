@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (c) 2026 Nayeem Bin Ahsan
+#![allow(dead_code)]
 use slint::platform::software_renderer::Rgb565Pixel;
 
-use crate::rendering::text_overlay::PageView;
-
 use crate::data::mark::{Mark, MarkKind};
+use crate::rendering::common::rgb565_as_bytes;
+use crate::rendering::text_overlay::PageView;
 
 const HIGHLIGHT_BAND: u16 = 0xC638;
 const SELECTION_BAND: u16 = 0x9999;
@@ -17,7 +18,8 @@ pub fn paint_highlight_bands(
     pad_left: usize,
     pad_right: usize,
 ) {
-    let buf_bytes = unsafe { &mut *(buf.as_mut_ptr() as *mut [u8]) };
+    let buf_len = buf.len();
+    let buf_bytes = rgb565_as_bytes(buf);
     let w = pv.w;
     let h = pv.h;
     let (s, e) = pv.pages.get(pv.page).copied().unwrap_or((0, pv.rows.len()));
@@ -59,7 +61,7 @@ pub fn paint_highlight_bands(
                 let row_offset = py * w;
                 for px in 0..content_w {
                     let idx = row_offset + pad_left + px;
-                    if idx < buf.len() {
+                    if idx < buf_len {
                         buf_bytes[idx * 2] = (HIGHLIGHT_BAND >> 8) as u8;
                         buf_bytes[idx * 2 + 1] = (HIGHLIGHT_BAND & 0xFF) as u8;
                     }
@@ -78,7 +80,8 @@ pub fn paint_selection_band(
     pad_left: usize,
     pad_right: usize,
 ) {
-    let buf_bytes = unsafe { &mut *(buf.as_mut_ptr() as *mut [u8]) };
+    let buf_len = buf.len();
+    let buf_bytes = rgb565_as_bytes(buf);
     let w = pv.w;
     let h = pv.h;
     let (s, e) = pv.pages.get(pv.page).copied().unwrap_or((0, pv.rows.len()));
@@ -112,7 +115,7 @@ pub fn paint_selection_band(
                 let row_offset = py * w;
                 for px in 0..content_w {
                     let idx = row_offset + pad_left + px;
-                    if idx < buf.len() {
+                    if idx < buf_len {
                         buf_bytes[idx * 2] = (SELECTION_BAND >> 8) as u8;
                         buf_bytes[idx * 2 + 1] = (SELECTION_BAND & 0xFF) as u8;
                     }
