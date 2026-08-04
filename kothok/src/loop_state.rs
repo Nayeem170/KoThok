@@ -27,6 +27,7 @@ pub enum ChapterTab {
     #[default]
     Chapters,
     Words,
+    Marks,
 }
 
 pub struct LoopState {
@@ -84,6 +85,12 @@ pub struct LoopState {
     pub search_result_selected: bool,
     pub press_search_scroll: i32,
     pub press_search_results_scroll: i32,
+
+    pub marks: Vec<crate::data::mark::Mark>,
+    pub marks_dirty: bool,
+    pub armed_mark_idx: usize,
+    pub marks_scroll: i32,
+    pub press_marks_scroll: i32,
 
     pub sb_dragging: bool,
     pub sb_drag_tab: ChapterTab,

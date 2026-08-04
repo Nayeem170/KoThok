@@ -278,12 +278,29 @@ pub(super) fn process_loop_callbacks(st: &mut LoopState, ctx: &mut LoopContext) 
     let overlay_now = reader.get_chapter_overlay_open();
     if overlay_now && !st.prev_chapter_overlay {
         st.chapter_scroll = 0;
-        st.chapter_tab = crate::loop_state::ChapterTab::Chapters;
         st.search_scroll = 0;
         st.search_results_active = false;
         st.search_results_scroll = 0;
         st.search_word_selected = false;
-        reader.set_chapter_overlay_active_tab(0);
+        st.marks_scroll = 0;
+        st.armed_mark_idx = usize::MAX;
+        let requested = cb.overlay_requested_tab_cell.replace(-1);
+        let tab = match requested {
+            2 => crate::loop_state::ChapterTab::Marks,
+            1 => crate::loop_state::ChapterTab::Words,
+            _ => crate::loop_state::ChapterTab::Chapters,
+        };
+        st.chapter_tab = tab;
+        let tab_int = match tab {
+            crate::loop_state::ChapterTab::Chapters => 0,
+            crate::loop_state::ChapterTab::Words => 1,
+            crate::loop_state::ChapterTab::Marks => 2,
+        };
+        reader.set_chapter_overlay_active_tab(tab_int);
+        let (seg_w, gap, font_px) = crate::rendering::tab_bar_geom(ctx.w);
+        reader.set_tab_seg_w(seg_w as f32);
+        reader.set_tab_gap(gap as f32);
+        reader.set_tab_font_px(font_px);
     }
 
     if overlay_now {
@@ -319,7 +336,10 @@ pub(super) fn process_loop_callbacks(st: &mut LoopState, ctx: &mut LoopContext) 
                 st.chapter_tab = crate::loop_state::ChapterTab::Words;
                 st.search_scroll = 0;
             }
-            _ => {}
+            2 => {
+                st.chapter_tab = crate::loop_state::ChapterTab::Marks;
+                st.marks_scroll = 0;
+            }
         }
         st.text_dirty = true;
         ui_changed = true;
@@ -331,6 +351,47 @@ pub(super) fn process_loop_callbacks(st: &mut LoopState, ctx: &mut LoopContext) 
     }
 
     jump::handle_jump_to_reading(st, reader, cb, cmd_tx, ctx);
+
+    if cb.mark_jump_cell.replace(false) && !st.picker_active {
+        let idx = cb.mark_jump_idx_cell.get();
+        if idx < st.marks.len() {
+            let m = &st.marks[idx];
+            let target_chapter = m.chapter;
+            let target_offset = m.start;
+            if target_chapter != st.current_chapter {
+                super::switch_chapter(
+                    st,
+                    reader,
+                    cmd_tx,
+                    target_chapter,
+                    super::ChapterSwitchOpts {
+                        to_last_page: false,
+                        update_cursor: false,
+                        load_audio: true,
+                    },
+                );
+            }
+            if let Some(pg) = bookmark::page_for_offset(st, target_offset) {
+                st.current_page = pg;
+                super::apply_page(
+                    reader,
+                    &st.state,
+                    st.current_page,
+                    &st.chapter_offsets,
+                    st.current_chapter,
+                );
+            }
+            bookmark::restore_cursor_line(st, reader, target_offset);
+            let base = st
+                .chapter_offsets
+                .get(st.current_chapter)
+                .copied()
+                .unwrap_or(0);
+            reader.set_saved_page((base + st.current_page) as i32);
+            reader.set_status(format!("Mark: page {}", base + st.current_page + 1).into());
+            st.text_dirty = true;
+        }
+    }
 
     if let Some(rx) = st.font_download_rx.take() {
         match rx.try_recv() {

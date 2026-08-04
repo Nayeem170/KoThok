@@ -25,10 +25,13 @@ export component ContentArea inherits Rectangle {
     in property <color> text-hint: #999999;
     in property <color> track-color: #d0d0d0;
     in property <bool> title-overflow: false;
+    in-out property <bool> selection-active: false;
 
     callback play-pause-toggle();
     callback progress-tap(float);
     callback chapters-tap();
+    callback highlight-selection();
+    callback cancel-selection();
 
     VerticalLayout {
         padding-left: 56px; padding-right: 56px;
@@ -313,6 +316,55 @@ export component ContentArea inherits Rectangle {
             Rectangle { visible: !root.playing; x: 29px; y: 42px; width: 16px; height: 4px; background: #ffffff; }
             Rectangle { visible: !root.playing; x: 29px; y: 46px; width: 10px; height: 4px; background: #ffffff; }
             Rectangle { visible: !root.playing; x: 29px; y: 50px; width: 4px;  height: 4px; background: #ffffff; }
+        }
+
+        if root.selection-active : Rectangle {
+            x: (root.width - 280px) / 2;
+            y: root.height - 140px;
+            width: 280px;
+            height: 72px;
+            border-radius: 36px;
+            background: #ffffff;
+
+            TouchArea {
+                x: 16px; y: 8px;
+                width: 120px; height: 56px;
+                clicked => { root.highlight-selection(); }
+            }
+            Rectangle {
+                x: 16px; y: 8px;
+                width: 120px; height: 56px;
+                background: root.brand-green;
+                border-radius: 28px;
+                Text {
+                    text: "Highlight";
+                    color: #ffffff;
+                    font-size: 22px;
+                    font-weight: 700;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+
+            TouchArea {
+                x: 144px; y: 8px;
+                width: 120px; height: 56px;
+                clicked => { root.cancel-selection(); }
+            }
+            Rectangle {
+                x: 144px; y: 8px;
+                width: 120px; height: 56px;
+                background: #e0e0e0;
+                border-radius: 28px;
+                Text {
+                    text: "Cancel";
+                    color: #333333;
+                    font-size: 22px;
+                    font-weight: 700;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
         }
     }
 }

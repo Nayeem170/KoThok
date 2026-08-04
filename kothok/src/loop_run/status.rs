@@ -76,6 +76,19 @@ pub(super) fn autosave_position(st: &mut LoopState, ctx: &LoopContext) {
         return;
     }
     save_position_now(st, reader);
+    save_marks_if_dirty(st);
+}
+
+fn save_marks_if_dirty(st: &mut LoopState) {
+    if !st.marks_dirty || st.current_book_path.is_empty() {
+        return;
+    }
+    crate::data::persistence::save_marks(
+        crate::data::persistence::marks_path(),
+        &st.current_book_path,
+        &st.marks,
+    );
+    st.marks_dirty = false;
 }
 
 pub(super) fn handle_exit_button(st: &mut LoopState, ctx: &LoopContext) -> LoopFlow {

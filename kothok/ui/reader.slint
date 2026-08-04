@@ -98,6 +98,9 @@ export component Reader inherits Window {
     in-out property <int> chapter-preview-idx: -1;
     in-out property <int> chapter-pending: -1;
     in-out property <int> chapter-overlay-active-tab: 0;
+    in-out property <length> tab-seg-w: 148px;
+    in-out property <length> tab-gap: 8px;
+    in-out property <length> tab-font-px: 22px;
     in-out property <bool> chapter-overlay-results-active: false;
     in-out property <string> chapter-overlay-results-title: "";
     in-out property <bool> loading-visible: false;
@@ -129,6 +132,7 @@ export component Reader inherits Window {
     in-out property <float> bookmark-frac: -1.0;
     in-out property <bool> audio-locked: false;
     in-out property <bool> title-overflow: false;
+    in-out property <bool> selection-active: false;
 
     callback mode-toggle();
     callback bookmark-set();
@@ -137,6 +141,8 @@ export component Reader inherits Window {
     callback skip-forward();
     callback skip-rewind();
     callback settings-tap();
+    callback highlight-selection();
+    callback cancel-selection();
 
     content-area := ContentArea {
         x: 0px;
@@ -167,9 +173,12 @@ export component Reader inherits Window {
         text-hint: root.text-hint;
         track-color: root.track-color;
         title-overflow: root.title_overflow;
+        selection-active <=> root.selection-active;
         play-pause-toggle => { root.play-pause-toggle(); }
         progress-tap(f) => { root.progress-tap(f); }
         chapters-tap => { root.panel-chapters(); }
+        highlight-selection => { root.highlight-selection(); }
+        cancel-selection => { root.cancel-selection(); }
     }
 
     audio-player := AudioPlayer {
@@ -302,6 +311,9 @@ export component Reader inherits Window {
         active-tab <=> root.chapter-overlay-active-tab;
         results-active: root.chapter-overlay-results-active;
         results-title: root.chapter-overlay-results-title;
+        tab-seg-w: root.tab-seg-w;
+        tab-gap: root.tab-gap;
+        tab-font-px: root.tab-font-px;
         chapter-selected(i, tab) => { root.chapter-selected(i, tab); }
         close-to-book => {
             root.chapter-overlay-open = false;

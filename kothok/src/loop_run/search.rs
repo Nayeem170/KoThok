@@ -38,21 +38,27 @@ pub(super) fn handle_search_release(
         return true;
     }
 
-    if st.chapter_tab == ChapterTab::Words {
-        if swipe_dy.abs() > 40.0 && swipe_dy.abs() > swipe_dx.abs() {
-            st.text_dirty = true;
-            ctx.window.request_redraw();
+    match st.chapter_tab {
+        ChapterTab::Words => {
+            if swipe_dy.abs() > 40.0 && swipe_dy.abs() > swipe_dx.abs() {
+                st.text_dirty = true;
+                ctx.window.request_redraw();
+                return true;
+            }
+            if let Some(idx) =
+                word_list_hit_test(dy as i32, st.search_scroll, st.word_index.words.len())
+            {
+                select_word(st, idx);
+                st.text_dirty = true;
+                ctx.window.request_redraw();
+                return true;
+            }
             return true;
         }
-        if let Some(idx) =
-            word_list_hit_test(dy as i32, st.search_scroll, st.word_index.words.len())
-        {
-            select_word(st, idx);
-            st.text_dirty = true;
-            ctx.window.request_redraw();
+        ChapterTab::Marks => {
             return true;
         }
-        return true;
+        ChapterTab::Chapters => {}
     }
     false
 }
@@ -210,6 +216,11 @@ mod tests {
             search_result_selected: false,
             press_search_scroll: 0,
             press_search_results_scroll: 0,
+            marks: Vec::new(),
+            marks_dirty: false,
+            armed_mark_idx: usize::MAX,
+            marks_scroll: 0,
+            press_marks_scroll: 0,
             sb_dragging: false,
             sb_drag_tab: Default::default(),
             sb_grab_offset: 0,

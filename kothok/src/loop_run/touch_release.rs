@@ -408,6 +408,47 @@ fn chapter_overlay_release(
                 st.text_dirty = true;
                 ctx.window.request_redraw();
             }
+        } else if st.chapter_tab == crate::loop_state::ChapterTab::Marks {
+            if st.armed_mark_idx != usize::MAX {
+                let idx = st.armed_mark_idx;
+                if idx < st.marks.len() {
+                    let m = &st.marks[idx];
+                    let target_chapter = m.chapter;
+                    let target_offset = m.start;
+                    st.armed_mark_idx = usize::MAX;
+                    crate::data::mark::remove_mark(&mut st.marks, idx);
+                    st.marks_dirty = true;
+                    reader.set_chapter_overlay_open(false);
+                    reader.set_chapter_preview_idx(-1);
+                    if target_chapter != st.current_chapter {
+                        super::switch_chapter(
+                            st,
+                            reader,
+                            ctx.cmd_tx,
+                            target_chapter,
+                            super::ChapterSwitchOpts {
+                                to_last_page: false,
+                                update_cursor: false,
+                                load_audio: true,
+                            },
+                        );
+                    }
+                    if let Some(pg) = super::callbacks::bookmark::page_for_offset(st, target_offset)
+                    {
+                        st.current_page = pg;
+                        super::apply_page(
+                            reader,
+                            &st.state,
+                            st.current_page,
+                            &st.chapter_offsets,
+                            st.current_chapter,
+                        );
+                    }
+                    super::callbacks::bookmark::restore_cursor_line(st, reader, target_offset);
+                    st.text_dirty = true;
+                    ctx.window.request_redraw();
+                }
+            }
         } else {
             let preview = reader.get_chapter_preview_idx();
             let idx = if preview >= 0 {

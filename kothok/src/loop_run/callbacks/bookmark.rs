@@ -15,41 +15,56 @@ pub(super) fn handle_bookmark_set(st: &mut LoopState, reader: &Reader, cb: &Call
     }
     let cur = reader.get_cur_start().max(0) as usize;
     let cursor_on_page = page_for_offset(st, cur) == Some(st.current_page);
-    // Anchor the bookmark to the live TTS line when playing, or to a cursor
-    // that still sits on this page (paused mid-sentence). Otherwise the
-    // cursor is stale -- manual page turns preserve the old cursor -- so fall
-    // back to the first line of the current page.
     let off = if reader.get_playing() || cursor_on_page {
         cur
     } else {
         first_text_row_offset_on_page(st).unwrap_or(cur)
     };
-    // Without active playback there is no sentence band to show the mark, so
-    // place the visible reading cursor on the bookmarked line. Otherwise the
-    // progress bar moves but the page gives no sign of where it landed.
     if !reader.get_playing() {
         restore_cursor_line(st, reader, off);
     }
-    st.bookmark = Some(crate::Bookmark {
-        chapter: st.current_chapter,
-        page: st.current_page,
-        offset: off,
+    let count = crate::data::mark::toggle_bookmark(
+        &mut st.marks,
+        st.current_chapter,
+        off,
+        String::new(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0),
+    );
+    let is_set = st.marks.iter().any(|m| {
+        m.kind == crate::data::mark::MarkKind::Bookmark
+            && m.chapter == st.current_chapter
+            && m.start == off
     });
-    reader.set_has_bookmark(true);
+    if is_set {
+        st.bookmark = Some(crate::Bookmark {
+            chapter: st.current_chapter,
+            page: st.current_page,
+            offset: off,
+        });
+        reader.set_has_bookmark(true);
+    } else {
+        st.bookmark = None;
+        reader.set_has_bookmark(false);
+    }
+    st.marks_dirty = true;
     let global_page = st
         .chapter_offsets
         .get(st.current_chapter)
         .copied()
         .unwrap_or(0)
         + st.current_page;
-    reader.set_status(format!("Bookmarked page {}", global_page + 1).into());
+    reader.set_status(format!("Bookmarked page {} ({} marks)", global_page + 1, count).into());
     info!(
-        "bookmark-set: ch={} pg={} off={} playing={} on_page={}",
+        "bookmark-set: ch={} pg={} off={} playing={} on_page={} count={}",
         st.current_chapter + 1,
         st.current_page + 1,
         off,
         reader.get_playing(),
         cursor_on_page,
+        count,
     );
     true
 }

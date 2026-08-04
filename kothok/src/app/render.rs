@@ -155,39 +155,56 @@ pub fn render_and_present(
                     },
                     st.sb_dragging && st.search_results_active,
                 );
-            } else if st.chapter_tab == ChapterTab::Words {
-                crate::rendering::word_list::paint_word_list(
-                    &mut st.buffer,
-                    &st.word_index.words,
-                    st.search_scroll,
-                    st.body_px,
-                    if st.search_word_selected {
-                        st.search_selected_word
-                    } else {
-                        usize::MAX
-                    },
-                    st.sb_dragging && st.sb_drag_tab == ChapterTab::Words,
-                );
             } else {
-                let current_row =
-                    crate::rendering::render::current_toc_row(&st.toc_rows, st.current_chapter)
+                match st.chapter_tab {
+                    ChapterTab::Chapters => {
+                        let current_row = crate::rendering::render::current_toc_row(
+                            &st.toc_rows,
+                            st.current_chapter,
+                        )
                         .unwrap_or(0) as i32;
-                crate::rendering::render::paint_chapter_list(
-                    &mut st.buffer,
-                    &st.toc_rows,
-                    st.chapter_scroll,
-                    ctx.reader.get_chapter_preview_idx(),
-                    current_row,
-                );
-                let buf_bytes = rgb565_as_bytes(&mut st.buffer);
-                crate::rendering::chapter_list::paint_scrollbar(
-                    buf_bytes,
-                    ctx.w,
-                    ctx.h,
-                    st.toc_rows.len(),
-                    st.chapter_scroll,
-                    st.sb_dragging && st.sb_drag_tab == ChapterTab::Chapters,
-                );
+                        crate::rendering::render::paint_chapter_list(
+                            &mut st.buffer,
+                            &st.toc_rows,
+                            st.chapter_scroll,
+                            ctx.reader.get_chapter_preview_idx(),
+                            current_row,
+                        );
+                        let buf_bytes = rgb565_as_bytes(&mut st.buffer);
+                        crate::rendering::chapter_list::paint_scrollbar(
+                            buf_bytes,
+                            ctx.w,
+                            ctx.h,
+                            st.toc_rows.len(),
+                            st.chapter_scroll,
+                            st.sb_dragging && st.sb_drag_tab == ChapterTab::Chapters,
+                        );
+                    }
+                    ChapterTab::Words => {
+                        crate::rendering::word_list::paint_word_list(
+                            &mut st.buffer,
+                            &st.word_index.words,
+                            st.search_scroll,
+                            st.body_px,
+                            if st.search_word_selected {
+                                st.search_selected_word
+                            } else {
+                                usize::MAX
+                            },
+                            st.sb_dragging && st.sb_drag_tab == ChapterTab::Words,
+                        );
+                    }
+                    ChapterTab::Marks => {
+                        crate::rendering::marks_list::paint_marks_list(
+                            &mut st.buffer,
+                            &st.marks,
+                            st.marks_scroll,
+                            st.body_px,
+                            st.armed_mark_idx,
+                            st.sb_dragging && st.sb_drag_tab == ChapterTab::Marks,
+                        );
+                    }
+                }
             }
         }
         // Marker fast path: refresh ONLY the box the marker moved through, with A2.
