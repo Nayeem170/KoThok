@@ -5,6 +5,8 @@ mod connectivity;
 mod font;
 pub(crate) mod sleep;
 mod sliders;
+mod system;
+mod text_align;
 mod voice;
 
 use std::sync::mpsc::Sender;
@@ -15,6 +17,19 @@ use crate::data::config::{save_config, save_settings_for, AppConfig};
 use crate::loop_state::LoopState;
 use crate::Reader;
 
+/// What one pass over the panel changed.
+///
+/// `ui_changed` is separate from `text_dirty` because they gate different
+/// things: `text_dirty` rebuilds the page raster, while only `ui_changed`
+/// reaches `request_redraw`. An async answer landing in the panel (the update
+/// check) touches no text but must still reach the glass without waiting for
+/// the next touch or the 3s status tick.
+#[derive(Default)]
+pub struct PanelOutcome {
+    pub text_dirty: bool,
+    pub ui_changed: bool,
+}
+
 pub fn process_panel_callbacks(
     st: &mut LoopState,
     reader: &Reader,
@@ -22,22 +37,37 @@ pub fn process_panel_callbacks(
     cfg: &mut AppConfig,
     fl_path: &Option<std::path::PathBuf>,
     cb: &Callbacks,
-) -> bool {
+) -> PanelOutcome {
     let frac_opt = cb.panel_frac.take();
     let mut book_changed = false;
     let mut global_changed = false;
+    let mut ui_changed = false;
 
     global_changed |= sliders::handle_brightness(reader, cfg, fl_path, &frac_opt);
     global_changed |= sliders::handle_volume(reader, cmd_tx, cfg, &frac_opt);
     book_changed |= sliders::handle_tts_rate(reader, cmd_tx, cfg, &frac_opt);
-    let mut text_dirty = font::handle_font_slider(st, reader, cmd_tx, cfg, cb);
+    let mut text_dirty = font::handle_font_slider(st, reader, cmd_tx, cfg, cb, &frac_opt);
+    book_changed |=
+        text_align::handle_text_align_toggle(st, reader, cmd_tx, cfg, &cb.text_align_cell);
     book_changed |= voice::handle_voice_cycle(reader, cmd_tx, cfg, &cb.panel_voice_cell);
     global_changed |= sleep::handle_sleep_cycle(reader, cfg, &cb.sleep_cycle_cell);
+    // Not a saved setting -- a one-shot request whose answer goes on screen.
+    ui_changed |= system::handle_update_check(st, reader, &cb.update_check_cell);
+    // Auto-hide is a reading-behaviour preference, not typography, so it is
+    // global rather than per-book.
+    global_changed |= system::handle_header_toggle(st, reader, cfg, &cb.header_toggle_cell);
+    // Runs after the saves below would have fired for this frame, but it writes
+    // the book file itself (by deleting the book's line) and re-reads the
+    // globals, so it must not be folded into `book_changed`.
+    let reset = system::handle_reset_book(st, reader, cfg, cb);
+    text_dirty |= reset;
 
     if global_changed {
         save_config(cfg);
     }
-    if book_changed {
+    // Skipped after a reset, or the same frame's book save would write the
+    // book's line straight back after the reset deleted it.
+    if book_changed && !reset {
         save_settings_for(&st.current_book_path, cfg, st.picker_active);
     }
 
@@ -46,5 +76,8 @@ pub fn process_panel_callbacks(
     connectivity::handle_bt(reader, st, &cb.bt_toggle_cell, &cb.bt_cycle_cell);
     text_dirty |= chapters::handle_chapter_overlay(st, reader, cmd_tx, cb);
 
-    text_dirty
+    PanelOutcome {
+        text_dirty,
+        ui_changed,
+    }
 }

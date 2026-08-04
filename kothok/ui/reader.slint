@@ -51,6 +51,14 @@ export component Reader inherits Window {
     in-out property <string> clock: "";
     in-out property <int> brightness-val: 50;
     in-out property <int> font-size-val: 36;
+    in-out property <int> line-spacing-val: 140;
+    in-out property <bool> text-justify: true;
+    in-out property <int> margin-val: 24;
+    in-out property <bool> auto-hide-header: false;
+    in-out property <string> update-status: "";
+    in-out property <string> device-model: "";
+    in-out property <string> app-version: "";
+    in-out property <string> free-space: "";
     in-out property <string> tts-lang: "auto";
     in-out property <string> tts-voice: "en-US-EmmaMultilingualNeural";
     in-out property <string> tts-voice-label: "Emma (English)";
@@ -75,6 +83,9 @@ export component Reader inherits Window {
     in-out property <string> book-author: "";
     in-out property <image> book-title-img;
     in-out property <int> book-title-img-h: 0;
+    // Same title, rendered at the settings panel's header size.
+    in-out property <image> book-title-head-img;
+    in-out property <int> book-title-head-img-h: 0;
     in-out property <image> book-author-img;
     in-out property <int> book-author-img-h: 0;
     in-out property <image> chapter-name-img;
@@ -98,6 +109,10 @@ export component Reader inherits Window {
     callback panel-wifi-cycle(string);
     callback panel-bt-cycle(string);
     callback panel-sleep-cycle(string);
+    callback panel-text-align-toggle();
+    callback panel-header-toggle();
+    callback panel-check-updates();
+    callback panel-reset-book();
     callback panel-chapters();
     callback progress-tap(float);
     callback panel-frac(int, float);
@@ -211,6 +226,14 @@ export component Reader inherits Window {
         brightness-val: root.brightness-val;
         tts-speed: root.tts-speed;
         font-size-val: root.font-size-val;
+        line-spacing-val: root.line-spacing-val;
+        text-justify: root.text-justify;
+        margin-val: root.margin-val;
+        auto-hide-header: root.auto-hide-header;
+        update-status: root.update-status;
+        device-model: root.device-model;
+        app-version: root.app-version;
+        free-space: root.free-space;
         volume-val: root.volume-val;
         tts-voice-label: root.tts-voice-label;
         wifi-on: root.wifi-on;
@@ -227,6 +250,8 @@ export component Reader inherits Window {
         chapter-name: root.chapter-name;
         book-title-img: root.book-title-img;
         book-title-img-h: root.book-title-img-h;
+        book-title-head-img: root.book-title-head-img;
+        book-title-head-img-h: root.book-title-head-img-h;
         book-author-img: root.book-author-img;
         book-author-img-h: root.book-author-img-h;
         chapter-name-img: root.chapter-name-img;
@@ -254,6 +279,10 @@ export component Reader inherits Window {
         panel-wifi-cycle(s) => { root.panel-wifi-cycle(s); }
         panel-bt-cycle(s) => { root.panel-bt-cycle(s); }
         panel-sleep-cycle(s) => { root.panel-sleep-cycle(s); }
+        panel-text-align-toggle => { root.panel-text-align-toggle(); }
+        panel-header-toggle => { root.panel-header-toggle(); }
+        panel-check-updates => { root.panel-check-updates(); }
+        panel-reset-book => { root.panel-reset-book(); }
     }
 
     chapter-overlay := ChapterOverlay {

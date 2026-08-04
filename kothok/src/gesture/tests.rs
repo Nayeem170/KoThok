@@ -32,35 +32,41 @@ fn footer_zone_left_of_bar_is_none() {
     );
 }
 
+// Zones for w=1072, right to left. Every one of these is the x of the matching
+// element in `content.slint` / `audio_player.slint`: 76px buttons, 10px gaps
+// inside a group, 38px divider between groups.
+//
+//   ModeToggle 401..487, Bookmark 487..573, JumpToBookmark 573..649,
+//   [divider 649..687], Sleep 687..773, Menu 773..859, Chapters 859..935,
+//   [divider 935..973], Library 973..1049.
+//
+// Left of 401 is the book title and must answer nothing.
+
 #[test]
-fn header_zone_library_top_left() {
+fn header_zone_library_is_far_right_past_the_divider() {
     assert_eq!(
-        classify_header_zone(20.0, 20.0, 1072.0),
+        classify_header_zone(1011.0, 20.0, 1072.0),
         HeaderZone::Library
     );
 }
 
 #[test]
-fn header_zone_menu_top_right() {
-    assert_eq!(classify_header_zone(925.0, 20.0, 1072.0), HeaderZone::Menu);
+fn header_zone_menu() {
+    assert_eq!(classify_header_zone(800.0, 20.0, 1072.0), HeaderZone::Menu);
 }
 
 #[test]
-fn header_zone_chapters_top_right() {
+fn header_zone_chapters() {
     assert_eq!(
-        classify_header_zone(1011.0, 20.0, 1072.0),
+        classify_header_zone(890.0, 20.0, 1072.0),
         HeaderZone::Chapters
     );
 }
 
-// Zones for w=1072 (76px buttons, 10px gaps within groups,
-// 38px separator gap between book buttons and system buttons):
-// ModeToggle 515..591, Bookmark 601..677, JumpToBookmark 687..763,
-// [separator 763..801], Sleep 801..877, Menu 887..963, Chapters 973..1049.
 #[test]
 fn header_zone_mode_toggle() {
     assert_eq!(
-        classify_header_zone(553.0, 20.0, 1072.0),
+        classify_header_zone(440.0, 20.0, 1072.0),
         HeaderZone::ModeToggle
     );
 }
@@ -68,7 +74,7 @@ fn header_zone_mode_toggle() {
 #[test]
 fn header_zone_bookmark() {
     assert_eq!(
-        classify_header_zone(639.0, 20.0, 1072.0),
+        classify_header_zone(520.0, 20.0, 1072.0),
         HeaderZone::Bookmark
     );
 }
@@ -76,19 +82,34 @@ fn header_zone_bookmark() {
 #[test]
 fn header_zone_jump_to_bookmark() {
     assert_eq!(
-        classify_header_zone(725.0, 20.0, 1072.0),
+        classify_header_zone(600.0, 20.0, 1072.0),
         HeaderZone::JumpToBookmark
     );
 }
 
 #[test]
 fn header_zone_sleep() {
-    assert_eq!(classify_header_zone(839.0, 20.0, 1072.0), HeaderZone::Sleep);
+    assert_eq!(classify_header_zone(720.0, 20.0, 1072.0), HeaderZone::Sleep);
+}
+
+/// The title moved to the left edge when the library button moved right. A tap
+/// there used to open the library, so this is the regression guard for the two
+/// files agreeing.
+#[test]
+fn header_zone_title_area_is_none() {
+    for dx in [20.0, 120.0, 300.0, 395.0] {
+        assert_eq!(
+            classify_header_zone(dx, 20.0, 1072.0),
+            HeaderZone::None,
+            "x={dx} is over the title, not a button"
+        );
+    }
 }
 
 #[test]
-fn header_zone_center_is_none() {
-    assert_eq!(classify_header_zone(500.0, 20.0, 1072.0), HeaderZone::None);
+fn header_zone_dividers_are_none() {
+    assert_eq!(classify_header_zone(668.0, 20.0, 1072.0), HeaderZone::None);
+    assert_eq!(classify_header_zone(950.0, 20.0, 1072.0), HeaderZone::None);
 }
 
 #[test]

@@ -36,6 +36,7 @@ pub(super) fn handle_sleep_cycle(
     let (secs, label) = SLEEP_OPTIONS[next_idx];
     cfg.reading_auto_sleep_secs = secs;
     reader.set_sleep_label(SharedString::from(label));
+    log::info!("panel: sleep cycle to {} ({})", label, secs);
     true
 }
 

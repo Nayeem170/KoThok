@@ -91,6 +91,10 @@ const PICKER_DOUBLE_TAP_MS: u64 = 450;
 /// Window for a second footer play-button tap to count as a double-click
 /// (bookmark) instead of a single play/pause toggle.
 const PLAY_BUTTON_DOUBLE_MS: u64 = 350;
+/// How long a tapped-open header stays up before retracting again, when
+/// auto-hide is on. Long enough to read the page number and reach a button,
+/// short enough that the page gets the screen back without another tap.
+pub const HEADER_REVEAL_SECS: u64 = 10;
 
 pub fn run_loop(st: &mut LoopState, ctx: &mut LoopContext) {
     let mut iter = 0u32;

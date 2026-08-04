@@ -106,7 +106,7 @@ fn chapter_with(text: &str) -> Chapter {
 fn inline_svg_figure_renders_a_picture_and_a_caption() {
     let xhtml = r#"<figure><svg width="200" height="80"><rect width="200" height="80" fill="black"/></svg><figcaption>Figure 1. A recipe.</figcaption></figure>"#;
     let mut ch = chapter_with(xhtml);
-    let st = build_state(&mut ch, BODY_PX, HEAD_PX, 48);
+    let st = build_state(&mut ch, BODY_PX, HEAD_PX, 48, true);
     assert_eq!(
         st.decoded_images.len(),
         1,
@@ -133,7 +133,7 @@ fn dense_pre_block_read_aloud_and_chapter_still_flows() {
     let long_json = format!("{{{}}}", "\"k\":1,".repeat(40));
     let xhtml = format!("<pre>{long_json}</pre><p>Real prose after the code block.</p>");
     let mut ch = chapter_with(&xhtml);
-    let st = build_state(&mut ch, BODY_PX, HEAD_PX, 48);
+    let st = build_state(&mut ch, BODY_PX, HEAD_PX, 48, true);
 
     let mono_rows = st
         .all_rows
@@ -159,7 +159,7 @@ fn dense_pre_block_read_aloud_and_chapter_still_flows() {
 fn build_state_text_only_produces_rows_and_pages() {
     let xhtml = "<h1>Title</h1><p>One two three four five six seven eight nine ten.</p>";
     let mut ch = chapter_with(xhtml);
-    let st = build_state(&mut ch, BODY_PX, HEAD_PX, 48);
+    let st = build_state(&mut ch, BODY_PX, HEAD_PX, 48, true);
     assert!(!st.all_rows.is_empty(), "text must yield rows");
     assert!(!st.pages.is_empty(), "must produce at least one page");
     for &(s, e) in &st.pages {
@@ -173,7 +173,7 @@ fn build_state_text_only_produces_rows_and_pages() {
 #[test]
 fn build_state_empty_chapter_safe() {
     let mut ch = chapter_with("");
-    let st = build_state(&mut ch, BODY_PX, HEAD_PX, 48);
+    let st = build_state(&mut ch, BODY_PX, HEAD_PX, 48, true);
     for &(s, e) in &st.pages {
         assert!(s <= st.all_rows.len());
         assert!(e <= st.all_rows.len());
@@ -188,7 +188,7 @@ fn build_state_pages_cover_all_rows() {
     }
     body.push_str("</p>");
     let mut ch = chapter_with(&body);
-    let st = build_state(&mut ch, BODY_PX, HEAD_PX, 48);
+    let st = build_state(&mut ch, BODY_PX, HEAD_PX, 48, true);
     let covered: usize = st.pages.iter().map(|(s, e)| e - s).sum();
     assert_eq!(
         covered,
@@ -202,7 +202,7 @@ fn build_state_stable_across_font_sizes() {
     let xhtml = "<p>The quick brown fox jumps over the lazy dog repeatedly.</p>";
     for line_h in [32, 48, 64] {
         let mut ch = chapter_with(xhtml);
-        let st = build_state(&mut ch, BODY_PX, HEAD_PX, line_h);
+        let st = build_state(&mut ch, BODY_PX, HEAD_PX, line_h, true);
         assert!(!st.pages.is_empty(), "line_h={line_h} produced no pages");
         for &(s, e) in &st.pages {
             assert!(s <= e && e <= st.all_rows.len());
@@ -214,7 +214,7 @@ fn build_state_stable_across_font_sizes() {
 fn build_state_row_heights_match_all_rows() {
     let xhtml = "<h1>Heading</h1><p>Body paragraph of normal length here.</p>";
     let mut ch = chapter_with(xhtml);
-    let st = build_state(&mut ch, BODY_PX, HEAD_PX, 48);
+    let st = build_state(&mut ch, BODY_PX, HEAD_PX, 48, true);
     assert_eq!(
         st.row_heights.len(),
         st.all_rows.len(),
@@ -258,7 +258,7 @@ fn count_chapter_pages_matches_build_state_pagination() {
     let xhtml = "<h1>Title</h1><p>One two three four five six seven eight.</p>";
     let mut a = chapter_with(xhtml);
     let mut b = chapter_with(xhtml);
-    let st = build_state(&mut a, BODY_PX, HEAD_PX, 48);
+    let st = build_state(&mut a, BODY_PX, HEAD_PX, 48, true);
     let layout = screen_layout();
     let counted = count_chapter_pages(&mut b, BODY_PX, 48, &layout);
     assert_eq!(
@@ -333,7 +333,7 @@ fn indented_block_reaches_the_row_and_suppresses_prose_devices() {
     let indents = kobo_core::html_text::parse_indents(".lvl { margin-left: 2em }");
     let xhtml = r#"<p>An ordinary paragraph of prose that is long enough to wrap onto a second line somewhere.</p><p class="lvl">    if x: return x</p>"#;
     let mut ch = Chapter::from_xhtml_with_indents(0, None, xhtml, &indents);
-    let st = build_state(&mut ch, BODY_PX, HEAD_PX, 42);
+    let st = build_state(&mut ch, BODY_PX, HEAD_PX, 42, true);
 
     let body: Vec<&crate::Row> = st.all_rows.iter().filter(|r| r.kind == 0).collect();
     let flush: Vec<&&crate::Row> = body.iter().filter(|r| block_indent_px(r) == 0).collect();
@@ -383,7 +383,7 @@ fn code_blocks_keep_their_internal_spacing() {
     let indents = kobo_core::html_text::parse_indents(".lvl { margin-left: 2em }");
     let xhtml = r#"<p class="lvl">x = 1      # aligned comment</p>"#;
     let mut ch = Chapter::from_xhtml_with_indents(0, None, xhtml, &indents);
-    let st = build_state(&mut ch, BODY_PX, HEAD_PX, 42);
+    let st = build_state(&mut ch, BODY_PX, HEAD_PX, 42, true);
     let joined: String = st
         .all_rows
         .iter()
@@ -400,7 +400,7 @@ fn code_blocks_keep_their_internal_spacing() {
 fn prose_still_wraps_by_word() {
     let xhtml = "<p>Ordinary prose with     irregular spacing that should normalise.</p>";
     let mut ch = Chapter::from_xhtml(0, None, xhtml);
-    let st = build_state(&mut ch, BODY_PX, HEAD_PX, 42);
+    let st = build_state(&mut ch, BODY_PX, HEAD_PX, 42, true);
     let joined: String = st
         .all_rows
         .iter()
@@ -420,7 +420,7 @@ fn dense_pre_block_keeps_real_ranges_per_row() {
     let long_json = r#"{"key1":"value1","key2":"value2","key3":"value3","key4":"value4","key5":"value5","key6":"value6","key7":"value7","key8":"value8","key9":"value9","key10":"value10","key11":"value11","key12":"value12"}"#;
     let xhtml = format!("<pre>{long_json}</pre>");
     let mut ch = Chapter::from_xhtml(0, None, &xhtml);
-    let st = build_state(&mut ch, BODY_PX, HEAD_PX, 48);
+    let st = build_state(&mut ch, BODY_PX, HEAD_PX, 48, true);
     let mono_rows: Vec<_> = st
         .all_rows
         .iter()
@@ -450,7 +450,7 @@ fn sparse_transcript_pre_block_keeps_real_ranges() {
     let transcript = "Speaker A: Hello there, welcome to the show.\nSpeaker B: Thank you for having me today.\nSpeaker A: Let us begin with the first topic of discussion now.";
     let xhtml = format!("<pre>{transcript}</pre>");
     let mut ch = Chapter::from_xhtml(0, None, &xhtml);
-    let st = build_state(&mut ch, BODY_PX, HEAD_PX, 48);
+    let st = build_state(&mut ch, BODY_PX, HEAD_PX, 48, true);
     let mono_rows: Vec<_> = st
         .all_rows
         .iter()

@@ -32,7 +32,16 @@ pub fn open_book_session(
     line_h: i32,
     book_path: &str,
 ) -> BookSession {
-    let state = build_state(&mut chapters[pos.chapter], body_px, head_px, line_h);
+    // Justification is a saved per-book setting; hardcoding `true` here meant a
+    // book left on left-alignment reopened justified until the panel was
+    // touched again.
+    let state = build_state(
+        &mut chapters[pos.chapter],
+        body_px,
+        head_px,
+        line_h,
+        cfg.text_justify,
+    );
     let (chapter_offsets, offset_rx) = resolve_offsets(
         chapters,
         pos.chapter,
@@ -190,7 +199,7 @@ mod tests {
 
         // Establish where page 0's and a later page's rows actually begin, the
         // same way the app would have while reading page 0 before browsing on.
-        let probe = build_state(&mut chapters[0], 36.0, 48.0, 48);
+        let probe = build_state(&mut chapters[0], 36.0, 48.0, 48, true);
         assert!(
             probe.pages.len() >= 3,
             "fixture must paginate to several pages: {}",

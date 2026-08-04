@@ -11,6 +11,8 @@ use crate::Reader;
 const SLIDER_BRIGHTNESS: i32 = 0;
 const SLIDER_TTS_RATE: i32 = 1;
 const SLIDER_VOLUME: i32 = 3;
+const SLIDER_LINE_SPACING: i32 = 4;
+const SLIDER_MARGIN: i32 = 5;
 
 pub(super) fn handle_brightness(
     reader: &Reader,
@@ -60,4 +62,18 @@ pub(super) fn handle_tts_rate(
         return true;
     }
     false
+}
+
+pub(super) fn handle_line_spacing_frac(frac_opt: &Option<(i32, f32)>) -> Option<f32> {
+    if let Some((SLIDER_LINE_SPACING, frac)) = frac_opt {
+        return Some(*frac);
+    }
+    None
+}
+
+pub(super) fn handle_margin_frac(frac_opt: &Option<(i32, f32)>) -> Option<f32> {
+    if let Some((SLIDER_MARGIN, frac)) = frac_opt {
+        return Some(*frac);
+    }
+    None
 }

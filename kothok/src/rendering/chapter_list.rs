@@ -510,6 +510,74 @@ mod tests {
         assert!(scrollbar_hit_test(w, CH_LIST_TOP, 1000, 0, CH_LIST_TOP + 50, 10, 0).is_none());
     }
 
+    /// Dragging the thumb down must scroll down. The press records a grab
+    /// offset against `thumb_top` and every later move is resolved through
+    /// `scrollbar_y_to_scroll`, so the two have to agree on which way the
+    /// track runs -- if they did not, the list would run away from the finger.
+    #[test]
+    fn thumb_drag_follows_the_finger() {
+        let top = CH_LIST_TOP;
+        let bottom = top + 1200;
+        let track_h = bottom - top;
+        for &n in &[8usize, 40, 200, 201, 5000] {
+            let sm = list_scroll_max(n, track_h);
+            for &start in &[0i32, sm / 3, sm] {
+                let press_y = thumb_top(top, track_h, n, start) + 20;
+                let grab = press_y - thumb_top(top, track_h, n, start);
+                let held = scrollbar_y_to_scroll(press_y, top, bottom, n, grab);
+                // A thumb pixel is worth `sm / max_travel` scroll pixels, and
+                // the round trip through `thumb_top` rounds once each way, so
+                // landing one thumb pixel off is the resolution of the control
+                // rather than a fault. What must not happen is the list moving
+                // by more than the finger could have asked for.
+                let (_, max_travel) = thumb_metrics(track_h, n);
+                let per_px = (sm / max_travel.max(1)) as u32 + 1;
+                assert!(
+                    held.abs_diff(start) <= per_px,
+                    "n={n} start={start}: press moved the list to {held},                      more than the {per_px} scroll px one thumb pixel is worth"
+                );
+                let mut prev = held;
+                for d in [10, 40, 120, 400] {
+                    let s = scrollbar_y_to_scroll(press_y + d, top, bottom, n, grab);
+                    assert!(s >= prev, "n={n} start={start} d={d}: {s} < {prev}");
+                    prev = s;
+                }
+                let up = scrollbar_y_to_scroll(press_y - 120, top, bottom, n, grab);
+                assert!(up <= held, "n={n} start={start}: dragging up scrolled down");
+            }
+        }
+    }
+
+    /// The thumb the finger grabs is the thumb the painter drew. `paint_scrollbar`
+    /// is handed the row count *including* the "and N more..." row, so a touch
+    /// path that counts only the result rows hit-tests a thumb of a different
+    /// size at a different place.
+    #[test]
+    fn painted_and_hit_tested_thumbs_agree() {
+        let top = CH_LIST_TOP;
+        let bottom = top + 1200;
+        let track_h = bottom - top;
+        let painted = 201usize; // 200 results + the "and N more..." row
+        let touched = 200usize;
+        for scroll in [0, 500, 2000, 8000] {
+            let p = thumb_top(top, track_h, painted, scroll);
+            let t = thumb_top(top, track_h, touched, scroll);
+            // A few pixels, i.e. under the 30px grab margin and invisible on
+            // an e-ink panel. The counts differ by one row out of two hundred.
+            assert!(
+                p.abs_diff(t) <= 4,
+                "scroll={scroll}: painted thumb at {p}px, hit-tested at {t}px"
+            );
+        }
+        // The counts do differ by the overflow row, so the reachable bottom
+        // differs by exactly one row pitch. That is the cost of the mismatch:
+        // dragging fully down stops a row short of the "and N more..." line.
+        assert_eq!(
+            list_scroll_max(painted, track_h) - list_scroll_max(touched, track_h),
+            CH_ROW_PITCH
+        );
+    }
+
     #[test]
     fn scrollbar_y_to_scroll_zero_items() {
         assert_eq!(

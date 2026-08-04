@@ -35,6 +35,7 @@ pub(super) fn check_font_repaginate(st: &mut LoopState, ctx: &mut LoopContext) {
                 st.body_px,
                 st.head_px,
                 st.line_h,
+                st.text_justify,
             );
             let total = st.state.all_rows.len();
             st.current_page = st.current_page.min(total.saturating_sub(1));

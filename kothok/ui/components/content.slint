@@ -66,27 +66,17 @@ export component ContentArea inherits Rectangle {
         background: #ffffff;
         visible: root.header-visible && !root.picker-active && root.page-count > 0;
 
-        Rectangle {
-            x: 23px; y: 17px;
-            width: 76px; height: 76px;
-            border-radius: 38px;
-            background: root.brand-red;
-            Image {
-                source: @image-url("assets/library.svg");
-                image-fit: contain;
-                width: 38px; height: 38px;
-                x: 19px; y: 19px;
-            }
-        }
-
+        // Title owns the left edge; every button is in the right-hand cluster.
+        // `gesture::classify_header_zone` mirrors these x positions -- change
+        // one and the other has to follow.
         Image {
             source: root.book-title-img;
-            x: 119px;
-            width: root.width - 686px;
+            x: 23px;
+            width: root.width - 710px;
             height: 76px;
             y: 17px;
             image-fit: contain;
-            horizontal-alignment: center;
+            horizontal-alignment: left;
             vertical-alignment: center;
             visible: root.book-title-img-h > 0;
         }
@@ -94,12 +84,12 @@ export component ContentArea inherits Rectangle {
             txt: root.header-title;
             txt-color: root.text-secondary; font-size: 33px; bold: true;
             overflow: root.title-overflow;
-            x: 119px; width: root.width - 686px; y: 17px; height: 76px;
+            x: 23px; width: root.width - 710px; y: 17px; height: 76px;
             visible: root.book-title-img-h == 0;
         }
 
         Rectangle {
-            x: root.width - 557px; y: 17px;
+            x: root.width - 671px; y: 17px;
             width: 76px; height: 76px;
             border-radius: 38px;
             background: root.brand-green;
@@ -112,7 +102,7 @@ export component ContentArea inherits Rectangle {
         }
 
         Rectangle {
-            x: root.width - 471px; y: 17px;
+            x: root.width - 585px; y: 17px;
             width: 76px; height: 76px;
             border-radius: 38px;
             background: root.brand-green;
@@ -125,7 +115,7 @@ export component ContentArea inherits Rectangle {
         }
 
         Rectangle {
-            x: root.width - 385px; y: 17px;
+            x: root.width - 499px; y: 17px;
             width: 76px; height: 76px;
             border-radius: 38px;
             background: root.brand-green;
@@ -138,13 +128,13 @@ export component ContentArea inherits Rectangle {
         }
 
         Rectangle {
-            x: root.width - 290px; y: 30px;
+            x: root.width - 404px; y: 30px;
             width: 3px; height: 50px;
             background: root.track-color;
         }
 
         Rectangle {
-            x: root.width - 271px; y: 17px;
+            x: root.width - 385px; y: 17px;
             width: 76px; height: 76px;
             border-radius: 38px;
             background: root.brand-green;
@@ -157,7 +147,7 @@ export component ContentArea inherits Rectangle {
         }
 
         Rectangle {
-            x: root.width - 185px; y: 17px;
+            x: root.width - 299px; y: 17px;
             width: 76px; height: 76px;
             border-radius: 38px;
             background: root.brand-green;
@@ -170,12 +160,34 @@ export component ContentArea inherits Rectangle {
         }
 
         Rectangle {
-            x: root.width - 99px; y: 17px;
+            x: root.width - 213px; y: 17px;
             width: 76px; height: 76px;
             border-radius: 38px;
             background: root.brand-green;
             Image {
                 source: @image-url("assets/chapters.svg");
+                image-fit: contain;
+                width: 38px; height: 38px;
+                x: 19px; y: 19px;
+            }
+        }
+
+        Rectangle {
+            x: root.width - 118px; y: 30px;
+            width: 3px; height: 50px;
+            background: root.track-color;
+        }
+
+        // Library is the one control that leaves the book, so it keeps its own
+        // colour and sits past a divider at the far right -- the same place the
+        // settings and chapter overlays put their exit button.
+        Rectangle {
+            x: root.width - 99px; y: 17px;
+            width: 76px; height: 76px;
+            border-radius: 38px;
+            background: root.brand-red;
+            Image {
+                source: @image-url("assets/library.svg");
                 image-fit: contain;
                 width: 38px; height: 38px;
                 x: 19px; y: 19px;

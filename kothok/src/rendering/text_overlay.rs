@@ -4,7 +4,7 @@ use slint::platform::software_renderer::Rgb565Pixel;
 
 use crate::rendering::common::TEXT_RGB565;
 use crate::rendering::layout::{
-    block_indent_px, content_h, first_line_indent, text_w, GUTTER_PAD, GUTTER_W, PAD_LEFT,
+    block_indent_px, content_h, first_line_indent, pad_left, text_w, GUTTER_PAD, GUTTER_W,
     ROW_FLAG_BQ, ROW_FLAG_CENTER, ROW_FLAG_INDENT, ROW_FLAG_JUSTIFY, ROW_FLAG_MONO,
 };
 use crate::rendering::text_render;
@@ -35,7 +35,7 @@ pub fn overlay_text(buf: &mut [Rgb565Pixel], pv: &PageView) {
     let (decoded_images, style_runs) = (pv.decoded_images, pv.style_runs);
     let (body_px, _head_px, line_h) = (pv.body_px, pv.head_px, pv.line_h);
     let (s, e) = pages.get(page).copied().unwrap_or((0, rows.len()));
-    let text_x = PAD_LEFT + GUTTER_W + GUTTER_PAD;
+    let text_x = pad_left() + GUTTER_W + GUTTER_PAD;
     let buf_bytes = rgb565_as_bytes(buf);
     let mut y = content_top;
     let max_y = content_top + content_h() as usize;
@@ -67,7 +67,7 @@ pub fn overlay_text(buf: &mut [Rgb565Pixel], pv: &PageView) {
             let script = text_render::detect_script(&row.text);
             if script.is_rtl() {
                 let tw = text_render::word_width(&row.text, px);
-                let right_edge = PAD_LEFT + GUTTER_W + GUTTER_PAD + text_w();
+                let right_edge = pad_left() + GUTTER_W + GUTTER_PAD + text_w();
                 let render_x = right_edge.saturating_sub(tw as usize).max(text_x);
                 text_render::blit_rgb565(buf_bytes, w, row.text.as_str(), px, render_x, vy, w, h);
             } else {
@@ -157,7 +157,7 @@ fn row_px(row: &Row, body_px: f32) -> f32 {
 /// line. They never co-occur (a block indent marks the block as code, which
 /// suppresses the prose one) but they add cleanly if that ever changes.
 fn row_origin_x(row: &Row, px: f32, body_px: f32) -> (usize, usize) {
-    let text_x = PAD_LEFT + GUTTER_W + GUTTER_PAD;
+    let text_x = pad_left() + GUTTER_W + GUTTER_PAD;
     let indent = block_indent_px(row)
         + if (row_flags(row) & ROW_FLAG_INDENT) != 0 {
             first_line_indent(body_px)
@@ -540,9 +540,9 @@ pub fn composite_text(
     let accent = cur_start < cur_end;
     let rtl = is_rtl();
     let (gutter_left, gutter_right) = if rtl {
-        (w - PAD_LEFT - GUTTER_W, w - PAD_LEFT)
+        (w - pad_left() - GUTTER_W, w - pad_left())
     } else {
-        (PAD_LEFT, PAD_LEFT + GUTTER_W)
+        (pad_left(), pad_left() + GUTTER_W)
     };
     let row_count = rows.get(s..e).unwrap_or(&[]).len();
     for (ri, row) in rows.get(s..e).unwrap_or(&[]).iter().enumerate() {
@@ -576,7 +576,7 @@ pub fn composite_text(
                 }
                 if (row_flags(row) & ROW_FLAG_BQ) != 0 {
                     let bi = block_indent_px(row);
-                    let bx = (PAD_LEFT + GUTTER_W + GUTTER_PAD)
+                    let bx = (pad_left() + GUTTER_W + GUTTER_PAD)
                         .saturating_sub(bi)
                         .saturating_sub(4);
                     for dx in 0..3 {

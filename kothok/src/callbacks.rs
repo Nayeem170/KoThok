@@ -36,6 +36,10 @@ pub struct Callbacks {
     pub skip_forward_cell: Rc<Cell<bool>>,
     pub skip_rewind_cell: Rc<Cell<bool>>,
     pub settings_cell: Rc<Cell<bool>>,
+    pub text_align_cell: Rc<Cell<bool>>,
+    pub header_toggle_cell: Rc<Cell<bool>>,
+    pub update_check_cell: Rc<Cell<bool>>,
+    pub reset_book_cell: Rc<Cell<bool>>,
     pub overlay_tab_switch_cell: Rc<Cell<i32>>,
     pub overlay_back_from_results_cell: Rc<Cell<bool>>,
 }
@@ -124,8 +128,12 @@ pub fn register(reader: &Reader) -> Callbacks {
 
     let panel_open_cell = Rc::new(Cell::new(false));
     let poc = panel_open_cell.clone();
+    let reader_weak = reader.as_weak();
     reader.on_panel_close(move || {
         poc.set(false);
+        if let Some(reader) = reader_weak.upgrade() {
+            reader.set_panel_open(false);
+        }
     });
 
     // The audio-mode gear must open the panel through Rust: setting Slint's
@@ -166,12 +174,14 @@ pub fn register(reader: &Reader) -> Callbacks {
     let wifi_toggle_cell = Rc::new(Cell::new(false));
     let wt = wifi_toggle_cell.clone();
     reader.on_panel_wifi_toggle(move || {
+        log::info!("callback: panel_wifi_toggle fired");
         wt.set(true);
     });
 
     let bt_toggle_cell = Rc::new(Cell::new(false));
     let bt = bt_toggle_cell.clone();
     reader.on_panel_bt_toggle(move || {
+        log::info!("callback: panel_bt_toggle fired");
         bt.set(true);
     });
 
@@ -239,6 +249,30 @@ pub fn register(reader: &Reader) -> Callbacks {
         src.set(true);
     });
 
+    let text_align_cell = Rc::new(Cell::new(false));
+    let tac = text_align_cell.clone();
+    reader.on_panel_text_align_toggle(move || {
+        tac.set(true);
+    });
+
+    let header_toggle_cell = Rc::new(Cell::new(false));
+    let htc = header_toggle_cell.clone();
+    reader.on_panel_header_toggle(move || {
+        htc.set(true);
+    });
+
+    let update_check_cell = Rc::new(Cell::new(false));
+    let ucc = update_check_cell.clone();
+    reader.on_panel_check_updates(move || {
+        ucc.set(true);
+    });
+
+    let reset_book_cell = Rc::new(Cell::new(false));
+    let rbc = reset_book_cell.clone();
+    reader.on_panel_reset_book(move || {
+        rbc.set(true);
+    });
+
     Callbacks {
         page_delta,
         quit,
@@ -268,6 +302,10 @@ pub fn register(reader: &Reader) -> Callbacks {
         lock_tap_cell,
         skip_forward_cell,
         skip_rewind_cell,
+        text_align_cell,
+        header_toggle_cell,
+        update_check_cell,
+        reset_book_cell,
         overlay_tab_switch_cell: chapter.tab_switch_cell,
         overlay_back_from_results_cell: chapter.back_from_results_cell,
     }

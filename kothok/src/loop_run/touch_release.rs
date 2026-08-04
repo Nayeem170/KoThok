@@ -353,6 +353,16 @@ pub(super) fn on_release(
                         st.text_dirty = true;
                     } else {
                         st.pending_tap_at = Some(now);
+                        // A tap on the page is how a retracted header is
+                        // recalled. Only meaningful while auto-hide is on --
+                        // otherwise the header is already up and this would
+                        // restart a countdown that must never run.
+                        if ctx.cfg.auto_hide_header && !st.header_visible {
+                            st.header_visible = true;
+                            reader.set_header_visible(true);
+                            st.header_revealed_at = Some(now);
+                            st.text_dirty = true;
+                        }
                     }
                 }
             }
