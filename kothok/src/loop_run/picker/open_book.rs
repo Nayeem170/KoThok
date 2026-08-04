@@ -93,6 +93,17 @@ pub(super) fn open_book_from_picker(
     let book_settings = load_book_settings(std::path::Path::new(BOOK_SETTINGS_FILE), &book_path);
     apply_book_settings(cfg, &book_settings);
     push_book_settings_to_ui(reader, cfg);
+    // The loop state carries the *previous* book's typography, and
+    // `open_book_session` below lays the new book out from these three fields --
+    // so without re-deriving them here the book's own font size and line
+    // spacing are loaded into `cfg`, shown in the panel, and then ignored by the
+    // pagination. Launch-time open (`setup::book_init`) already does this.
+    crate::rendering::layout::set_margin_px(cfg.margin_px);
+    st.body_px = cfg.font_size as f32;
+    st.head_px = cfg.font_size as f32 * crate::rendering::layout::HEADING_SCALE;
+    st.line_h = (cfg.font_size as f32 * cfg.line_spacing_pct as f32 / 100.0) as i32;
+    st.line_spacing_pct = cfg.line_spacing_pct;
+    st.text_justify = cfg.text_justify;
     if cfg.tts_voice != voice_before || cfg.tts_lang != lang_before {
         save_settings_for(&book_path, cfg, false);
     }

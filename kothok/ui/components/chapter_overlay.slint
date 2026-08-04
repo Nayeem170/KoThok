@@ -32,30 +32,30 @@ export component ChapterOverlay inherits Rectangle {
 
     // Header: 110px tall, 76px buttons, 23px edge padding.
     // Right cluster (right-to-left): toggle | pipe | close/back
-    // Title centred with 240px margins to clear the cluster.
+    // Every button sits on the right, so the title starts at the left edge
+    // rather than being centred in the space left over between them.
     Rectangle {
         y: 0px; height: 110px; width: root.width;
         background: #ffffff;
 
-        // Title centred in 240px margins.
         // Hidden in results mode (replaced by results-title below).
         if !root.results-active : Text {
-            x: 240px; width: root.width - 480px; height: 110px;
+            x: 23px; width: root.width - 240px; height: 110px;
             text: root.active-tab == 0 ? "Chapters" : "Words";
             color: root.text-primary;
             font-size: 33px; font-weight: 700;
-            horizontal-alignment: center;
+            horizontal-alignment: left;
             vertical-alignment: center;
             overflow: elide;
         }
 
-        // Results context title (centred, same geometry, shown only in results mode).
+        // Results context title (same geometry, shown only in results mode).
         if root.results-active : Text {
-            x: 240px; width: root.width - 480px; height: 110px;
+            x: 23px; width: root.width - 240px; height: 110px;
             text: root.results-title;
             color: root.text-secondary;
             font-size: 33px; font-weight: 700;
-            horizontal-alignment: center;
+            horizontal-alignment: left;
             vertical-alignment: center;
             overflow: elide;
         }

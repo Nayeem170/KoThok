@@ -26,6 +26,7 @@ pub fn build_state(
     body_px: f32,
     _head_px: f32,
     line_h: i32,
+    justify: bool,
 ) -> ChapterState {
     if chapter.body.is_empty() && !chapter.segments.is_empty() {
         let built = build_chapter_body(chapter);
@@ -92,6 +93,7 @@ pub fn build_state(
                 body_px,
                 line_h,
                 seg,
+                justify,
             );
         }
     }

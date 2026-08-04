@@ -96,25 +96,29 @@ Step "Checking prerequisites..."
 
 $missing = @()
 
-$rustOk = $false
-try { $rustVer = & rustc --version 2>$null; if ($LASTEXITCODE -eq 0) { $rustOk = $true } } catch {}
-if (-not $rustOk) {
+# Presence is checked with Get-Command, not by running the tool. Under
+# `$ErrorActionPreference = 'Stop'` a native command that writes *anything* to
+# stderr raises a NativeCommandError, which the catch then swallows as "not
+# installed" -- and `cross --version` always prints a host-target warning. That
+# reported a perfectly good toolchain as missing.
+if (-not (Get-Command rustc -ErrorAction SilentlyContinue)) {
     $missing += "Rust (install from https://rustup.rs)"
 }
 
-$crossOk = $false
-try { $crossVer = & cross --version 2>$null; if ($LASTEXITCODE -eq 0) { $crossOk = $true } } catch {}
-if (-not $crossOk) {
+if (-not (Get-Command cross -ErrorAction SilentlyContinue)) {
     $missing += "cross (run: cargo install cross)"
 }
 
-$dockerOk = $false
-try { $dockerVer = & docker --version 2>$null; if ($LASTEXITCODE -eq 0) { $dockerOk = $true } } catch {}
-if (-not $dockerOk) {
+if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
     $missing += "Docker (install from https://docker.com)"
 } else {
+    # The daemon has to actually be reachable, so this one does run -- with
+    # stderr merged into stdout so a warning cannot be mistaken for a failure.
     $dockerRunning = $false
-    try { & docker info 2>$null | Out-Null; if ($LASTEXITCODE -eq 0) { $dockerRunning = $true } } catch {}
+    try {
+        & docker info 2>&1 | Out-Null
+        if ($LASTEXITCODE -eq 0) { $dockerRunning = $true }
+    } catch {}
     if (-not $dockerRunning) {
         $missing += "Docker daemon not running (start Docker Desktop)"
     }
@@ -313,16 +317,35 @@ else {
 
     Sync-Fonts $FontSrc $addsDir
 
+    # The build stamp the app will show for this binary. Read back from the
+    # device copy, so it describes the file that was actually written.
+    #
+    # The MD5 check above is weaker than it looks: it re-reads through the same
+    # Windows file cache the copy just went into, so it confirms bytes that may
+    # still only exist in RAM. Comparing this pair against the settings panel is
+    # what proves the binary reached flash and survived the reboot run.sh does
+    # on exit.
+    $devFile  = Get-Item -LiteralPath $binaryOnDevice
+    $epoch    = [int64](New-TimeSpan -Start ([datetime]'1970-01-01Z').ToUniversalTime() `
+                                     -End $devFile.LastWriteTimeUtc).TotalSeconds
+    $stamp    = "$([int64]($devFile.Length / 1024))k/$($epoch % 1000000)"
+
     Write-Host ""
     Write-Host "  ============================" -ForegroundColor Green
     Write-Host "  UPDATE COMPLETE" -ForegroundColor Green
     Write-Host "  ============================" -ForegroundColor Green
-    Info "MD5: $hostHash"
+    Info "MD5:   $hostHash"
+    Write-Host "  BUILD: $stamp" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "  DONE! Follow these steps:" -ForegroundColor Yellow
     Write-Host ""
     Write-Host "  1. Eject the Kobo (system tray -> Safely Remove -> KOBOeReader)" -ForegroundColor White
+    Write-Host "     Do NOT just unplug -- an unflushed copy is lost on the next reboot," -ForegroundColor DarkGray
+    Write-Host "     and run.sh reboots the device every time you exit the reader." -ForegroundColor DarkGray
     Write-Host "  2. Unplug USB cable" -ForegroundColor White
     Write-Host "  3. Tap the hamburger menu (bottom-right) -> tap 'KoThok'" -ForegroundColor White
+    Write-Host "  4. Library -> gear -> check the build line reads:" -ForegroundColor White
+    Write-Host "        build $stamp" -ForegroundColor Cyan
+    Write-Host "     If it does not, the copy did not survive. Re-run with a proper eject." -ForegroundColor DarkGray
     Write-Host ""
 }

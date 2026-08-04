@@ -50,22 +50,18 @@ pub struct FlatTocRow {
 /// row's text off the edge of the column entirely.
 const MAX_TOC_DEPTH: usize = 6;
 
-/// Flatten `toc_tree` into paintable rows, or fall back to one row per spine
-/// chapter when the book ships no NCX/nav at all -- today's only behaviour,
-/// so a book without a TOC does not regress.
+/// Flatten `toc_tree` into paintable rows, merged with the spine so every
+/// chapter file is reachable even when the book's nav only names a few.
+///
+/// The NCX is flattened in document order, then walked once. Each nav entry
+/// that points at chapter `c` first emits synthesised rows for any spine file
+/// before `c` that no entry has covered, then the entry itself wins for that
+/// file. Divider entries (`chapter: None`, e.g. "Part One") are emitted as-is.
+/// Spine files the nav never names are synthesised at the end, titled from the
+/// chapter itself. This is a single path, not a fallback: there is no "is the
+/// nav good enough?" test, because that test is what left unnamed files
+/// unreachable.
 pub fn toc_rows(toc_tree: &[TocEntry], chapters: &[Chapter]) -> Vec<FlatTocRow> {
-    if toc_tree.is_empty() {
-        return chapters
-            .iter()
-            .enumerate()
-            .map(|(i, ch)| FlatTocRow {
-                label: chapter_display_title(ch, i),
-                depth: 0,
-                chapter: Some(i),
-                anchor: None,
-            })
-            .collect();
-    }
     fn walk(entries: &[TocEntry], out: &mut Vec<FlatTocRow>) {
         for e in entries {
             out.push(FlatTocRow {
@@ -77,8 +73,37 @@ pub fn toc_rows(toc_tree: &[TocEntry], chapters: &[Chapter]) -> Vec<FlatTocRow> 
             walk(&e.children, out);
         }
     }
+    fn spine_row(chapters: &[Chapter], i: usize) -> FlatTocRow {
+        FlatTocRow {
+            label: chapter_display_title(&chapters[i], i),
+            depth: 0,
+            chapter: Some(i),
+            anchor: None,
+        }
+    }
+
+    let mut flat = Vec::new();
+    walk(toc_tree, &mut flat);
+
     let mut out = Vec::new();
-    walk(toc_tree, &mut out);
+    let mut next_spine = 0usize;
+    for e in flat {
+        if let Some(c) = e.chapter {
+            while next_spine < c && next_spine < chapters.len() {
+                out.push(spine_row(chapters, next_spine));
+                next_spine += 1;
+            }
+            // `.max`, not `= c + 1`: several entries may point into the same
+            // file (a chapter and its sections). Advancing only forwards keeps
+            // the file's row from being re-synthesised on the second entry.
+            next_spine = next_spine.max(c.saturating_add(1));
+        }
+        out.push(e);
+    }
+    while next_spine < chapters.len() {
+        out.push(spine_row(chapters, next_spine));
+        next_spine += 1;
+    }
     out
 }
 
@@ -94,7 +119,7 @@ pub fn fnv1a(s: &str) -> u64 {
 /// length prefix read at the wrong offset asks for an allocation the device
 /// cannot serve. A version that is part of the path means an outdated cache is
 /// never opened at all.
-const CACHE_FORMAT: u32 = 6;
+const CACHE_FORMAT: u32 = 7;
 
 pub fn book_cache_path(path: &str) -> std::path::PathBuf {
     let h = fnv1a(path);

@@ -8,7 +8,7 @@ use kobo_core::Chapter;
 #[test]
 fn headings_reach_read_aloud() {
     let mut ch = Chapter::from_xhtml(0, None, "<h1>Chapter Title</h1><p>Body text here.</p>");
-    let st = build_state(&mut ch, BODY_PX, HEAD_PX, 42);
+    let st = build_state(&mut ch, BODY_PX, HEAD_PX, 42, true);
     assert!(
         st.utterances
             .iter()
@@ -21,7 +21,7 @@ fn headings_reach_read_aloud() {
 #[test]
 fn heading_rows_carry_a_byte_range() {
     let mut ch = Chapter::from_xhtml(0, None, "<h2>Some Heading</h2><p>Body.</p>");
-    let st = build_state(&mut ch, BODY_PX, HEAD_PX, 42);
+    let st = build_state(&mut ch, BODY_PX, HEAD_PX, 42, true);
     let head = st
         .all_rows
         .iter()
@@ -42,7 +42,7 @@ fn links_inside_a_heading_are_addressable() {
         None,
         r#"<h2><a href="ch02.xhtml">Linked Heading</a></h2>"#,
     );
-    let st = build_state(&mut ch, BODY_PX, HEAD_PX, 42);
+    let st = build_state(&mut ch, BODY_PX, HEAD_PX, 42, true);
     assert_eq!(st.links.len(), 1, "heading link is captured");
     let link = &st.links[0];
     let head = st
@@ -65,7 +65,7 @@ fn links_inside_a_heading_are_addressable() {
 fn heading_levels_do_not_alias_row_flags() {
     for (tag, level) in [("h1", 1), ("h2", 2), ("h4", 4)] {
         let mut ch = Chapter::from_xhtml(0, None, &format!("<{tag}>Title</{tag}><p>Body.</p>"));
-        let st = build_state(&mut ch, BODY_PX, HEAD_PX, 42);
+        let st = build_state(&mut ch, BODY_PX, HEAD_PX, 42, true);
         let head = st
             .all_rows
             .iter()
@@ -79,7 +79,7 @@ fn heading_levels_do_not_alias_row_flags() {
 fn emphasis_lands_on_the_right_words() {
     let xhtml = "<p>first para plain</p><p>second has <b>BOLDWORD</b> inside</p>";
     let mut ch = Chapter::from_xhtml(0, None, xhtml);
-    let st = build_state(&mut ch, BODY_PX, HEAD_PX, 42);
+    let st = build_state(&mut ch, BODY_PX, HEAD_PX, 42, true);
     assert_eq!(st.style_runs.len(), 1, "one bold run: {:?}", st.style_runs);
 
     let row = st
@@ -136,7 +136,7 @@ fn code_rows_stay_mono_even_with_emphasis() {
     let indents = kobo_core::html_text::parse_indents(".lvl { margin-left: 2em }");
     let xhtml = r#"<p class="lvl">x = <b>1</b>  # note</p>"#;
     let mut ch = Chapter::from_xhtml_with_indents(0, None, xhtml, &indents);
-    let st = build_state(&mut ch, BODY_PX, HEAD_PX, 42);
+    let st = build_state(&mut ch, BODY_PX, HEAD_PX, 42, true);
     for row in st.all_rows.iter().filter(|r| r.kind == 0) {
         assert_ne!(row.tag & ROW_FLAG_MONO, 0, "code row lost its mono flag");
     }
@@ -149,7 +149,7 @@ fn code_rows_stay_mono_even_with_emphasis() {
 fn table_card_rows_are_not_rendered_as_code() {
     let xhtml = "<table><tr><th>Key</th><th>Value</th></tr><tr><td>a</td><td>long value here</td></tr></table>";
     let mut ch = Chapter::from_xhtml(0, None, xhtml);
-    let st = build_state(&mut ch, BODY_PX, HEAD_PX, 42);
+    let st = build_state(&mut ch, BODY_PX, HEAD_PX, 42, true);
     let mono_rows: Vec<_> = st
         .all_rows
         .iter()
@@ -166,7 +166,7 @@ fn table_card_rows_are_not_rendered_as_code() {
 fn nested_list_rows_are_not_rendered_as_code() {
     let xhtml = "<ul><li>top item<ul><li>inner item with several words</li></ul></li></ul>";
     let mut ch = Chapter::from_xhtml(0, None, xhtml);
-    let st = build_state(&mut ch, BODY_PX, HEAD_PX, 42);
+    let st = build_state(&mut ch, BODY_PX, HEAD_PX, 42, true);
     let mono_rows: Vec<_> = st
         .all_rows
         .iter()

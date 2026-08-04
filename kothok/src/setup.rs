@@ -102,6 +102,8 @@ pub fn run() -> Option<InitResult> {
         setup.body_px,
         setup.head_px,
         setup.line_h,
+        setup.cfg.line_spacing_pct,
+        setup.cfg.text_justify,
         w,
         h,
         hw_cfg.model,
@@ -246,11 +248,17 @@ fn init_reader_and_config(w: usize, hw_cfg: &hw::DeviceConfig) -> ReaderSetup {
     let cfg = config::load_config_from_base(config::CONFIG_FILE, device_default_font);
     let body_px: f32 = cfg.font_size as f32;
     let head_px: f32 = cfg.font_size as f32 * layout::HEADING_SCALE;
-    let line_h: i32 = (cfg.font_size as f32 * layout::LINE_HEIGHT_SCALE) as i32;
+    let line_h: i32 = (cfg.font_size as f32 * cfg.line_spacing_pct as f32 / 100.0) as i32;
     reader.set_tts_lang(SharedString::from(cfg.tts_lang.clone()));
     reader.set_tts_voice(SharedString::from(cfg.tts_voice.clone()));
     reader.set_tts_speed(cfg.tts_rate);
     reader.set_font_size_val(cfg.font_size);
+    reader.set_line_spacing_val(cfg.line_spacing_pct);
+    reader.set_text_justify(cfg.text_justify);
+    reader.set_margin_val(cfg.margin_px);
+    layout::set_margin_px(cfg.margin_px);
+    reader.set_auto_hide_header(cfg.auto_hide_header);
+    reader.set_header_visible(!cfg.auto_hide_header);
     crate::update_check::set_enabled(cfg.check_updates);
     reader.set_sleep_label(
         crate::panel::callbacks::sleep::sleep_label(cfg.reading_auto_sleep_secs).into(),
@@ -309,6 +317,7 @@ fn init_book_or_picker(
             setup.body_px,
             setup.head_px,
             setup.line_h,
+            true,
         );
         (
             vec![setup.dummy_ch.clone()],
@@ -332,8 +341,17 @@ fn init_book_or_picker(
             Default::default(),
         )
     });
-    let picker = picker_state
-        .unwrap_or_else(|| (false, 0, Vec::new(), std::collections::HashMap::new(), None));
+    // Book mode: the loop paints the page itself, so these start blank -- but
+    // white, not the zeroed (black) vectors they used to be.
+    let picker = picker_state.unwrap_or_else(|| PickerInit {
+        active: false,
+        scroll: 0,
+        cells: Vec::new(),
+        cover_cache: std::collections::HashMap::new(),
+        entered: None,
+        buffer: vec![Rgb565Pixel(0xFFFF); w * h],
+        text_cache: vec![Rgb565Pixel(0xFFFF); w * h],
+    });
     (book, picker)
 }
 

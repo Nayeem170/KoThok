@@ -12,7 +12,32 @@ use std::collections::HashMap;
 
 use crate::audio::Utterance;
 
+/// Side margin before the bookmark gutter, in pixels, when the reader has not
+/// chosen one. Still a constant because the splash screen draws before any
+/// config is read and has to match the first page of a book on a fresh install.
 pub const PAD_LEFT: usize = 24;
+
+/// Range offered by the Margins slider. The upper bound leaves a readable
+/// column on the narrowest panel this runs on; the lower bound is where the
+/// bookmark gutter starts crowding the bezel.
+pub const MARGIN_MIN_PX: i32 = 12;
+pub const MARGIN_MAX_PX: i32 = 96;
+
+/// The live side margin. An atomic rather than a `OnceLock` because the
+/// Margins slider changes it mid-session, and every wrap measurement and every
+/// draw has to agree on the new value within the same reflow.
+static MARGIN_PX: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(PAD_LEFT);
+
+pub fn pad_left() -> usize {
+    MARGIN_PX.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// Set the side margin. Callers must repaginate afterwards: `text_w()` changes
+/// with it, so every cached row's wrap is stale the moment this returns.
+pub fn set_margin_px(px: i32) {
+    let px = px.clamp(MARGIN_MIN_PX, MARGIN_MAX_PX) as usize;
+    MARGIN_PX.store(px, std::sync::atomic::Ordering::Relaxed);
+}
 /// Top of the text area == the header height, shared by every page's header
 /// (see `content.slint`). Changing it repaginates: `content_h` shrinks and page
 /// indices shift, so saved positions land a page or so off once.
@@ -30,9 +55,6 @@ pub const FOOTER_H_F: f32 = 92.0;
 /// reader setup (`setup.rs`) and the live font reflow (`panel/callbacks/font.rs`)
 /// so both agree on the head/body ratio after a font change.
 pub const HEADING_SCALE: f32 = 0.78;
-/// Line height as a multiple of the body font size. Same shared use as
-/// `HEADING_SCALE`; changing it repaginates every chapter.
-pub const LINE_HEIGHT_SCALE: f32 = 1.4;
 
 /// Mono (code block) size as a fraction of the body font size. Shared by
 /// `push_pre_rows`, `push_body_rows` (Calibre margin-left code), and
@@ -107,22 +129,31 @@ pub fn first_line_indent(body_px: f32) -> usize {
 }
 
 struct AppScreenLayout {
-    text_w: usize,
+    fb_w: usize,
     content_h: i32,
 }
 
 static LAYOUT: std::sync::OnceLock<AppScreenLayout> = std::sync::OnceLock::new();
 
 pub fn init_layout(fb_w: usize, fb_h: usize) {
-    let side = PAD_LEFT + GUTTER_W + GUTTER_PAD;
     LAYOUT.get_or_init(|| AppScreenLayout {
-        text_w: fb_w.saturating_sub(2 * side),
+        fb_w,
         content_h: fb_h as i32 - PAD_TOP as i32 - FOOTER_H,
     });
 }
 
+/// Width of the text column.
+///
+/// Derived on each call rather than cached at init: the margin is a live
+/// setting now, and a cached width would keep wrapping to the old column after
+/// the slider moved -- text measured for one width and drawn at another is how
+/// lines end up overflowing or ragged.
 pub fn text_w() -> usize {
-    LAYOUT.get().map(|l| l.text_w).unwrap_or(976)
+    let side = pad_left() + GUTTER_W + GUTTER_PAD;
+    LAYOUT
+        .get()
+        .map(|l| l.fb_w.saturating_sub(2 * side))
+        .unwrap_or(976)
 }
 
 pub fn content_h() -> i32 {

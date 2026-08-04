@@ -235,9 +235,11 @@ fn toc_rows_flattens_a_nested_tree_in_document_order() {
     assert_eq!(rows[2].label, "Chapter Two");
 }
 
-/// A three-level nav (Part -> Chapter -> Section) must flatten with each
-/// level's depth incremented correctly. Multiple entries into the same chapter
-/// (the chapter and its section) stay as separate rows.
+/// A three-level nav (Part -> Chapter -> Section) flattens with each level's
+/// depth incremented. File 0 is never named by the nav (only chapter 1 is), so
+/// the merge synthesises a row for it before "Chapter Two"; the rest come
+/// straight from the tree. Multiple entries into the same chapter (the chapter
+/// and its section) stay as separate rows.
 #[test]
 fn toc_rows_flattens_a_three_level_tree_with_correct_depth() {
     let ch0 = Chapter::from_xhtml(0, None, "<p>a</p>");
@@ -254,12 +256,55 @@ fn toc_rows_flattens_a_three_level_tree_with_correct_depth() {
         )],
     )];
     let rows = toc_rows(&tree, &[ch0, ch1]);
-    assert_eq!(rows.len(), 3, "{rows:?}");
+    assert_eq!(rows.len(), 4, "{rows:?}");
     assert_eq!(rows[0].depth, 0, "Part One");
-    assert_eq!(rows[1].depth, 1, "Chapter Two");
-    assert_eq!(rows[2].depth, 2, "Section Two-A");
-    assert_eq!(rows[1].chapter, Some(1));
-    assert_eq!(rows[2].chapter, Some(1), "section shares the chapter file");
+    assert_eq!(
+        rows[1].chapter,
+        Some(0),
+        "file 0 unnamed by the nav: synthesised from the spine"
+    );
+    assert_eq!(rows[1].depth, 0);
+    assert_eq!(rows[2].depth, 1, "Chapter Two");
+    assert_eq!(rows[3].depth, 2, "Section Two-A");
+    assert_eq!(rows[2].chapter, Some(1));
+    assert_eq!(rows[3].chapter, Some(1), "section shares the chapter file");
+}
+
+/// "The Book of Tomorrow" shape: the nav names only the first file, but the
+/// spine keeps going. Every trailing unnamed file is synthesised from its own
+/// content. Here the named entry ("Start") wins for file 0; files 1-3 become
+/// plain spine rows.
+#[test]
+fn toc_rows_synthesises_trailing_spine_files_after_a_single_nav_entry() {
+    let chs: Vec<Chapter> = (0..4)
+        .map(|i| Chapter::from_xhtml(i, None, &format!("<p>Line {i}</p>")))
+        .collect();
+    let tree = vec![toc_entry("Start", 0, Some(0), vec![])];
+    let rows = toc_rows(&tree, &chs);
+    assert_eq!(rows.len(), 4, "{rows:?}");
+    assert_eq!(rows[0].label, "Start");
+    assert_eq!(rows[0].chapter, Some(0));
+    for (i, r) in rows[1..].iter().enumerate() {
+        assert_eq!(r.chapter, Some(i + 1), "trailing file synthesised");
+        assert_eq!(r.depth, 0, "synthesised rows carry no nesting");
+    }
+}
+
+/// A nav entry that points past earlier unnamed files fills the gap with
+/// synthesised rows for those files, in spine order, before the entry itself.
+#[test]
+fn toc_rows_fills_unnamed_files_before_a_nav_entry() {
+    let ch0 = Chapter::from_xhtml(0, Some("Cover".to_string()), "<p>a</p>");
+    let ch1 = Chapter::from_xhtml(1, Some("Map".to_string()), "<p>b</p>");
+    let ch2 = Chapter::from_xhtml(2, Some("Chapter 1".to_string()), "<p>c</p>");
+    let tree = vec![toc_entry("Chapter 1", 0, Some(2), vec![])];
+    let rows = toc_rows(&tree, &[ch0, ch1, ch2]);
+    assert_eq!(rows.len(), 3, "{rows:?}");
+    assert_eq!(rows[0].chapter, Some(0), "ch0 synthesised");
+    assert_eq!(rows[0].label, "Cover");
+    assert_eq!(rows[1].chapter, Some(1), "ch1 synthesised");
+    assert_eq!(rows[2].chapter, Some(2), "nav entry wins for its file");
+    assert_eq!(rows[2].label, "Chapter 1");
 }
 
 /// An anchor (`#fragment`) on a TocEntry must survive the flatten into

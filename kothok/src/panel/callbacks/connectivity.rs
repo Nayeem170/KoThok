@@ -61,7 +61,7 @@ pub(super) fn ensure_wifi_bt_lists(st: &mut LoopState, reader: &Reader) {
 fn toggle_selector(
     reader: &Reader,
     toggle_cell: &Cell<bool>,
-    _kind: &str,
+    kind: &str,
     is_on: impl Fn(&Reader) -> bool,
     set_on: impl Fn(&Reader, bool),
     cur_name: impl Fn(&Reader) -> SharedString,
@@ -71,7 +71,18 @@ fn toggle_selector(
     if !toggle_cell.replace(false) {
         return None;
     }
-    let connected = is_on(reader) && cur_name(reader) == connected_name(reader);
+    let on = is_on(reader);
+    let cur = cur_name(reader);
+    let conn = connected_name(reader);
+    let connected = on && cur == conn;
+    log::info!(
+        "panel: {} toggle selector: on={}, cur='{}', conn='{}', connected={}",
+        kind,
+        on,
+        cur,
+        conn,
+        connected
+    );
     if connected {
         toggle_dev(false);
         set_on(reader, false);
@@ -124,9 +135,11 @@ pub(super) fn handle_wifi(
         wifi_toggle,
     ) {
         Some(true) => {
+            log::info!("panel: wifi toggle ON");
             st.wifi_user_on = true;
             if st.wifi_list_ids_valid && !st.wifi_list.is_empty() {
                 let id = st.wifi_list[st.wifi_list_idx].1;
+                log::info!("panel: wifi selecting network {}", id);
                 std::thread::spawn(move || wifi_select_network(id));
             }
             if !st.wifi_list_ids_valid {
@@ -134,6 +147,7 @@ pub(super) fn handle_wifi(
             }
         }
         Some(false) => {
+            log::info!("panel: wifi toggle OFF");
             st.wifi_user_on = false;
         }
         None => {}
@@ -181,6 +195,7 @@ pub(super) fn handle_bt(
         },
     ) {
         Some(true) => {
+            log::info!("panel: bt toggle ON");
             st.bt_user_on = true;
             st.bt_list_fetched = false;
             // Clear the poll's failure streak, or a count left over from the
@@ -190,6 +205,7 @@ pub(super) fn handle_bt(
             st.bt_fail_count = 0;
         }
         Some(false) => {
+            log::info!("panel: bt toggle OFF");
             st.bt_user_on = false;
         }
         None => {}

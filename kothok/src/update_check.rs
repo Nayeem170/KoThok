@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (c) 2026 Nayeem Bin Ahsan
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::OnceLock;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::VERSION;
@@ -12,7 +11,6 @@ const RELEASES_URL: &str = "https://api.github.com/repos/Nayeem170/KoThok/releas
 /// a network or parse failure.
 const RETRY_INTERVAL_SECS: u64 = 3600;
 
-static LATEST: OnceLock<String> = OnceLock::new();
 static CHECKED: AtomicBool = AtomicBool::new(false);
 static LAST_CHECK: AtomicU64 = AtomicU64::new(0);
 static ENABLED: AtomicBool = AtomicBool::new(false);
@@ -44,7 +42,9 @@ pub fn try_check_if_wifi() {
     std::thread::spawn(fetch_latest);
 }
 
-fn fetch_latest() {
+/// The release tag GitHub reports as latest, or `None` if the request or the
+/// parse failed. Shared by the automatic check and the settings-panel button.
+fn fetch_latest_tag() -> Option<String> {
     let agent = ureq::AgentBuilder::new()
         .timeout_connect(Duration::from_secs(10))
         .timeout_read(Duration::from_secs(15))
@@ -54,7 +54,7 @@ fn fetch_latest() {
         Ok(r) => r,
         Err(e) => {
             log::warn!("update-check: {e}");
-            return;
+            return None;
         }
     };
 
@@ -66,24 +66,79 @@ fn fetch_latest() {
         Some(v) => v,
         None => {
             log::warn!("update-check: parse error");
-            return;
+            return None;
         }
     };
 
     let tag = body.get("tag_name").and_then(|t| t.as_str()).unwrap_or("");
+    if tag.is_empty() {
+        log::warn!("update-check: release has no tag_name");
+        return None;
+    }
+    Some(tag.to_string())
+}
+
+fn fetch_latest() {
+    let Some(tag) = fetch_latest_tag() else {
+        return;
+    };
+    let tag = tag.as_str();
     let remote_ver = tag.strip_prefix('v').unwrap_or(tag);
 
     if is_newer(remote_ver, VERSION) {
         log::info!("update-check: newer version available: {tag}");
-        let _ = LATEST.set(tag.to_string());
     } else {
         log::info!("update-check: up to date ({VERSION})");
     }
     CHECKED.store(true, Ordering::Relaxed);
 }
 
-pub fn pending_update() -> Option<&'static str> {
-    LATEST.get().map(|s| s.as_str())
+/// Outcome of a reader-initiated check, for the device settings panel.
+pub enum ManualCheck {
+    UpToDate(String),
+    Available(String),
+    NoNetwork,
+    Failed,
+}
+
+impl ManualCheck {
+    pub fn label(&self) -> String {
+        match self {
+            ManualCheck::UpToDate(v) => format!("Up to date (v{v})"),
+            ManualCheck::Available(tag) => format!("Update available: {tag}"),
+            ManualCheck::NoNetwork => "No WiFi - connect first".to_string(),
+            ManualCheck::Failed => "Check failed - try again".to_string(),
+        }
+    }
+}
+
+/// Ask GitHub for the latest release now, on the reader's say-so.
+///
+/// Deliberately ignores `ENABLED`, `CHECKED` and the retry floor that gate the
+/// automatic check: those exist so the app does not reach the network on its
+/// own initiative, and none of them apply to a button the reader just pressed.
+/// Returns a receiver so the caller polls it like every other background job in
+/// the loop rather than blocking the UI on a 15-second read timeout.
+pub fn spawn_manual_check() -> std::sync::mpsc::Receiver<ManualCheck> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    if !crate::device::wifi_status() {
+        let _ = tx.send(ManualCheck::NoNetwork);
+        return rx;
+    }
+    std::thread::spawn(move || {
+        let _ = tx.send(match fetch_latest_tag() {
+            Some(tag) => {
+                let remote = tag.strip_prefix('v').unwrap_or(&tag);
+                if is_newer(remote, VERSION) {
+                    ManualCheck::Available(tag)
+                } else {
+                    ManualCheck::UpToDate(VERSION.to_string())
+                }
+            }
+            None => ManualCheck::Failed,
+        });
+    });
+    rx
 }
 
 /// Is `remote` a strictly higher version than `local`?

@@ -117,8 +117,25 @@ pub(super) fn handle_picker(st: &mut LoopState, ctx: &mut LoopContext) -> LoopFl
                             )
                             .into(),
                         );
+                        reader.set_device_model(SharedString::from(st.device_model.as_str()));
+                        // The build stamp, not BUILD_TAG: that one is derived
+                        // from VERSION, so this line used to print the same
+                        // number twice and say nothing about which binary was
+                        // running. See `device::build_stamp`.
+                        reader.set_app_version(SharedString::from(format!(
+                            "KoThok {} - build {}",
+                            crate::VERSION,
+                            crate::device::build_stamp()
+                        )));
+                        reader.set_free_space(
+                            crate::device::free_space_label()
+                                .map(SharedString::from)
+                                .unwrap_or_default(),
+                        );
+                        reader.set_update_status(Default::default());
                         let wifi = caps.network_available();
                         let bt = caps.audio_sink_available();
+                        log::info!("picker: device settings OPEN, wifi={}, bt={}", wifi, bt);
                         reader.set_wifi_on(wifi);
                         if !crate::device::bt_reconnect_busy() {
                             reader.set_bt_on(bt);
@@ -131,7 +148,17 @@ pub(super) fn handle_picker(st: &mut LoopState, ctx: &mut LoopContext) -> LoopFl
                         }
                         reader.set_play_enabled(wifi && bt);
                         if let Some(n) = caps.wifi_name() {
-                            reader.set_wifi_connected_name(SharedString::from(n));
+                            log::info!("picker: wifi connected name={}", n);
+                            reader.set_wifi_connected_name(SharedString::from(n.clone()));
+                            reader.set_wifi_name(SharedString::from(n));
+                        } else {
+                            log::info!("picker: no wifi name available");
+                        }
+                        if let Some(n) = caps.bt_name() {
+                            log::info!("picker: bt connected name={}", n);
+                            reader.set_bt_name(SharedString::from(n));
+                        } else {
+                            log::info!("picker: no bt name available");
                         }
                         if let Some(ref path) = ctx.fl_path {
                             if let Some(hw) = frontlight_get(path) {
@@ -148,7 +175,7 @@ pub(super) fn handle_picker(st: &mut LoopState, ctx: &mut LoopContext) -> LoopFl
                         st.exit_armed = false;
                         st.about_open = true;
                         crate::update_check::try_check_if_wifi();
-                        crate::rendering::about::show_about(&fb, &mut st.buffer, &st.device_model);
+                        crate::rendering::about::show_about(&fb, &mut st.buffer);
                         st.prev_buffer.copy_from_slice(&st.buffer);
                         return LoopFlow::Continue;
                     }

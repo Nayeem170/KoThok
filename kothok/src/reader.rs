@@ -120,7 +120,7 @@ pub fn switch_chapter(
     let Some(chapter) = st.chapters.get_mut(nc) else {
         return;
     };
-    st.state = build_state(chapter, body_px, head_px, line_h);
+    st.state = build_state(chapter, body_px, head_px, line_h, st.text_justify);
     st.current_page = if opts.to_last_page {
         st.state.pages.len().saturating_sub(1)
     } else {

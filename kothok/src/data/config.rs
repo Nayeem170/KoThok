@@ -38,6 +38,10 @@ const KEY_CHECK_UPDATES: &str = "check_updates";
 const KEY_PANEL_TRANSITION: &str = "panel_transition";
 const KEY_ONBOARDING_VERSION: &str = "onboarding_version";
 const KEY_VOICE_PREFIX: &str = "voice.";
+const KEY_LINE_SPACING_PCT: &str = "line_spacing_pct";
+const KEY_TEXT_JUSTIFY: &str = "text_justify";
+const KEY_MARGIN_PX: &str = "margin_px";
+const KEY_AUTO_HIDE_HEADER: &str = "auto_hide_header";
 
 const TTS_RATE_DEFAULT: i32 = 60;
 const VOLUME_DEFAULT: i32 = 100;
@@ -71,6 +75,21 @@ pub struct AppConfig {
     /// Compared against BUILD_TAG via string inequality - a different value
     /// (upgrade or downgrade) opens the guide. Empty on first install.
     pub onboarding_version: String,
+    /// Line spacing as a percentage of the body font size (100 = single-spaced,
+    /// 140 = 1.4x, 200 = double-spaced). Default 140 matches the old hardcoded
+    /// LINE_HEIGHT_SCALE. Range 100-200.
+    pub line_spacing_pct: i32,
+    /// Whether body text is justified (full-justification) or left-aligned.
+    pub text_justify: bool,
+    /// Side margin in pixels, before the bookmark gutter. Range
+    /// `MARGIN_MIN_PX..=MARGIN_MAX_PX`; the default matches the old hardcoded
+    /// `layout::PAD_LEFT`.
+    pub margin_px: i32,
+    /// Let the reading header retract so the page owns the full screen. It
+    /// comes back on a tap and retracts again after
+    /// [`HEADER_REVEAL_SECS`](crate::loop_run::HEADER_REVEAL_SECS), and stays
+    /// down while TTS is playing.
+    pub auto_hide_header: bool,
 }
 
 impl Default for AppConfig {
@@ -88,6 +107,10 @@ impl Default for AppConfig {
             check_updates: true,
             panel_transition: PanelTransition::default(),
             onboarding_version: String::new(),
+            line_spacing_pct: 140,
+            text_justify: true,
+            margin_px: crate::rendering::layout::PAD_LEFT as i32,
+            auto_hide_header: false,
         }
     }
 }
@@ -136,6 +159,20 @@ pub fn load_config_from_base(path: &str, base_font: i32) -> AppConfig {
                 KEY_CHECK_UPDATES => cfg.check_updates = val == "1" || val == "true",
                 KEY_PANEL_TRANSITION => cfg.panel_transition = PanelTransition::from_key(val),
                 KEY_ONBOARDING_VERSION => cfg.onboarding_version = val.into(),
+                KEY_LINE_SPACING_PCT => {
+                    cfg.line_spacing_pct = val.parse::<i32>().unwrap_or(140).clamp(100, 200)
+                }
+                KEY_TEXT_JUSTIFY => cfg.text_justify = val != "0" && val != "false",
+                KEY_MARGIN_PX => {
+                    cfg.margin_px = val
+                        .parse::<i32>()
+                        .unwrap_or(crate::rendering::layout::PAD_LEFT as i32)
+                        .clamp(
+                            crate::rendering::layout::MARGIN_MIN_PX,
+                            crate::rendering::layout::MARGIN_MAX_PX,
+                        )
+                }
+                KEY_AUTO_HIDE_HEADER => cfg.auto_hide_header = val == "1" || val == "true",
                 _ if key.starts_with(KEY_VOICE_PREFIX) => {
                     let lang = key.trim_start_matches(KEY_VOICE_PREFIX).to_string();
                     if !lang.is_empty() {
@@ -155,13 +192,17 @@ pub fn save_config_to(cfg: &AppConfig, path: &str) {
     // `panel_transition` would revert an on-device waveform trial the moment
     // the user touched the brightness slider.
     let mut data = format!(
-        "{KEY_FONT_SIZE}={}\n{KEY_TTS_LANG}={}\n{KEY_TTS_VOICE}={}\n{KEY_TTS_RATE}={}\n{KEY_VOLUME}={}\n{KEY_BRIGHTNESS}={}\n{KEY_NATURAL_SCROLL}={}\n{KEY_READING_AUTO_SLEEP}={}\n{KEY_CHECK_UPDATES}={}\n{KEY_PANEL_TRANSITION}={}\n{KEY_ONBOARDING_VERSION}={}\n",
+        "{KEY_FONT_SIZE}={}\n{KEY_TTS_LANG}={}\n{KEY_TTS_VOICE}={}\n{KEY_TTS_RATE}={}\n{KEY_VOLUME}={}\n{KEY_BRIGHTNESS}={}\n{KEY_NATURAL_SCROLL}={}\n{KEY_READING_AUTO_SLEEP}={}\n{KEY_CHECK_UPDATES}={}\n{KEY_PANEL_TRANSITION}={}\n{KEY_ONBOARDING_VERSION}={}\n{KEY_LINE_SPACING_PCT}={}\n{KEY_TEXT_JUSTIFY}={}\n{KEY_MARGIN_PX}={}\n{KEY_AUTO_HIDE_HEADER}={}\n",
         cfg.font_size, cfg.tts_lang, cfg.tts_voice, cfg.tts_rate, cfg.volume, cfg.brightness,
         if cfg.natural_scroll { 1 } else { 0 },
         cfg.reading_auto_sleep_secs,
         if cfg.check_updates { 1 } else { 0 },
         cfg.panel_transition.as_key(),
-        cfg.onboarding_version
+        cfg.onboarding_version,
+        cfg.line_spacing_pct,
+        if cfg.text_justify { 1 } else { 0 },
+        cfg.margin_px,
+        if cfg.auto_hide_header { 1 } else { 0 },
     );
     for (lang, voice) in &cfg.voices {
         data.push_str(&format!("{KEY_VOICE_PREFIX}{lang}={voice}\n"));

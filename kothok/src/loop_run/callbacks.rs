@@ -9,6 +9,34 @@ mod jump;
 mod mode_toggle;
 mod navigation;
 
+/// Retract the reading header once its reveal has expired, or as soon as
+/// playback starts.
+///
+/// Playback wins over the countdown: read-aloud is the case where the screen is
+/// being looked at rather than touched, so the header is pure furniture there.
+/// The header stays put in the library, behind the panel and behind the chapter
+/// overlay -- those either do not draw it or are mid-interaction.
+fn retract_header_if_due(st: &mut LoopState, ctx: &LoopContext) -> bool {
+    let reader = ctx.reader;
+    if !ctx.cfg.auto_hide_header || st.picker_active || st.panel_open {
+        return false;
+    }
+    if !st.header_visible {
+        return false;
+    }
+    let expired = st
+        .header_revealed_at
+        .is_none_or(|t| t.elapsed().as_secs() >= HEADER_REVEAL_SECS);
+    if !(reader.get_playing() || expired) {
+        return false;
+    }
+    st.header_visible = false;
+    st.header_revealed_at = None;
+    reader.set_header_visible(false);
+    st.text_dirty = true;
+    true
+}
+
 pub(super) fn process_loop_callbacks(st: &mut LoopState, ctx: &mut LoopContext) -> (bool, bool) {
     let reader = ctx.reader;
     let cb = ctx.cb;
@@ -99,7 +127,11 @@ pub(super) fn process_loop_callbacks(st: &mut LoopState, ctx: &mut LoopContext) 
     // three seconds of every session, before any page had been turned.
     reader.set_nav_recent(st.last_nav.elapsed().as_secs() < 3);
 
-    st.text_dirty |= process_panel_callbacks(st, reader, cmd_tx, ctx.cfg, ctx.fl_path, cb);
+    let panel = process_panel_callbacks(st, reader, cmd_tx, ctx.cfg, ctx.fl_path, cb);
+    st.text_dirty |= panel.text_dirty;
+    ui_changed |= panel.ui_changed;
+
+    ui_changed |= retract_header_if_due(st, ctx);
 
     if cb.lock_tap_cell.replace(false)
         && !st.picker_active

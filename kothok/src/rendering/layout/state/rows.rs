@@ -144,6 +144,7 @@ pub(super) fn push_body_rows(
     body_px: f32,
     line_h: i32,
     seg: &kobo_core::TextSegment,
+    justify: bool,
 ) {
     if !all_rows.is_empty() {
         if let Some(last) = all_rows.last() {
@@ -212,7 +213,7 @@ pub(super) fn push_body_rows(
         } else {
             packed_hanging
         };
-        if word_spacing && !is_last && !is_code_block && marker_str.is_empty() {
+        if justify && word_spacing && !is_last && !is_code_block && marker_str.is_empty() {
             tag |= ROW_FLAG_JUSTIFY;
         }
         if first && indent_w > 0 {

@@ -77,10 +77,21 @@ pub fn classify_header_zone(dx: f32, dy: f32, w: f32) -> HeaderZone {
     if dy >= HEADER_H {
         return HeaderZone::None;
     }
-    if dx < PAD + BTN {
+    // Every control lives in one right-hand cluster, so the left of the header
+    // is the title and answers no tap. Mirrors `content.slint` exactly: move a
+    // button there and this must move with it, or the glyph and the zone that
+    // activates it drift apart.
+    //
+    // Right to left: library | chapters, gear, sleep | jump, bookmark, toggle
+    let mut left = w - PAD - BTN;
+    if dx >= left {
         return HeaderZone::Library;
     }
-    let mut left = w - PAD - BTN;
+    left -= SEP;
+    if dx >= left {
+        return HeaderZone::None;
+    }
+    left -= BTN;
     if dx >= left {
         return HeaderZone::Chapters;
     }

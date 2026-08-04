@@ -34,13 +34,24 @@ pub(super) struct ScreenCtx<'a> {
     pub h: usize,
 }
 
-pub(super) type PickerInit = (
-    bool,
-    i32,
-    Vec<GridCell>,
-    CoverCache,
-    Option<std::time::Instant>,
-);
+pub(super) struct PickerInit {
+    pub active: bool,
+    pub scroll: i32,
+    pub cells: Vec<GridCell>,
+    pub cover_cache: CoverCache,
+    pub entered: Option<std::time::Instant>,
+    /// The screen as painted at launch, and the library image behind it.
+    ///
+    /// These have to be the buffers the loop goes on to use. `init_picker`
+    /// used to paint into locals and drop them, leaving `LoopState.text_cache`
+    /// as the all-zero (i.e. **black**) vector it was allocated as. Closing the
+    /// settings panel over the library restores the screen with
+    /// `buffer.copy_from_slice(&text_cache)`, so the first close painted the
+    /// whole screen black -- and only the first, because any later picker
+    /// interaction repaints `text_cache` on the way through.
+    pub buffer: Vec<Rgb565Pixel>,
+    pub text_cache: Vec<Rgb565Pixel>,
+}
 
 pub(super) fn init_picker(
     setup: &ReaderSetup,
@@ -48,8 +59,8 @@ pub(super) fn init_picker(
     all_books: &[EpubEntry],
 ) -> Option<PickerInit> {
     let picker_scroll = 0;
-    let mut buffer = vec![Rgb565Pixel(0); screen.w * screen.h];
-    let mut text_cache = vec![Rgb565Pixel(0); screen.w * screen.h];
+    let mut buffer = vec![Rgb565Pixel(0xFFFF); screen.w * screen.h];
+    let mut text_cache = vec![Rgb565Pixel(0xFFFF); screen.w * screen.h];
     let mut picker_cover_cache: CoverCache = std::collections::HashMap::new();
     render::show_book_picker(
         &setup.reader,
@@ -68,13 +79,15 @@ pub(super) fn init_picker(
     );
     let picker_cells =
         render::picker_scroll_cells(all_books, picker_scroll, render::LibraryFilter::default());
-    Some((
-        true,
-        picker_scroll,
-        picker_cells,
-        picker_cover_cache,
-        Some(std::time::Instant::now()),
-    ))
+    Some(PickerInit {
+        active: true,
+        scroll: picker_scroll,
+        cells: picker_cells,
+        cover_cache: picker_cover_cache,
+        entered: Some(std::time::Instant::now()),
+        buffer,
+        text_cache,
+    })
 }
 
 pub(super) type BookInit = (
@@ -133,11 +146,12 @@ pub(super) fn init_book(
     apply_book_settings(&mut setup.cfg, &book_settings);
     push_book_settings_to_ui(reader, &setup.cfg);
 
-    if book_settings.font_size.is_some() {
+    crate::rendering::layout::set_margin_px(setup.cfg.margin_px);
+    if book_settings.font_size.is_some() || book_settings.line_spacing_pct.is_some() {
         setup.body_px = setup.cfg.font_size as f32;
         setup.head_px = setup.cfg.font_size as f32 * crate::rendering::layout::HEADING_SCALE;
         setup.line_h =
-            (setup.cfg.font_size as f32 * crate::rendering::layout::LINE_HEIGHT_SCALE) as i32;
+            (setup.cfg.font_size as f32 * setup.cfg.line_spacing_pct as f32 / 100.0) as i32;
     }
     if setup.cfg.tts_voice != voice_before || setup.cfg.tts_lang != lang_before {
         config::save_book_settings(&book_path, &setup.cfg);

@@ -90,6 +90,7 @@ fn jump_reading_position(
             st.body_px,
             st.head_px,
             st.line_h,
+            st.text_justify,
         );
         let cn =
             crate::data::library::chapter_display_title(&st.chapters[st.reading_ch], st.reading_ch);

@@ -45,6 +45,8 @@ pub struct LoopState {
     pub body_px: f32,
     pub head_px: f32,
     pub line_h: i32,
+    pub line_spacing_pct: i32,
+    pub text_justify: bool,
 
     pub current_book_path: String,
 
@@ -177,6 +179,10 @@ pub struct LoopState {
     pub sleep_pressed: bool,
     pub chapter_pressed: bool,
     pub header_visible: bool,
+    /// When the reader last tapped the page to bring the header back, while
+    /// auto-hide is on. `None` means the header is not on a countdown -- either
+    /// it is pinned open (auto-hide off) or already retracted.
+    pub header_revealed_at: Option<std::time::Instant>,
     pub pending_tap_at: Option<Instant>,
     pub press_dispatched: bool,
     pub press_x: i32,
@@ -212,6 +218,8 @@ pub struct LoopState {
 
     pub wifi_bt_list_rx: Option<Receiver<crate::panel::WifiBtListResult>>,
 
+    /// In-flight reader-initiated update check, polled by the settings panel.
+    pub update_check_rx: Option<std::sync::mpsc::Receiver<crate::update_check::ManualCheck>>,
     pub font_download_rx: Option<Receiver<crate::device::font_download::FontDownloadResult>>,
 
     pub wifi_list: Vec<(String, u32)>,
