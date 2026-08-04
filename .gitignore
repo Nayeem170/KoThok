@@ -38,8 +38,8 @@ kothok/crates/kobo/measure-baseline.sh
 graphify-out/
 
 # Agentic pipeline
-# .agentic-tasks/ is committed as audit trail (task history + build logs)
-# .agentic/ holds pipeline config
+# Root-level task tracking (local audit trail, not committed)
+.agentic-tasks/
 kothok/.agentic-tasks/
 
 # AGENTS.md (project config, not repo code)
@@ -75,4 +75,9 @@ kothok/kobo
 kothok/grab-tester
 kothok/grab-tester.c
 kothok/measure-baseline.sh
+kothok/reload.sh
 .kilo/
+
+# Local CLI launchers
+claude-direct.ps1
+claude-proxy.ps1
