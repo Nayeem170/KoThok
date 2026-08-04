@@ -21,6 +21,7 @@ Thumbs.db
 *.o
 *.so
 *.a
+/build-latest.log
 
 # Kobo device binaries
 kothok/crates/kobo/kobo
