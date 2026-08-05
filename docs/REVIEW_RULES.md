@@ -83,6 +83,15 @@ Format: `[source] rule text`
 - [seed] A loosely-named concern in the requirement is the enabling condition. "Fix the keying" names a topic, not a site set. Where a requirement names a concern rather than sites, the plan must enumerate the sites before implementation, and the reviewer verifies the enumeration -- not just the fix.
 - [seed] Test the defect's real shape, not the surface touched. The keying defect requires two books whose paths share a prefix; no existing test constructed that, so the gate was blind by construction. Prove a new test discriminates by running it against unfixed code and watching it fail before the fix lands.
 
+### Requirement-clause coverage
+
+- [seed] Every clause in an accepted requirement is both an implementation obligation and a review checkpoint. A clause no diff hunk satisfies has not been deferred -- it has been dropped, and the ticket closes as complete.
+- [seed] Clause coverage is not diff review. Reading the full diff shows what the code does; it cannot show what the requirement asked for and the code never mentions. Absence has no hunk. That is why a green gate and an ACCEPTED review both pass over it.
+- [seed] Diagnostic: before the verdict, list the requirement's clauses and name, for each, the `file:line` that satisfies it. A clause with no citation is a finding. "The plan did not cover it" is not an exemption -- the requirement was accepted, so the plan is the thing that failed.
+- [seed] Concrete case: `feat-highlights-bookmarks` shipped three clauses unimplemented. C1 ("long press ... selects the word under the finger") shipped anchored at the TTS reading cursor. C5 ("selects that highlight and the bar offers Remove instead of Highlight") was absent entirely. D3 ("a long press arms the row ... and tapping it deletes ... a single misread gesture must not destroy a mark") shipped as a one-gesture delete -- live data loss. All three passed a green gate and an ACCEPTED review.
+- [seed] Second-order cost: a dropped clause resurfaces as a fresh design question. The follow-up ticket re-derives options for a decision the accepted requirement already made, and can land a worse answer than the one already agreed. Before opening any follow-up, grep the original requirement for the behaviour -- the spec may already answer it, down to the draw call.
+- [seed] Applies to prose, not just numbered lists. "User data is never discarded without the user asking" is an obligation with a test behind it, not a sentiment.
+
 ## Learned rules
 
 - [feat/word-list-select-open-flow|0] UI mocks use Pencil CLI (pen.dev) by default. Read `pen_cli` from `.agentic/config.md` for the binary name (default: `pen`). Write mock.md with device dimensions, prompt, design decisions, interactive states. Generate with `<pen_cli> --out mock.pen --prompt-file mock.md --enable-preview`. Export preview with `<pen_cli> --in mock.pen --export mock-preview.png`. If Pencil unavailable, fall back to mock.html with device dimensions.

@@ -88,6 +88,7 @@ Check every active rule against the artifact.
 - [ ] Mock data uses realistic values (realistic EPUB structure, plausible strings)
 - [ ] Reference-port parity: if the diff ports a fix from a reference site (sibling file, earlier commit, "same as X"), every changed hunk in the reference has a counterpart here or an explicit "does not apply" note. Diff the reference commit and count hunks. See docs/REVIEW_RULES.md "Reference-port completeness".
 - [ ] For any new or modified test that guards a fix: it was run against unfixed code and observed to FAIL before the fix landed (run-red-first). A test that only passes after the fix is unproven as a guard.
+- [ ] For each requirement clause, cite the file:line in the diff that satisfies it. A clause you cannot cite is a HIGH regardless of whether the diff is otherwise correct. See docs/REVIEW_RULES.md "Requirement-clause coverage".
 
 ### For plan reviews
 
@@ -98,6 +99,7 @@ Check every active rule against the artifact.
 - [ ] DoD is machine-checkable (each item has a pass/fail criterion)
 - [ ] For every type change in the plan (enum variant, struct field, signature, trait impl): ask "what does rustc do?" Check for escape hatches (`_ =>`, `..Default::default()`, catch-all impl, `#[non_exhaustive]`). If none, the compiler enumerates sites at S4 build; verify the plan's Files table covers them. If an escape hatch exists, flag it (HIGH) and manually enumerate affected sites. See docs/REVIEW_RULES.md "Type-change completeness".
 - [ ] When the plan ports a fix from a reference site (sibling file, earlier commit, "same as X"): diff the reference fix and list its changed hunks. If the port has fewer hunks than the reference, each missing hunk maps to a reference hunk with an explicit "does not apply, because ..." or it is a gap (HIGH). Where the requirement names a concern rather than sites ("fix the keying"), verify the plan enumerates the sites before implementation. See docs/REVIEW_RULES.md "Reference-port completeness".
+- [ ] Enumerate the requirement's clauses. Every clause must map to a row in the plan's Files table or an explicit deferral with a reason. An unmapped clause is a HIGH. See docs/REVIEW_RULES.md "Requirement-clause coverage".
 
 ### For test plan reviews
 
