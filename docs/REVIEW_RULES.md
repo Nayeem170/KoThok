@@ -52,6 +52,29 @@ Format: `[source] rule text`
 - [seed] leda/ledb are color channels, NOT main frontlight
 - [seed] After extended sleep, toggle bl_power to force driver reinit
 
+### Type-change completeness (the rustc question)
+
+- [seed] For any change that modifies a type (add an enum variant, add or remove a struct field, change a function signature, add a trait impl), ask: what does rustc do about this type change?
+- [seed] rustc enumerates affected sites exhaustively at build time UNLESS an escape hatch silences it. Check for escape hatches: `_ =>` or `_ => {}` match arms, `..Default::default()` in struct literals (or `#[derive(Default)]` on the struct), catch-all or blanket impls, `#[non_exhaustive]`.
+- [seed] If NO escape hatch exists: the compiler owns site discovery. At S4 (cross build) every un-updated site is a hard error (E0004 non-exhaustive match, E0063 missing field). The reviewer verifies the plan accounts for those sites and checks semantics per site; it does not have to discover them. Grep the source for the sites (struct literals, match expressions, trait impls) and confirm the plan's Files table covers them.
+- [seed] If an escape hatch EXISTS: the compiler will NOT flag un-updated sites, so they silently fall through. This is silent-regression risk. The reviewer MUST manually enumerate every affected site and verify each. Flag the escape hatch itself (HIGH): a `_ => {}` that swallows a new variant, or a `..Default::default()` that hides a missing field, is the defect.
+- [seed] This is NOT a ban on `_ =>` or `..Default`. It treats their presence as "enumeration silenced, review manually here" and their absence as "compiler enumerates, verify semantics." Generalizes to trait impls, From/Into conversions, serde field ordering, and match patterns.
+
+### Verdict vs. load-bearing sub-claims
+
+- [seed] A review verdict and the reasoning supporting it are separately falsifiable. A scoped axis can return the correct verdict on a false sub-claim: the reviewer checks the conclusion ("no W/H mutation in our scenarios" -- correct) but not the load-bearing reason ("about.rs fleet tests have the same hazard" -- false).
+- [seed] Distinguish from an axis-never-given miss (the Type-change completeness / rustc-question case above): there the reviewer was never asked to check something; here the axis was given and the verdict was right, but a supporting sub-claim was wrong. Different failure mode, different remedy -- do not apply the scoping remedy to a verification-depth problem.
+- [seed] Remedy: when a verdict rests on a factual sub-claim about the source, verify the sub-claim directly (read the cited line), not just that the verdict is internally consistent. A correct conclusion built on an unchecked premise passes review and ships the wrong rationale.
+- [seed] Apply especially to attribution citations ("X is the precedent for Y"), hazard claims ("Z has the same risk"), and existence claims ("W exists at path P") -- load-bearing sub-claims a verdict can ride on without verifying.
+
+### Test-vs-impl tautology
+
+- [seed] A test must assert against a value the implementation does not derive. If the test recomputes its expected value using the same expression the implementation used, it validates the impl against itself and is anchored to nothing external. It cannot fail for the reason it exists, and a false green stops anyone from looking.
+- [seed] Diagnostic: take the assertion's expected side and trace where each term comes from. If every term is either a literal in the test or a value returned by the function under test, the test is tautological. A real test names at least one constant from the system the code must agree with -- a layout coordinate, a file-format field count, a protocol size, a spec threshold.
+- [seed] Concrete case: `tab_bar_geom` derived `seg_w` by subtracting `label_w + PAD_PX + 2*gap` from the panel width; `fleet_measure_text` then asserted `trailing_gap` computed from that same expression. Both passed on all 7 panels while the close button -- the thing the bar must actually clear, at `w - 99` -- appeared in neither. Moving or resizing the close button would not have failed the test.
+- [seed] Remedy: assert against the external constant directly (`23 + 3*seg_w + 2*gap <= w - 99 - gap`). Where a measurement is involved, demote it from an input of the formula to the fit check on the result (`measure_text("Chapters", font_px) <= seg_w`), per `about.rs:604-618`.
+- [seed] Applies beyond geometry: a serializer tested by round-tripping through its own parser, a hash checked against a value the same function produced, a cache test whose expected value is read from the cache.
+
 ## Learned rules
 
 - [feat/word-list-select-open-flow|0] UI mocks use Pencil CLI (pen.dev) by default. Read `pen_cli` from `.agentic/config.md` for the binary name (default: `pen`). Write mock.md with device dimensions, prompt, design decisions, interactive states. Generate with `<pen_cli> --out mock.pen --prompt-file mock.md --enable-preview`. Export preview with `<pen_cli> --in mock.pen --export mock-preview.png`. If Pencil unavailable, fall back to mock.html with device dimensions.
