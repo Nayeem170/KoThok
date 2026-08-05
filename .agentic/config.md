@@ -23,7 +23,7 @@ preflight_fix = Start-Process Docker Desktop.exe
 
 build = cross build --target armv7-unknown-linux-musleabihf --release -p kothok-app
 test = cross test -p kothok-app --target armv7-unknown-linux-musleabihf
-lint = cross clippy -p kothok-app --target armv7-unknown-linux-musleabihf -D warnings
+lint = cross clippy -p kothok-app --target armv7-unknown-linux-musleabihf --all-targets -- -D warnings
 cargo_fmt_check = cargo fmt --manifest-path kothok/Cargo.toml -- --check
 
 ## Branching
