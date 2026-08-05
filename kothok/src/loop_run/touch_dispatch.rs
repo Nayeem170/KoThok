@@ -533,10 +533,14 @@ pub(super) fn poll_and_dispatch_touch(st: &mut LoopState, ctx: &mut LoopContext)
                                 && !st.picker_active
                             {
                                 let cur = reader.get_cur_start().max(0) as usize;
-                                st.selection = Some(crate::loop_state::Selection {
-                                    anchor: cur,
-                                    head: cur,
-                                });
+                                let (anchor, head) = st
+                                    .chapters
+                                    .get(st.current_chapter)
+                                    .map(|c| {
+                                        crate::rendering::text_overlay::word_boundary(&c.body, cur)
+                                    })
+                                    .unwrap_or((cur, cur));
+                                st.selection = Some(crate::loop_state::Selection { anchor, head });
                                 reader.set_selection_active(true);
                                 st.text_dirty = true;
                                 ctx.window.request_redraw();

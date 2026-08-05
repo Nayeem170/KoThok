@@ -94,13 +94,14 @@ pub fn render_and_present(
                     line_h: st.line_h,
                     style_runs: &st.state.style_runs,
                 };
+                let text_side = layout::pad_left() + layout::GUTTER_W + layout::GUTTER_PAD;
                 crate::rendering::highlight::paint_highlight_bands(
                     &mut st.buffer,
                     &pv,
                     &st.marks,
                     st.current_chapter,
-                    layout::pad_left(),
-                    layout::pad_left() + layout::GUTTER_W + layout::GUTTER_PAD,
+                    text_side,
+                    text_side,
                 );
                 if let Some(ref sel) = st.selection {
                     crate::rendering::highlight::paint_selection_band(
@@ -108,8 +109,8 @@ pub fn render_and_present(
                         &pv,
                         sel.anchor,
                         sel.head,
-                        layout::pad_left(),
-                        layout::pad_left() + layout::GUTTER_W + layout::GUTTER_PAD,
+                        text_side,
+                        text_side,
                     );
                 }
                 composite_text(

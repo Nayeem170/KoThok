@@ -331,7 +331,21 @@ pub(super) fn on_release(
                         dy as usize,
                     ) {
                         if let Some(ref mut sel) = st.selection {
-                            sel.head = offset;
+                            let snapped = st
+                                .chapters
+                                .get(st.current_chapter)
+                                .map(|c| {
+                                    let (s, e) = crate::rendering::text_overlay::word_boundary(
+                                        &c.body, offset,
+                                    );
+                                    if offset.abs_diff(s) < offset.abs_diff(e) {
+                                        s
+                                    } else {
+                                        e
+                                    }
+                                })
+                                .unwrap_or(offset);
+                            sel.head = snapped;
                         }
                     }
                     st.text_dirty = true;
@@ -354,7 +368,7 @@ pub(super) fn on_release(
                     }
                     _ => {}
                 }
-                if st.selection.is_some() {
+                if st.selection.is_some() && swipe_dir != gesture::SwipeDirection::None {
                     st.selection = None;
                     reader.set_selection_active(false);
                     st.text_dirty = true;

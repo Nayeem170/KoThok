@@ -106,6 +106,7 @@ pub(super) fn process_loop_callbacks(st: &mut LoopState, ctx: &mut LoopContext) 
         if st.selection.is_some() {
             st.selection = None;
             reader.set_selection_active(false);
+            reader.set_selection_active(false);
         }
         // Turning a page retires whatever the footer was saying.
         //

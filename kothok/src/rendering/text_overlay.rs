@@ -592,6 +592,27 @@ pub fn composite_text(
     }
 }
 
+pub fn word_boundary(text: &str, offset: usize) -> (usize, usize) {
+    let bytes = text.as_bytes();
+    let len = bytes.len();
+    if offset >= len {
+        return (len, len);
+    }
+    let is_delim = |b: u8| -> bool { b == b' ' || b == b'\n' || b == b'\r' || b == b'\t' };
+    let mut start = offset;
+    while start > 0 && !is_delim(bytes[start - 1]) {
+        start -= 1;
+    }
+    let mut end = offset;
+    while end < len && !is_delim(bytes[end]) {
+        end += 1;
+    }
+    if start == end && end < len {
+        end += 1;
+    }
+    (start, end)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -782,5 +803,24 @@ mod zoom_tests {
             Rgb565Pixel(7),
             "zero-area calls must not touch the buffer"
         );
+    }
+}
+
+#[cfg(test)]
+mod word_boundary_tests {
+    use super::word_boundary;
+
+    #[test]
+    fn word_boundary_finds_word() {
+        let text = "hello world foo";
+        assert_eq!(word_boundary(text, 2), (0, 5));
+        assert_eq!(word_boundary(text, 7), (6, 11));
+        assert_eq!(word_boundary(text, 13), (12, 15));
+        assert_eq!(word_boundary(text, 5), (0, 5));
+        assert_eq!(word_boundary(text, 15), (15, 15));
+        assert_eq!(word_boundary(text, 0), (0, 5));
+        let text2 = "hello";
+        assert_eq!(word_boundary(text2, 0), (0, 5));
+        assert_eq!(word_boundary(text2, 4), (0, 5));
     }
 }
