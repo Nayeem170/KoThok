@@ -102,9 +102,11 @@ pub(super) fn process_loop_callbacks(st: &mut LoopState, ctx: &mut LoopContext) 
     ui_changed |= nav_ui;
     if st.current_chapter != pre_nav_ch || st.current_page != pre_nav_pg {
         st.last_nav = std::time::Instant::now();
-        // Latched, never cleared for the session: once a page has been turned,
-        // the footer shows where you are instead of how to turn one.
         reader.set_has_navigated(true);
+        if st.selection.is_some() {
+            st.selection = None;
+            reader.set_selection_active(false);
+        }
         // Turning a page retires whatever the footer was saying.
         //
         // The footer prefers `status` over the page number whenever it is
@@ -413,6 +415,57 @@ pub(super) fn process_loop_callbacks(st: &mut LoopState, ctx: &mut LoopContext) 
             }
             Err(std::sync::mpsc::TryRecvError::Disconnected) => {}
         }
+    }
+
+    if cb.highlight_selection_cell.replace(false) {
+        if let Some(sel) = st.selection.take() {
+            reader.set_selection_active(false);
+            let start = sel.anchor.min(sel.head);
+            let end = sel.anchor.max(sel.head);
+            if start < end {
+                let body = st
+                    .chapters
+                    .get(st.current_chapter)
+                    .map(|c| c.body.as_str())
+                    .unwrap_or("");
+                let excerpt = body
+                    .get(start..end)
+                    .unwrap_or("")
+                    .chars()
+                    .take(120)
+                    .collect::<String>()
+                    .replace('\n', " ");
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0);
+                let m = crate::data::mark::Mark {
+                    kind: crate::data::mark::MarkKind::Highlight,
+                    chapter: st.current_chapter,
+                    start,
+                    end,
+                    page_hint: st.current_page,
+                    created: now,
+                    excerpt,
+                };
+                match crate::data::mark::add_mark(&mut st.marks, m) {
+                    Ok(()) => {
+                        st.marks_dirty = true;
+                        reader.set_status(format!("Highlighted ({} marks)", st.marks.len()).into());
+                    }
+                    Err(e) => {
+                        reader.set_status(e.into());
+                    }
+                }
+            }
+            st.text_dirty = true;
+        }
+    }
+
+    if cb.cancel_selection_cell.replace(false) && st.selection.is_some() {
+        st.selection = None;
+        reader.set_selection_active(false);
+        st.text_dirty = true;
     }
 
     (ui_changed, page_changed)

@@ -310,6 +310,32 @@ pub(super) fn on_release(
                 let dt_ms = dt.as_millis();
                 let swipe_dir =
                     gesture::classify_swipe(swipe_dx, swipe_dy, touch::SWIPE_MIN_DX, dt_ms);
+                if swipe_dir == gesture::SwipeDirection::None && st.selection.is_some() {
+                    let pv = crate::rendering::text_overlay::PageView {
+                        w: ctx.w,
+                        h: ctx.h,
+                        rows: &st.state.all_rows,
+                        page: st.current_page,
+                        pages: &st.state.pages,
+                        content_top: PAD_TOP,
+                        row_heights: &st.state.row_heights,
+                        decoded_images: &st.state.decoded_images,
+                        body_px: st.body_px,
+                        head_px: st.head_px,
+                        line_h: st.line_h,
+                        style_runs: &st.state.style_runs,
+                    };
+                    if let Some(offset) = crate::rendering::text_overlay::offset_at_point(
+                        &pv,
+                        dx as usize,
+                        dy as usize,
+                    ) {
+                        if let Some(ref mut sel) = st.selection {
+                            sel.head = offset;
+                        }
+                    }
+                    st.text_dirty = true;
+                }
                 match swipe_dir {
                     gesture::SwipeDirection::Left | gesture::SwipeDirection::Right
                         if st.zoom_active =>
@@ -328,6 +354,11 @@ pub(super) fn on_release(
                     }
                     _ => {}
                 }
+                if st.selection.is_some() {
+                    st.selection = None;
+                    reader.set_selection_active(false);
+                    st.text_dirty = true;
+                }
                 if swipe_dir == gesture::SwipeDirection::None
                     && super::link_nav::try_follow_link(st, reader, cmd_tx, ctx, dx, dy)
                 {
@@ -345,6 +376,10 @@ pub(super) fn on_release(
                         // on the tap. A second double-tap clears it.
                         st.pending_tap_at = None;
                         st.zoom_active = !st.zoom_active;
+                        if st.selection.is_some() {
+                            st.selection = None;
+                            reader.set_selection_active(false);
+                        }
                         if st.zoom_active {
                             let content_end = (PAD_TOP + ctx.content_h as usize).min(ctx.h);
                             st.zoom_center =

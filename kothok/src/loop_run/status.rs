@@ -334,7 +334,10 @@ mod tests {
 
     #[test]
     fn failed_save_keeps_marks_dirty() {
-        let dir = std::env::temp_dir().join("kothok_test_status_marks_dirty");
+        let dir = std::env::temp_dir().join(format!(
+            "kothok_test_status_marks_dirty_{}",
+            std::process::id()
+        ));
         let _ = std::fs::create_dir_all(&dir);
         let bad_path = dir.join("no_such_dir").join("marks");
         let mut dirty = true;

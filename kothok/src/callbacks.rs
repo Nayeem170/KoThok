@@ -45,6 +45,8 @@ pub struct Callbacks {
     pub overlay_requested_tab_cell: Rc<Cell<i32>>,
     pub mark_jump_cell: Rc<Cell<bool>>,
     pub mark_jump_idx_cell: Rc<Cell<usize>>,
+    pub highlight_selection_cell: Rc<Cell<bool>>,
+    pub cancel_selection_cell: Rc<Cell<bool>>,
 }
 
 struct ChapterCells {
@@ -57,6 +59,8 @@ struct ChapterCells {
     requested_tab_cell: Rc<Cell<i32>>,
     mark_jump_cell: Rc<Cell<bool>>,
     mark_jump_idx_cell: Rc<Cell<usize>>,
+    highlight_selection_cell: Rc<Cell<bool>>,
+    cancel_selection_cell: Rc<Cell<bool>>,
 }
 
 fn register_chapter(reader: &Reader, panel_open_cell: &Rc<Cell<bool>>) -> ChapterCells {
@@ -69,6 +73,8 @@ fn register_chapter(reader: &Reader, panel_open_cell: &Rc<Cell<bool>>) -> Chapte
     let requested_tab_cell = Rc::new(Cell::new(-1i32));
     let mark_jump_cell = Rc::new(Cell::new(false));
     let mark_jump_idx_cell = Rc::new(Cell::new(0usize));
+    let highlight_selection_cell = Rc::new(Cell::new(false));
+    let cancel_selection_cell = Rc::new(Cell::new(false));
 
     let cp_jtr = jump_cell.clone();
     let cp_jtr_panel = panel_open_cell.clone();
@@ -124,6 +130,16 @@ fn register_chapter(reader: &Reader, panel_open_cell: &Rc<Cell<bool>>) -> Chapte
         bfr.set(true);
     });
 
+    let hl = highlight_selection_cell.clone();
+    reader.on_highlight_selection(move || {
+        hl.set(true);
+    });
+
+    let cs = cancel_selection_cell.clone();
+    reader.on_cancel_selection(move || {
+        cs.set(true);
+    });
+
     ChapterCells {
         panel_cell,
         select_cell,
@@ -134,6 +150,8 @@ fn register_chapter(reader: &Reader, panel_open_cell: &Rc<Cell<bool>>) -> Chapte
         requested_tab_cell,
         mark_jump_cell,
         mark_jump_idx_cell,
+        highlight_selection_cell,
+        cancel_selection_cell,
     }
 }
 
@@ -333,5 +351,7 @@ pub fn register(reader: &Reader) -> Callbacks {
         overlay_requested_tab_cell: chapter.requested_tab_cell,
         mark_jump_cell: chapter.mark_jump_cell,
         mark_jump_idx_cell: chapter.mark_jump_idx_cell,
+        highlight_selection_cell: chapter.highlight_selection_cell,
+        cancel_selection_cell: chapter.cancel_selection_cell,
     }
 }

@@ -100,7 +100,7 @@ pub fn render_and_present(
                     &st.marks,
                     st.current_chapter,
                     layout::pad_left(),
-                    layout::pad_left(),
+                    layout::pad_left() + layout::GUTTER_W + layout::GUTTER_PAD,
                 );
                 if let Some(ref sel) = st.selection {
                     crate::rendering::highlight::paint_selection_band(
@@ -109,7 +109,7 @@ pub fn render_and_present(
                         sel.anchor,
                         sel.head,
                         layout::pad_left(),
-                        layout::pad_left(),
+                        layout::pad_left() + layout::GUTTER_W + layout::GUTTER_PAD,
                     );
                 }
                 composite_text(

@@ -511,19 +511,19 @@ mod tests {
     }
 
     #[test]
-    fn save_error_does_not_wipe_on_bad_read() {
-        let dir = setup_temp("save_err");
+    fn save_aborts_on_non_notfound_read_error() {
+        let dir = setup_temp("save_utf8_err");
         let marks_file = dir.join("marks");
         fs::write(&marks_file, b"other.epub|b|0|0|0|0|1|\xff\xfe\n").unwrap();
         let res = save_marks(&marks_file, "/mnt/onboard/Test.epub", &[]);
         assert!(
             res.is_err(),
-            "save must fail on invalid UTF-8 read, not silently proceed"
+            "save must return Err on non-NotFound read failure"
         );
         let remaining = fs::read(&marks_file).unwrap();
         assert!(
             remaining.starts_with(b"other.epub"),
-            "save must not overwrite the file when read fails"
+            "file must not be overwritten when read fails"
         );
     }
 

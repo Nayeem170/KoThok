@@ -537,6 +537,7 @@ pub(super) fn poll_and_dispatch_touch(st: &mut LoopState, ctx: &mut LoopContext)
                                     anchor: cur,
                                     head: cur,
                                 });
+                                reader.set_selection_active(true);
                                 st.text_dirty = true;
                                 ctx.window.request_redraw();
                             }

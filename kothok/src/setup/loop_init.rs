@@ -46,7 +46,7 @@ pub(super) fn build_loop_state(
             .unwrap_or(0),
         book.6,
     )
-    .unwrap_or(false);
+    .unwrap_or(true);
     crate::loop_state::LoopState {
         current_chapter: book.4,
         current_page: book.6,
