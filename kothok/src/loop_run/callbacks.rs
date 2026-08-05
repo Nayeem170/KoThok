@@ -286,6 +286,7 @@ pub(super) fn process_loop_callbacks(st: &mut LoopState, ctx: &mut LoopContext) 
         st.search_word_selected = false;
         st.marks_scroll = 0;
         st.armed_mark_idx = usize::MAX;
+        st.mark_armed_this_press = false;
         st.selection = None;
         reader.set_selection_active(false);
         let requested = cb.overlay_requested_tab_cell.replace(-1);

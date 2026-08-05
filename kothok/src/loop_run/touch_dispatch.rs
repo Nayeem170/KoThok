@@ -515,18 +515,19 @@ pub(super) fn poll_and_dispatch_touch(st: &mut LoopState, ctx: &mut LoopContext)
                         ) {
                             if reader.get_chapter_overlay_open()
                                 && st.chapter_tab == crate::loop_state::ChapterTab::Marks
+                                && !st.search_results_active
                             {
                                 let list_bottom = ctx.h as i32 - CH_LIST_BOTTOM_PAD;
                                 if let Some(idx) = crate::rendering::marks_list::marks_list_hit_test(
                                     dy as i32,
                                     st.marks_scroll,
                                     st.marks.len(),
+                                    list_bottom,
                                 ) {
-                                    if (dy as i32) < list_bottom {
-                                        st.armed_mark_idx = idx;
-                                        st.text_dirty = true;
-                                        ctx.window.request_redraw();
-                                    }
+                                    st.armed_mark_idx = idx;
+                                    st.mark_armed_this_press = true;
+                                    st.text_dirty = true;
+                                    ctx.window.request_redraw();
                                 }
                             } else if !reader.get_chapter_overlay_open()
                                 && !st.panel_open

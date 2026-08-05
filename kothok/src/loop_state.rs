@@ -89,6 +89,10 @@ pub struct LoopState {
     pub marks: Vec<crate::data::mark::Mark>,
     pub marks_dirty: bool,
     pub armed_mark_idx: usize,
+    /// True only for the release belonging to the gesture that armed
+    /// `armed_mark_idx`. Consumed on that release so the arming gesture can never
+    /// delete; a later separate tap on the Delete band confirms.
+    pub mark_armed_this_press: bool,
     pub marks_scroll: i32,
     pub press_marks_scroll: i32,
 
