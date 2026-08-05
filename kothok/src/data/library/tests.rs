@@ -114,7 +114,7 @@ fn write_fixture_epub(path: &std::path::Path, chapters: &[&str]) {
     )
     .unwrap();
     for (i, body) in chapters.iter().enumerate() {
-        zw.start_file(&format!("OEBPS/c{i}.xhtml"), opts).unwrap();
+        zw.start_file(format!("OEBPS/c{i}.xhtml"), opts).unwrap();
         zw.write_all(format!("<html><body>{body}</body></html>").as_bytes())
             .unwrap();
     }

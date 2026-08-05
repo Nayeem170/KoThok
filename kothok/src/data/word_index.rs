@@ -72,10 +72,7 @@ mod tests {
         let idx = build_word_index(&chapters);
         let hello_hits = &idx.occurrences[idx.words.iter().position(|w| w == "hello").unwrap()];
         assert_eq!(hello_hits[0].chapter, 0);
-        assert_eq!(
-            chapters[0].body[hello_hits[0].byte_offset as usize..].starts_with("hello"),
-            true
-        );
+        assert!(chapters[0].body[hello_hits[0].byte_offset as usize..].starts_with("hello"));
     }
 
     #[test]
@@ -119,9 +116,8 @@ mod tests {
         let cat_hits = &idx.occurrences[idx.words.iter().position(|w| w == "cat").unwrap()];
         assert_eq!(cat_hits.len(), 3);
         for hit in cat_hits {
-            assert_eq!(
+            assert!(
                 chapters[0].body[hit.byte_offset as usize..].starts_with("cat"),
-                true,
                 "offset {} does not point to 'cat'",
                 hit.byte_offset
             );

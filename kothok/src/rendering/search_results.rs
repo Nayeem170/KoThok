@@ -313,9 +313,11 @@ mod tests {
     fn snippet_size_tracks_the_reader_until_it_stops_fitting() {
         assert_eq!(snippet_px(20.0), 20.0, "small sizes pass through");
         assert_eq!(snippet_px(60.0), SNIPPET_PX_MAX, "large sizes clamp");
-        assert!(
-            SNIPPET_PX_MAX < 36.0,
-            "the cap must bind at the default size"
-        );
+        const {
+            assert!(
+                SNIPPET_PX_MAX < 36.0,
+                "the cap must bind at the default size"
+            )
+        };
     }
 }
