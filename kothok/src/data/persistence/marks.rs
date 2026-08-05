@@ -6,6 +6,7 @@ use std::path::Path;
 pub fn load_marks(marks_file: &Path, book_path: &str) -> Vec<crate::data::mark::Mark> {
     let data = match fs::read_to_string(marks_file) {
         Ok(d) => d,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
         Err(_) => return Vec::new(),
     };
     let mut marks = Vec::new();
@@ -24,7 +25,7 @@ pub fn load_marks(marks_file: &Path, book_path: &str) -> Vec<crate::data::mark::
         let end = parts[4].parse().unwrap_or(0);
         let page_hint = parts[5].parse().unwrap_or(0);
         let created = parts[6].parse().unwrap_or(0);
-        let excerpt = parts[7].to_string();
+        let excerpt = unescape_excerpt(parts[7]);
         marks.push(crate::data::mark::Mark {
             kind,
             chapter,
@@ -39,10 +40,15 @@ pub fn load_marks(marks_file: &Path, book_path: &str) -> Vec<crate::data::mark::
 }
 
 pub fn save_marks(marks_file: &Path, book_path: &str, marks: &[crate::data::mark::Mark]) {
-    let mut lines: Vec<String> = fs::read_to_string(marks_file)
-        .unwrap_or_default()
+    let existing = match fs::read_to_string(marks_file) {
+        Ok(s) => s,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(_) => return,
+    };
+    let prefix = format!("{book_path}|");
+    let mut lines: Vec<String> = existing
         .lines()
-        .filter(|l| !l.is_empty() && !l.starts_with(book_path))
+        .filter(|l| !l.is_empty() && !l.starts_with(&prefix))
         .map(String::from)
         .collect();
     for m in marks {
@@ -52,10 +58,73 @@ pub fn save_marks(marks_file: &Path, book_path: &str, marks: &[crate::data::mark
         };
         lines.push(format!(
             "{}|{}|{}|{}|{}|{}|{}|{}",
-            book_path, kind, m.chapter, m.start, m.end, m.page_hint, m.created, m.excerpt
+            book_path,
+            kind,
+            m.chapter,
+            m.start,
+            m.end,
+            m.page_hint,
+            m.created,
+            escape_excerpt(&m.excerpt),
         ));
     }
-    let _ = fs::write(marks_file, lines.join("\n"));
+    if let Err(e) = fs::write(marks_file, lines.join("\n")) {
+        log::error!(
+            "save_marks: failed to write {}: {}",
+            marks_file.display(),
+            e
+        );
+    }
+}
+
+fn escape_excerpt(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '|' => out.push_str("\\|"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            c if c.is_control() && c != '\t' => {
+                out.push('\\');
+                out.push('x');
+                out.push_str(&format!("{:02X}", c as u8));
+            }
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+fn unescape_excerpt(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars();
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            match chars.next() {
+                Some('n') => out.push('\n'),
+                Some('r') => out.push('\r'),
+                Some('|') => out.push('|'),
+                Some('x') => {
+                    let hex: String = chars.by_ref().take(2).collect();
+                    if let Ok(byte) = u8::from_str_radix(&hex, 16) {
+                        out.push(byte as char);
+                    } else {
+                        out.push('\\');
+                        out.push('x');
+                        out.push_str(&hex);
+                    }
+                }
+                Some(other) => {
+                    out.push('\\');
+                    out.push(other);
+                }
+                None => out.push('\\'),
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
 }
 
 #[allow(dead_code)]
@@ -368,5 +437,93 @@ mod tests {
         assert_eq!(loaded[1].end, 200);
         let other = load_marks(&marks_file, "/mnt/onboard/Other.epub");
         assert!(other.is_empty());
+    }
+
+    #[test]
+    fn save_does_not_clobber_similar_book() {
+        let dir = setup_temp("prefix_key");
+        let marks_file = dir.join("marks");
+        let path_a = "/mnt/onboard/A.epub";
+        let path_b = "/mnt/onboard/A.epub.bak";
+        fs::write(&marks_file, format!("{path_b}|b|0|0|0|0|100|stub\n")).unwrap();
+        let marks = vec![crate::data::mark::Mark {
+            kind: crate::data::mark::MarkKind::Bookmark,
+            chapter: 0,
+            start: 10,
+            end: 10,
+            page_hint: 0,
+            created: 200,
+            excerpt: String::new(),
+        }];
+        save_marks(&marks_file, path_a, &marks);
+        let loaded_b = load_marks(&marks_file, path_b);
+        assert_eq!(
+            loaded_b.len(),
+            1,
+            "A.epub.bak mark must survive a save of A.epub"
+        );
+        assert_eq!(loaded_b[0].chapter, 0);
+        assert_eq!(loaded_b[0].start, 0);
+    }
+
+    #[test]
+    fn excerpt_roundtrip_with_special_chars() {
+        let dir = setup_temp("excerpt_escape");
+        let marks_file = dir.join("marks");
+        let book_path = "/mnt/onboard/Special.epub";
+        let excerpt = "line1\nline2|\t\r\x01end";
+        let marks = vec![crate::data::mark::Mark {
+            kind: crate::data::mark::MarkKind::Highlight,
+            chapter: 0,
+            start: 5,
+            end: 100,
+            page_hint: 0,
+            created: 1,
+            excerpt: excerpt.to_string(),
+        }];
+        save_marks(&marks_file, book_path, &marks);
+        let content = fs::read_to_string(&marks_file).unwrap();
+        assert!(
+            !content.contains('\n'),
+            "saved file must not contain bare newlines"
+        );
+        let loaded = load_marks(&marks_file, book_path);
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(
+            loaded[0].excerpt, excerpt,
+            "escaped excerpt must round-trip"
+        );
+    }
+
+    #[test]
+    fn read_error_does_not_wipe_file() {
+        let dir = setup_temp("read_err");
+        let book_path = "/mnt/onboard/Test.epub";
+        let result = load_marks(&dir, book_path);
+        assert!(
+            result.is_empty(),
+            "directory-as-path must return empty, not panic"
+        );
+    }
+
+    #[test]
+    fn save_error_does_not_wipe_on_bad_read() {
+        let dir = setup_temp("save_err");
+        let marks_file = dir.join("marks");
+        fs::write(&marks_file, "other.epub|b|0|0|0|0|1|stub\n").unwrap();
+        save_marks(&dir, "/mnt/onboard/Test.epub", &[]);
+        let remaining = fs::read_to_string(&marks_file).unwrap();
+        assert!(
+            remaining.contains("other.epub"),
+            "save must abort on read error, not wipe the file"
+        );
+    }
+
+    #[test]
+    fn notfound_proceeds_as_empty() {
+        let dir = setup_temp("notfound");
+        let marks_file = dir.join("nonexistent_marks");
+        let loaded = load_marks(&marks_file, "/mnt/onboard/Nope.epub");
+        assert!(loaded.is_empty(), "missing file must yield empty marks");
     }
 }
