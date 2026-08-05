@@ -24,7 +24,8 @@ fn progress_survives_a_roundtrip() {
             bookmark: None,
             progress: 0.4137,
         },
-    );
+    )
+    .unwrap();
     let pos = load_position(&file, "/mnt/onboard/Book.epub").unwrap();
     assert!(
         (pos.progress - 0.4137).abs() < 0.0005,
@@ -69,7 +70,8 @@ fn progress_endpoints_are_exact() {
                 bookmark: None,
                 progress: p,
             },
-        );
+        )
+        .unwrap();
         assert_eq!(
             load_position(&file, "/mnt/onboard/B.epub")
                 .unwrap()

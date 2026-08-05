@@ -158,7 +158,7 @@ pub fn migrate_bookmark(
         excerpt: String::new(),
     });
     save_marks(marks_file, book_path, marks)?;
-    crate::data::persistence::clear_bookmark_field(positions_file, book_path);
+    crate::data::persistence::clear_bookmark_field(positions_file, book_path)?;
     Ok(true)
 }
 
@@ -172,11 +172,12 @@ pub fn load_bookmark_field(
 }
 
 #[allow(dead_code)]
-pub fn clear_bookmark_field(positions_file: &Path, book_path: &str) {
+pub fn clear_bookmark_field(positions_file: &Path, book_path: &str) -> std::io::Result<()> {
     if let Some(mut pos) = crate::data::persistence::load_position(positions_file, book_path) {
         pos.bookmark = None;
-        crate::data::persistence::save_position(positions_file, book_path, &pos);
+        crate::data::persistence::save_position(positions_file, book_path, &pos)?;
     }
+    Ok(())
 }
 
 pub fn marks_path() -> &'static Path {

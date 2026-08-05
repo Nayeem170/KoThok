@@ -47,9 +47,16 @@ fn format_mode(mode: ViewMode) -> char {
     }
 }
 
-pub fn save_position(file: &Path, book_path: &str, pos: &ReadingPosition) {
-    let mut lines: Vec<String> = fs::read_to_string(file)
-        .unwrap_or_default()
+pub fn save_position(file: &Path, book_path: &str, pos: &ReadingPosition) -> std::io::Result<()> {
+    // A read failure must NOT become an empty write: reading "" then overwriting
+    // would wipe every other book's position. NotFound is benign (fresh file);
+    // any other read error aborts so the existing file is left untouched.
+    let existing = match fs::read_to_string(file) {
+        Ok(s) => s,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => return Err(e),
+    };
+    let mut lines: Vec<String> = existing
         .lines()
         .filter(|l| !l.is_empty() && !l.starts_with(book_path))
         .map(String::from)
@@ -65,8 +72,7 @@ pub fn save_position(file: &Path, book_path: &str, pos: &ReadingPosition) {
         format_mode(pos.view_mode),
         pos.progress.clamp(0.0, 1.0),
     ));
-    // best-effort: a failed position write only loses resume state, not the read
-    let _ = fs::write(file, lines.join("\n"));
+    fs::write(file, lines.join("\n"))
 }
 
 fn parse_bookmark(s: &str) -> Option<Bookmark> {
@@ -97,7 +103,7 @@ fn parse_mode(s: Option<&str>) -> ViewMode {
 pub fn load_position(file: &Path, book_path: &str) -> Option<ReadingPosition> {
     let data = fs::read_to_string(file).ok()?;
     for line in data.lines() {
-        let parts: Vec<&str> = line.split('|').collect();
+        let parts: Vec<&str> = line.splitn(8, '|').collect();
         if parts.len() >= 5 && parts[0] == book_path {
             let ch = parts[1].parse().ok()?;
             let pg = parts[2].parse().ok()?;
@@ -155,7 +161,8 @@ mod tests {
                 bookmark: None,
                 progress: 0.0,
             },
-        );
+        )
+        .unwrap();
         let pos = load_position(&file, "/mnt/onboard/Book.epub").unwrap();
         assert_eq!(pos.chapter, 3);
         assert_eq!(pos.page, 7);
@@ -182,7 +189,8 @@ mod tests {
                 bookmark: None,
                 progress: 0.0,
             },
-        );
+        )
+        .unwrap();
         save_position(
             &file,
             "/mnt/onboard/Book.epub",
@@ -199,7 +207,8 @@ mod tests {
                 }),
                 progress: 0.0,
             },
-        );
+        )
+        .unwrap();
         let pos = load_position(&file, "/mnt/onboard/Book.epub").unwrap();
         assert_eq!(pos.chapter, 5);
         assert_eq!(pos.page, 9);
@@ -231,7 +240,8 @@ mod tests {
                 bookmark: None,
                 progress: 0.0,
             },
-        );
+        )
+        .unwrap();
         save_position(
             &file,
             "/mnt/onboard/B.epub",
@@ -244,7 +254,8 @@ mod tests {
                 bookmark: None,
                 progress: 0.0,
             },
-        );
+        )
+        .unwrap();
         let a = load_position(&file, "/mnt/onboard/A.epub").unwrap();
         assert_eq!(a.chapter, 1);
         let b = load_position(&file, "/mnt/onboard/B.epub").unwrap();
@@ -269,7 +280,8 @@ mod tests {
                 bookmark: None,
                 progress: 0.0,
             },
-        );
+        )
+        .unwrap();
         save_position(
             &file,
             "/mnt/onboard/Second.epub",
@@ -282,7 +294,8 @@ mod tests {
                 bookmark: None,
                 progress: 0.0,
             },
-        );
+        )
+        .unwrap();
         assert_eq!(
             last_book_path(&file),
             Some("/mnt/onboard/Second.epub".into())
@@ -319,7 +332,8 @@ mod tests {
                 }),
                 progress: 0.0,
             },
-        );
+        )
+        .unwrap();
         let pos = load_position(&file, "/mnt/onboard/X.epub").unwrap();
         assert_eq!(
             pos.bookmark,
@@ -343,6 +357,91 @@ mod tests {
         assert_eq!(pos.page, 7);
         assert!(pos.bookmark.is_none());
         assert_eq!(pos.view_mode, ViewMode::Reading);
+    }
+
+    #[test]
+    fn save_aborts_on_non_notfound_read_error() {
+        // Multi-book file containing invalid UTF-8 (a stray 0xFF). read_to_string
+        // returns Err(InvalidData) on this writable regular file. On unfixed code
+        // unwrap_or_default() -> "" -> the write wipes every other book; here the
+        // save must abort and leave the file byte-for-byte unchanged. (Not a dir:
+        // a dir makes read AND write both fail -> false green.)
+        let dir = std::env::temp_dir().join("kothok_test_pos_readerr_abort");
+        let _ = std::fs::create_dir_all(&dir);
+        let file = dir.join("positions");
+        let mut bad: Vec<u8> = b"/mnt/onboard/A.epub|1|2|10|20|0:0:0|r|0.1000\n".to_vec();
+        bad.extend_from_slice(b"/mnt/onboard/B.epub|3|4|30|40|0:0:0|r|0.2000\n");
+        bad.push(0xFF);
+        std::fs::write(&file, &bad).unwrap();
+
+        let before = std::fs::read(&file).unwrap();
+        let res = save_position(
+            &file,
+            "/mnt/onboard/A.epub",
+            &ReadingPosition {
+                chapter: 9,
+                page: 9,
+                cur_start: 90,
+                cur_end: 99,
+                view_mode: ViewMode::Reading,
+                bookmark: None,
+                progress: 0.9,
+            },
+        );
+        let after = std::fs::read(&file).unwrap();
+        assert!(res.is_err(), "save must abort on a non-NotFound read error");
+        assert_eq!(
+            before, after,
+            "file must be unchanged (no wipe on bad read)"
+        );
+    }
+
+    #[test]
+    fn save_position_notfound_is_benign() {
+        let dir = std::env::temp_dir().join("kothok_test_pos_notfound_benign");
+        let _ = std::fs::create_dir_all(&dir);
+        let file = dir.join("positions");
+        let _ = std::fs::remove_file(&file);
+        save_position(
+            &file,
+            "/mnt/onboard/First.epub",
+            &ReadingPosition {
+                chapter: 0,
+                page: 0,
+                cur_start: 0,
+                cur_end: 0,
+                view_mode: ViewMode::Reading,
+                bookmark: None,
+                progress: 0.0,
+            },
+        )
+        .unwrap();
+        let pos = load_position(&file, "/mnt/onboard/First.epub").unwrap();
+        assert_eq!(pos.chapter, 0);
+    }
+
+    #[test]
+    fn load_position_splitn_stable_fields() {
+        // 9 pipe-separated values (extra trailing field). Unbounded split gives
+        // parts[7]="0.5" -> progress 0.5; splitn(8) gives parts[7]="0.5|EXTRA"
+        // -> f32 parse fails -> 0.0. Fields 0-6 are identical under both; only
+        // the trailing-junk tail is where splitn(8) changes behavior.
+        let dir = std::env::temp_dir().join("kothok_test_pos_splitn");
+        let _ = std::fs::create_dir_all(&dir);
+        let file = dir.join("positions");
+        std::fs::write(
+            &file,
+            "/mnt/onboard/Test.epub|2|5|10|20|0:0:0|r|0.5|EXTRA\n",
+        )
+        .unwrap();
+        let pos = load_position(&file, "/mnt/onboard/Test.epub").unwrap();
+        assert_eq!(pos.chapter, 2);
+        assert_eq!(pos.page, 5);
+        assert_eq!(pos.cur_start, 10);
+        assert_eq!(pos.cur_end, 20);
+        assert!(pos.bookmark.is_none());
+        assert_eq!(pos.view_mode, ViewMode::Reading);
+        assert_eq!(pos.progress, 0.0);
     }
 }
 
