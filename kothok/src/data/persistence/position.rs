@@ -56,9 +56,10 @@ pub fn save_position(file: &Path, book_path: &str, pos: &ReadingPosition) -> std
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
         Err(e) => return Err(e),
     };
+    let prefix = format!("{book_path}|");
     let mut lines: Vec<String> = existing
         .lines()
-        .filter(|l| !l.is_empty() && !l.starts_with(book_path))
+        .filter(|l| !l.is_empty() && !l.starts_with(&prefix))
         .map(String::from)
         .collect();
     lines.push(format!(
@@ -442,6 +443,38 @@ mod tests {
         assert!(pos.bookmark.is_none());
         assert_eq!(pos.view_mode, ViewMode::Reading);
         assert_eq!(pos.progress, 0.0);
+    }
+
+    #[test]
+    fn save_does_not_clobber_similar_book() {
+        // Mirror of marks.rs save_does_not_clobber_similar_book. Saving A.epub
+        // must NOT delete A.epub.bak's line: the filter must match the
+        // "{book_path}|" prefix, not the bare path (A.epub.bak's line
+        // starts_with A.epub, so a bare match clobbers it). On unfixed code this
+        // test FAILS -- save_position(A.epub) drops the .bak line and
+        // load_position(.bak) returns None -> .expect panics.
+        let dir = std::env::temp_dir().join("kothok_test_pos_prefix_key");
+        let _ = std::fs::create_dir_all(&dir);
+        let file = dir.join("positions");
+        std::fs::write(&file, "/mnt/onboard/A.epub.bak|2|3|30|40|0:0:0|r|0.2000\n").unwrap();
+        save_position(
+            &file,
+            "/mnt/onboard/A.epub",
+            &ReadingPosition {
+                chapter: 1,
+                page: 1,
+                cur_start: 10,
+                cur_end: 20,
+                view_mode: ViewMode::Reading,
+                bookmark: None,
+                progress: 0.1,
+            },
+        )
+        .unwrap();
+        let b = load_position(&file, "/mnt/onboard/A.epub.bak")
+            .expect("A.epub.bak must survive a save of A.epub");
+        assert_eq!(b.chapter, 2);
+        assert_eq!(b.cur_start, 30);
     }
 }
 
