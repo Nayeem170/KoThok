@@ -94,6 +94,7 @@ Check every active rule against the artifact.
 - [ ] Out-of-scope items are listed and justified
 - [ ] Risks identified with mitigation
 - [ ] DoD is machine-checkable (each item has a pass/fail criterion)
+- [ ] For every type change in the plan (enum variant, struct field, signature, trait impl): ask "what does rustc do?" Check for escape hatches (`_ =>`, `..Default::default()`, catch-all impl, `#[non_exhaustive]`). If none, the compiler enumerates sites at S4 build; verify the plan's Files table covers them. If an escape hatch exists, flag it (HIGH) and manually enumerate affected sites. See docs/REVIEW_RULES.md "Type-change completeness".
 
 ### For test plan reviews
 
