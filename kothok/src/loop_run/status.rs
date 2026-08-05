@@ -39,11 +39,13 @@ pub(crate) fn save_position_now(st: &mut LoopState, reader: &Reader) {
         return;
     }
     let pos = current_position(st, reader);
-    save_position(
+    if let Err(e) = save_position(
         std::path::Path::new(POSITIONS_FILE),
         &st.current_book_path,
         &pos,
-    );
+    ) {
+        log::error!("save_position_now: {e}");
+    }
     st.saved_pos = Some((pos.chapter, pos.page, pos.cur_start));
     st.saved_pos_at = Some(std::time::Instant::now());
 }
