@@ -91,6 +91,7 @@ pub(super) fn build_loop_state(
         marks,
         marks_dirty,
         armed_mark_idx: usize::MAX,
+        mark_armed_this_press: false,
         marks_scroll: 0,
         press_marks_scroll: 0,
         sb_dragging: false,

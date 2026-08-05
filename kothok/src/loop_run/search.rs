@@ -219,6 +219,7 @@ mod tests {
             marks: Vec::new(),
             marks_dirty: false,
             armed_mark_idx: usize::MAX,
+            mark_armed_this_press: false,
             marks_scroll: 0,
             press_marks_scroll: 0,
             sb_dragging: false,
