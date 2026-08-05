@@ -224,7 +224,7 @@ pub(super) fn process_loop_callbacks(st: &mut LoopState, ctx: &mut LoopContext) 
         }
     }
 
-    ui_changed |= bookmark::handle_bookmark_jump(st, reader, cb, cmd_tx);
+    ui_changed |= bookmark::handle_bookmark_jump(st, reader, cb);
 
     navigation::handle_skip_forward(st, reader, cb, cmd_tx);
     navigation::handle_skip_rewind(st, reader, cb, cmd_tx);
@@ -284,6 +284,7 @@ pub(super) fn process_loop_callbacks(st: &mut LoopState, ctx: &mut LoopContext) 
         st.search_word_selected = false;
         st.marks_scroll = 0;
         st.armed_mark_idx = usize::MAX;
+        st.selection = None;
         let requested = cb.overlay_requested_tab_cell.replace(-1);
         let tab = match requested {
             2 => crate::loop_state::ChapterTab::Marks,

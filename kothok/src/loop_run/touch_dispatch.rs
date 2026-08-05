@@ -505,11 +505,48 @@ pub(super) fn poll_and_dispatch_touch(st: &mut LoopState, ctx: &mut LoopContext)
                             ctx.window.request_redraw();
                         }
                     } else {
-                        ctx.window.window().dispatch_event(
-                            slint::platform::WindowEvent::PointerMoved {
-                                position: slint::LogicalPosition::new(dx, dy),
-                            },
-                        );
+                        let (press_dx, press_dy) = to_display(st.press_x, st.press_y);
+                        if gesture::classify_body_long_press(
+                            press_dx,
+                            press_dy,
+                            dx,
+                            dy,
+                            now.duration_since(st.press_time).as_millis(),
+                        ) {
+                            if reader.get_chapter_overlay_open()
+                                && st.chapter_tab == crate::loop_state::ChapterTab::Marks
+                            {
+                                let list_bottom = ctx.h as i32 - CH_LIST_BOTTOM_PAD;
+                                if let Some(idx) = crate::rendering::marks_list::marks_list_hit_test(
+                                    dy as i32,
+                                    st.marks_scroll,
+                                    st.marks.len(),
+                                ) {
+                                    if (dy as i32) < list_bottom {
+                                        st.armed_mark_idx = idx;
+                                        st.text_dirty = true;
+                                        ctx.window.request_redraw();
+                                    }
+                                }
+                            } else if !reader.get_chapter_overlay_open()
+                                && !st.panel_open
+                                && !st.picker_active
+                            {
+                                let cur = reader.get_cur_start().max(0) as usize;
+                                st.selection = Some(crate::loop_state::Selection {
+                                    anchor: cur,
+                                    head: cur,
+                                });
+                                st.text_dirty = true;
+                                ctx.window.request_redraw();
+                            }
+                        } else {
+                            ctx.window.window().dispatch_event(
+                                slint::platform::WindowEvent::PointerMoved {
+                                    position: slint::LogicalPosition::new(dx, dy),
+                                },
+                            );
+                        }
                     }
                 }
                 if !st.frame_down {

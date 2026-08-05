@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (c) 2026 Nayeem Bin Ahsan
-#![allow(dead_code)]
 use std::fs;
 use std::path::Path;
 
@@ -59,6 +58,7 @@ pub fn save_marks(marks_file: &Path, book_path: &str, marks: &[crate::data::mark
     let _ = fs::write(marks_file, lines.join("\n"));
 }
 
+#[allow(dead_code)]
 pub fn migrate_bookmark(
     _marks_file: &Path,
     positions_file: &Path,
@@ -66,6 +66,7 @@ pub fn migrate_bookmark(
     chapter_count: usize,
     marks: &mut Vec<crate::data::mark::Mark>,
     now: u64,
+    current_page: usize,
 ) {
     let bm_field = crate::data::persistence::load_bookmark_field(positions_file, book_path);
     let bm = match bm_field {
@@ -86,13 +87,14 @@ pub fn migrate_bookmark(
         chapter: bm.chapter,
         start: bm.offset,
         end: bm.offset,
-        page_hint: 0,
+        page_hint: current_page,
         created: now,
         excerpt: String::new(),
     });
     crate::data::persistence::clear_bookmark_field(positions_file, book_path);
 }
 
+#[allow(dead_code)]
 pub fn load_bookmark_field(
     positions_file: &Path,
     book_path: &str,
@@ -101,6 +103,7 @@ pub fn load_bookmark_field(
     pos.bookmark
 }
 
+#[allow(dead_code)]
 pub fn clear_bookmark_field(positions_file: &Path, book_path: &str) {
     if let Some(mut pos) = crate::data::persistence::load_position(positions_file, book_path) {
         pos.bookmark = None;
@@ -141,6 +144,7 @@ mod tests {
             10,
             &mut marks,
             1000,
+            0,
         );
         let bookmarks: Vec<_> = marks
             .iter()
@@ -166,6 +170,7 @@ mod tests {
             5,
             &mut marks,
             1000,
+            0,
         );
         assert!(marks.is_empty(), "short line must not produce marks");
     }
@@ -188,6 +193,7 @@ mod tests {
             5,
             &mut marks,
             1000,
+            0,
         );
         assert!(marks.is_empty(), "out-of-range chapter must be dropped");
     }
@@ -210,6 +216,7 @@ mod tests {
             10,
             &mut marks,
             1000,
+            0,
         );
         assert_eq!(marks.len(), 1);
         assert_eq!(marks[0].kind, crate::data::mark::MarkKind::Bookmark);
@@ -228,6 +235,7 @@ mod tests {
             10,
             &mut marks,
             1001,
+            0,
         );
         assert_eq!(
             marks.len(),
@@ -269,13 +277,13 @@ mod tests {
     #[test]
     fn bookmark_toggle_off() {
         let mut marks: Vec<crate::data::mark::Mark> = Vec::new();
-        let count = crate::data::mark::toggle_bookmark(&mut marks, 3, 100, "excerpt".into(), 1);
+        let count = crate::data::mark::toggle_bookmark(&mut marks, 3, 100, "excerpt".into(), 1, 0);
         assert_eq!(count, 1);
         let bm = marks.iter().find(|m| {
             m.kind == crate::data::mark::MarkKind::Bookmark && m.chapter == 3 && m.start == 100
         });
         assert!(bm.is_some());
-        let count = crate::data::mark::toggle_bookmark(&mut marks, 3, 100, "excerpt".into(), 2);
+        let count = crate::data::mark::toggle_bookmark(&mut marks, 3, 100, "excerpt".into(), 2, 0);
         assert_eq!(count, 0);
         assert!(marks
             .iter()

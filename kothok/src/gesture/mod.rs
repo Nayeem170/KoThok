@@ -176,7 +176,6 @@ pub fn classify_swipe(swipe_dx: f32, swipe_dy: f32, threshold: f32, dt_ms: u128)
     SwipeDirection::None
 }
 
-#[allow(dead_code)]
 pub fn classify_body_long_press(
     press_dx: f32,
     press_dy: f32,

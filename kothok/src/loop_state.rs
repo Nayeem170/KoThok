@@ -219,6 +219,7 @@ pub struct LoopState {
     /// clamped into the content region when set.
     pub zoom_active: bool,
     pub zoom_center: (usize, usize),
+    pub selection: Option<Selection>,
 
     pub voice_rx: Option<Receiver<Vec<kothok_edge_tts::VoiceInfo>>>,
     pub voice_fetch_attempted: bool,
@@ -237,6 +238,12 @@ pub struct LoopState {
     pub bt_list_idx: usize,
     pub bt_list_fetched: bool,
     pub bt_list_ids_valid: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct Selection {
+    pub anchor: usize,
+    pub head: usize,
 }
 
 pub struct LoopContext<'a> {

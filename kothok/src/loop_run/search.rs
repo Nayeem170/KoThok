@@ -291,6 +291,7 @@ mod tests {
             text_cache: vec![Rgb565Pixel(0); w * h],
             zoom_active: false,
             zoom_center: (0, 0),
+            selection: None,
             voice_rx: None,
             voice_fetch_attempted: false,
             wifi_bt_list_rx: None,

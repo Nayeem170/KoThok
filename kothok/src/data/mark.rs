@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (c) 2026 Nayeem Bin Ahsan
-#![allow(dead_code)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MarkKind {
     Bookmark,
@@ -69,6 +68,7 @@ pub fn toggle_bookmark(
     offset: usize,
     excerpt: String,
     now: u64,
+    page_hint: usize,
 ) -> usize {
     if let Some(pos) = marks
         .iter()
@@ -81,7 +81,7 @@ pub fn toggle_bookmark(
             chapter,
             start: offset,
             end: offset,
-            page_hint: 0,
+            page_hint,
             created: now,
             excerpt,
         });

@@ -1,13 +1,10 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (c) 2026 Nayeem Bin Ahsan
-use log::{info, warn};
+use log::info;
 
-use crate::audio::Cmd;
 use crate::callbacks::Callbacks;
 use crate::loop_state::LoopState;
 use crate::Reader;
-
-use super::super::{apply_page, best_effort_send, switch_chapter, ChapterSwitchOpts};
 
 pub(super) fn handle_bookmark_set(st: &mut LoopState, reader: &Reader, cb: &Callbacks) -> bool {
     if !cb.bookmark_set_cell.replace(false) || st.picker_active {
@@ -23,15 +20,17 @@ pub(super) fn handle_bookmark_set(st: &mut LoopState, reader: &Reader, cb: &Call
     if !reader.get_playing() {
         restore_cursor_line(st, reader, off);
     }
+    let excerpt = excerpt_for_offset(st, off);
     let count = crate::data::mark::toggle_bookmark(
         &mut st.marks,
         st.current_chapter,
         off,
-        String::new(),
+        excerpt,
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs())
             .unwrap_or(0),
+        st.current_page,
     );
     let is_set = st.marks.iter().any(|m| {
         m.kind == crate::data::mark::MarkKind::Bookmark
@@ -76,90 +75,31 @@ fn first_text_row_offset_on_page(st: &LoopState) -> Option<usize> {
     crate::reader::first_text_row(&st.state, *s, *e).map(|(start, _)| start as usize)
 }
 
-pub(super) fn handle_bookmark_jump(
-    st: &mut LoopState,
-    reader: &Reader,
-    cb: &Callbacks,
-    cmd_tx: &std::sync::mpsc::Sender<Cmd>,
-) -> bool {
+fn excerpt_for_offset(st: &LoopState, off: usize) -> String {
+    let ch = match st.chapters.get(st.current_chapter) {
+        Some(c) => &c.body,
+        None => return String::new(),
+    };
+    if off >= ch.len() {
+        return String::new();
+    }
+    let rest = &ch[off..];
+    let line_end = rest.find('\n').unwrap_or(rest.len()).min(60);
+    let line = &rest[..line_end];
+    let trimmed = line.trim_start_matches(|c: char| c.is_whitespace() || c == '\u{200B}');
+    let word_end = trimmed
+        .find(|c: char| c.is_whitespace())
+        .unwrap_or(trimmed.len())
+        .min(40);
+    trimmed[..word_end].to_string()
+}
+
+pub(super) fn handle_bookmark_jump(st: &mut LoopState, _reader: &Reader, cb: &Callbacks) -> bool {
     if !cb.bookmark_jump_cell.replace(false) || st.picker_active {
         return false;
     }
-    if let Some(bm) = st.bookmark {
-        if bm.chapter >= st.chapters.len() {
-            st.bookmark = None;
-            reader.set_has_bookmark(false);
-            reader.set_status("That bookmark is no longer in this book".into());
-            warn!(
-                "bookmark-jump: ch {} out of range ({} chapters), cleared",
-                bm.chapter,
-                st.chapters.len()
-            );
-        } else {
-            if bm.chapter != st.current_chapter {
-                switch_chapter(
-                    st,
-                    reader,
-                    cmd_tx,
-                    bm.chapter,
-                    ChapterSwitchOpts {
-                        to_last_page: false,
-                        update_cursor: false,
-                        load_audio: true,
-                    },
-                );
-            }
-            st.current_page = page_for_bookmark(st, &bm);
-            apply_page(
-                reader,
-                &st.state,
-                st.current_page,
-                &st.chapter_offsets,
-                st.current_chapter,
-            );
-            let restored = restore_cursor_line(st, reader, bm.offset);
-            let base = st
-                .chapter_offsets
-                .get(st.current_chapter)
-                .copied()
-                .unwrap_or(0);
-            reader.set_saved_page((base + st.current_page) as i32);
-            if matches!(st.view_mode, crate::ViewMode::Audio) {
-                // Audio mode: the full chapter is already queued (by
-                // switch_chapter or a prior load). Seek to the utterance
-                // matching the bookmark offset within the chapter -- do NOT
-                // reload, which would replace the chapter with one page.
-                let chapter_utts = crate::audio::glue::chapter_utterances(&st.state);
-                let target =
-                    crate::audio::glue::utterance_index_for_offset(&chapter_utts, bm.offset);
-                best_effort_send(cmd_tx, Cmd::Seek(target));
-            } else {
-                let utts = crate::audio::glue::page_utterances(st.current_page, &st.state);
-                let target = crate::audio::glue::utterance_index_for_offset(&utts, bm.offset);
-                best_effort_send(cmd_tx, Cmd::Reload(utts));
-                best_effort_send(cmd_tx, Cmd::Seek(target));
-            }
-            st.text_dirty = true;
-            reader.set_status(
-                if restored {
-                    format!("Back to page {}", base + st.current_page + 1)
-                } else {
-                    format!("Back to page {} (line moved)", base + st.current_page + 1)
-                }
-                .into(),
-            );
-            info!(
-                "bookmark-jump: ch={} pg={} off={} line_restored={} audio_mode={}",
-                bm.chapter + 1,
-                st.current_page + 1,
-                bm.offset,
-                restored,
-                matches!(st.view_mode, crate::ViewMode::Audio),
-            );
-        }
-    } else {
-        reader.set_status("No bookmark yet - tap the ribbon to set one".into());
-    }
+    cb.overlay_requested_tab_cell.set(2);
+    cb.chapter_panel_cell.set(true);
     true
 }
 

@@ -94,6 +94,24 @@ pub fn render_and_present(
                     line_h: st.line_h,
                     style_runs: &st.state.style_runs,
                 };
+                crate::rendering::highlight::paint_highlight_bands(
+                    &mut st.buffer,
+                    &pv,
+                    &st.marks,
+                    st.current_chapter,
+                    layout::pad_left(),
+                    layout::pad_left(),
+                );
+                if let Some(ref sel) = st.selection {
+                    crate::rendering::highlight::paint_selection_band(
+                        &mut st.buffer,
+                        &pv,
+                        sel.anchor,
+                        sel.head,
+                        layout::pad_left(),
+                        layout::pad_left(),
+                    );
+                }
                 composite_text(
                     &mut st.buffer,
                     &st.text_cache,

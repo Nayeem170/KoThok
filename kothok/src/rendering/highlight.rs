@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (c) 2026 Nayeem Bin Ahsan
-#![allow(dead_code)]
 use slint::platform::software_renderer::Rgb565Pixel;
 
 use crate::data::mark::{Mark, MarkKind};
@@ -8,7 +7,7 @@ use crate::rendering::common::rgb565_as_bytes;
 use crate::rendering::text_overlay::PageView;
 
 const HIGHLIGHT_BAND: u16 = 0xC638;
-const SELECTION_BAND: u16 = 0x9999;
+const SELECTION_BAND: u16 = 0x9CD3;
 
 pub fn paint_highlight_bands(
     buf: &mut [Rgb565Pixel],
@@ -62,8 +61,9 @@ pub fn paint_highlight_bands(
                 for px in 0..content_w {
                     let idx = row_offset + pad_left + px;
                     if idx < buf_len {
-                        buf_bytes[idx * 2] = (HIGHLIGHT_BAND >> 8) as u8;
-                        buf_bytes[idx * 2 + 1] = (HIGHLIGHT_BAND & 0xFF) as u8;
+                        let bytes = HIGHLIGHT_BAND.to_le_bytes();
+                        buf_bytes[idx * 2] = bytes[0];
+                        buf_bytes[idx * 2 + 1] = bytes[1];
                     }
                 }
             }
@@ -116,8 +116,9 @@ pub fn paint_selection_band(
                 for px in 0..content_w {
                     let idx = row_offset + pad_left + px;
                     if idx < buf_len {
-                        buf_bytes[idx * 2] = (SELECTION_BAND >> 8) as u8;
-                        buf_bytes[idx * 2 + 1] = (SELECTION_BAND & 0xFF) as u8;
+                        let bytes = SELECTION_BAND.to_le_bytes();
+                        buf_bytes[idx * 2] = bytes[0];
+                        buf_bytes[idx * 2 + 1] = bytes[1];
                     }
                 }
             }
