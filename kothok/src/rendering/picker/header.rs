@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (c) 2026 Nayeem Bin Ahsan
+#![allow(clippy::type_complexity)]
 use std::sync::OnceLock;
 
 use crate::rendering::density::{dp, dpf};

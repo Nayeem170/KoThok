@@ -4,7 +4,7 @@ use super::*;
 use crate::Reader;
 
 mod audio;
-mod bookmark;
+pub(super) mod bookmark;
 mod jump;
 mod mode_toggle;
 mod navigation;
@@ -102,9 +102,11 @@ pub(super) fn process_loop_callbacks(st: &mut LoopState, ctx: &mut LoopContext) 
     ui_changed |= nav_ui;
     if st.current_chapter != pre_nav_ch || st.current_page != pre_nav_pg {
         st.last_nav = std::time::Instant::now();
-        // Latched, never cleared for the session: once a page has been turned,
-        // the footer shows where you are instead of how to turn one.
         reader.set_has_navigated(true);
+        if st.selection.is_some() {
+            st.selection = None;
+            reader.set_selection_active(false);
+        }
         // Turning a page retires whatever the footer was saying.
         //
         // The footer prefers `status` over the page number whenever it is
@@ -224,7 +226,7 @@ pub(super) fn process_loop_callbacks(st: &mut LoopState, ctx: &mut LoopContext) 
         }
     }
 
-    ui_changed |= bookmark::handle_bookmark_jump(st, reader, cb, cmd_tx);
+    ui_changed |= bookmark::handle_bookmark_jump(st, reader, cb);
 
     navigation::handle_skip_forward(st, reader, cb, cmd_tx);
     navigation::handle_skip_rewind(st, reader, cb, cmd_tx);
@@ -278,12 +280,31 @@ pub(super) fn process_loop_callbacks(st: &mut LoopState, ctx: &mut LoopContext) 
     let overlay_now = reader.get_chapter_overlay_open();
     if overlay_now && !st.prev_chapter_overlay {
         st.chapter_scroll = 0;
-        st.chapter_tab = crate::loop_state::ChapterTab::Chapters;
         st.search_scroll = 0;
         st.search_results_active = false;
         st.search_results_scroll = 0;
         st.search_word_selected = false;
-        reader.set_chapter_overlay_active_tab(0);
+        st.marks_scroll = 0;
+        st.armed_mark_idx = usize::MAX;
+        st.selection = None;
+        reader.set_selection_active(false);
+        let requested = cb.overlay_requested_tab_cell.replace(-1);
+        let tab = match requested {
+            2 => crate::loop_state::ChapterTab::Marks,
+            1 => crate::loop_state::ChapterTab::Words,
+            _ => crate::loop_state::ChapterTab::Chapters,
+        };
+        st.chapter_tab = tab;
+        let tab_int = match tab {
+            crate::loop_state::ChapterTab::Chapters => 0,
+            crate::loop_state::ChapterTab::Words => 1,
+            crate::loop_state::ChapterTab::Marks => 2,
+        };
+        reader.set_chapter_overlay_active_tab(tab_int);
+        let (seg_w, gap, font_px) = crate::rendering::tab_bar_geom::tab_bar_geom(ctx.w);
+        reader.set_tab_seg_w(seg_w as f32);
+        reader.set_tab_gap(gap as f32);
+        reader.set_tab_font_px(font_px);
     }
 
     if overlay_now {
@@ -319,6 +340,10 @@ pub(super) fn process_loop_callbacks(st: &mut LoopState, ctx: &mut LoopContext) 
                 st.chapter_tab = crate::loop_state::ChapterTab::Words;
                 st.search_scroll = 0;
             }
+            2 => {
+                st.chapter_tab = crate::loop_state::ChapterTab::Marks;
+                st.marks_scroll = 0;
+            }
             _ => {}
         }
         st.text_dirty = true;
@@ -331,6 +356,47 @@ pub(super) fn process_loop_callbacks(st: &mut LoopState, ctx: &mut LoopContext) 
     }
 
     jump::handle_jump_to_reading(st, reader, cb, cmd_tx, ctx);
+
+    if cb.mark_jump_cell.replace(false) && !st.picker_active {
+        let idx = cb.mark_jump_idx_cell.get();
+        if idx < st.marks.len() {
+            let m = &st.marks[idx];
+            let target_chapter = m.chapter;
+            let target_offset = m.start;
+            if target_chapter != st.current_chapter {
+                super::switch_chapter(
+                    st,
+                    reader,
+                    cmd_tx,
+                    target_chapter,
+                    super::ChapterSwitchOpts {
+                        to_last_page: false,
+                        update_cursor: false,
+                        load_audio: true,
+                    },
+                );
+            }
+            if let Some(pg) = bookmark::page_for_offset(st, target_offset) {
+                st.current_page = pg;
+                super::apply_page(
+                    reader,
+                    &st.state,
+                    st.current_page,
+                    &st.chapter_offsets,
+                    st.current_chapter,
+                );
+            }
+            bookmark::restore_cursor_line(st, reader, target_offset);
+            let base = st
+                .chapter_offsets
+                .get(st.current_chapter)
+                .copied()
+                .unwrap_or(0);
+            reader.set_saved_page((base + st.current_page) as i32);
+            reader.set_status(format!("Mark: page {}", base + st.current_page + 1).into());
+            st.text_dirty = true;
+        }
+    }
 
     if let Some(rx) = st.font_download_rx.take() {
         match rx.try_recv() {
@@ -350,6 +416,57 @@ pub(super) fn process_loop_callbacks(st: &mut LoopState, ctx: &mut LoopContext) 
             }
             Err(std::sync::mpsc::TryRecvError::Disconnected) => {}
         }
+    }
+
+    if cb.highlight_selection_cell.replace(false) {
+        if let Some(sel) = st.selection.take() {
+            reader.set_selection_active(false);
+            let start = sel.anchor.min(sel.head);
+            let end = sel.anchor.max(sel.head);
+            if start < end {
+                let body = st
+                    .chapters
+                    .get(st.current_chapter)
+                    .map(|c| c.body.as_str())
+                    .unwrap_or("");
+                let excerpt = body
+                    .get(start..end)
+                    .unwrap_or("")
+                    .chars()
+                    .take(120)
+                    .collect::<String>()
+                    .replace('\n', " ");
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0);
+                let m = crate::data::mark::Mark {
+                    kind: crate::data::mark::MarkKind::Highlight,
+                    chapter: st.current_chapter,
+                    start,
+                    end,
+                    page_hint: st.current_page,
+                    created: now,
+                    excerpt,
+                };
+                match crate::data::mark::add_mark(&mut st.marks, m) {
+                    Ok(()) => {
+                        st.marks_dirty = true;
+                        reader.set_status(format!("Highlighted ({} marks)", st.marks.len()).into());
+                    }
+                    Err(e) => {
+                        reader.set_status(e.into());
+                    }
+                }
+            }
+            st.text_dirty = true;
+        }
+    }
+
+    if cb.cancel_selection_cell.replace(false) && st.selection.is_some() {
+        st.selection = None;
+        reader.set_selection_active(false);
+        st.text_dirty = true;
     }
 
     (ui_changed, page_changed)

@@ -32,6 +32,21 @@ pub(super) fn build_loop_state(
     let text_cache = picker.text_cache;
     debug_assert_eq!(buffer.len(), w * h, "launch buffer must match the panel");
     let now = std::time::Instant::now();
+    let mut marks =
+        crate::data::persistence::load_marks(crate::data::persistence::marks_path(), &book.11);
+    let marks_dirty = crate::data::persistence::migrate_bookmark(
+        crate::data::persistence::marks_path(),
+        std::path::Path::new(crate::data::config::POSITIONS_FILE),
+        &book.11,
+        book.1,
+        &mut marks,
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0),
+        book.6,
+    )
+    .unwrap_or(true);
     crate::loop_state::LoopState {
         current_chapter: book.4,
         current_page: book.6,
@@ -73,6 +88,11 @@ pub(super) fn build_loop_state(
         search_result_selected: false,
         press_search_scroll: 0,
         press_search_results_scroll: 0,
+        marks,
+        marks_dirty,
+        armed_mark_idx: usize::MAX,
+        marks_scroll: 0,
+        press_marks_scroll: 0,
         sb_dragging: false,
         sb_drag_tab: Default::default(),
         sb_grab_offset: 0,
@@ -145,6 +165,7 @@ pub(super) fn build_loop_state(
         text_cache,
         zoom_active: false,
         zoom_center: (0, 0),
+        selection: None,
         voice_rx: None,
         voice_fetch_attempted: false,
         wifi_bt_list_rx: None,

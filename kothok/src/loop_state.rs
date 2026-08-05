@@ -27,6 +27,7 @@ pub enum ChapterTab {
     #[default]
     Chapters,
     Words,
+    Marks,
 }
 
 pub struct LoopState {
@@ -84,6 +85,12 @@ pub struct LoopState {
     pub search_result_selected: bool,
     pub press_search_scroll: i32,
     pub press_search_results_scroll: i32,
+
+    pub marks: Vec<crate::data::mark::Mark>,
+    pub marks_dirty: bool,
+    pub armed_mark_idx: usize,
+    pub marks_scroll: i32,
+    pub press_marks_scroll: i32,
 
     pub sb_dragging: bool,
     pub sb_drag_tab: ChapterTab,
@@ -212,6 +219,7 @@ pub struct LoopState {
     /// clamped into the content region when set.
     pub zoom_active: bool,
     pub zoom_center: (usize, usize),
+    pub selection: Option<Selection>,
 
     pub voice_rx: Option<Receiver<Vec<kothok_edge_tts::VoiceInfo>>>,
     pub voice_fetch_attempted: bool,
@@ -230,6 +238,12 @@ pub struct LoopState {
     pub bt_list_idx: usize,
     pub bt_list_fetched: bool,
     pub bt_list_ids_valid: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct Selection {
+    pub anchor: usize,
+    pub head: usize,
 }
 
 pub struct LoopContext<'a> {

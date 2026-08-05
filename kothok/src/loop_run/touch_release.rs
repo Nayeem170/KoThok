@@ -310,6 +310,46 @@ pub(super) fn on_release(
                 let dt_ms = dt.as_millis();
                 let swipe_dir =
                     gesture::classify_swipe(swipe_dx, swipe_dy, touch::SWIPE_MIN_DX, dt_ms);
+                if swipe_dir == gesture::SwipeDirection::None && st.selection.is_some() {
+                    let pv = crate::rendering::text_overlay::PageView {
+                        w: ctx.w,
+                        h: ctx.h,
+                        rows: &st.state.all_rows,
+                        page: st.current_page,
+                        pages: &st.state.pages,
+                        content_top: PAD_TOP,
+                        row_heights: &st.state.row_heights,
+                        decoded_images: &st.state.decoded_images,
+                        body_px: st.body_px,
+                        head_px: st.head_px,
+                        line_h: st.line_h,
+                        style_runs: &st.state.style_runs,
+                    };
+                    if let Some(offset) = crate::rendering::text_overlay::offset_at_point(
+                        &pv,
+                        dx as usize,
+                        dy as usize,
+                    ) {
+                        if let Some(ref mut sel) = st.selection {
+                            let snapped = st
+                                .chapters
+                                .get(st.current_chapter)
+                                .map(|c| {
+                                    let (s, e) = crate::rendering::text_overlay::word_boundary(
+                                        &c.body, offset,
+                                    );
+                                    if offset.abs_diff(s) < offset.abs_diff(e) {
+                                        s
+                                    } else {
+                                        e
+                                    }
+                                })
+                                .unwrap_or(offset);
+                            sel.head = snapped;
+                        }
+                    }
+                    st.text_dirty = true;
+                }
                 match swipe_dir {
                     gesture::SwipeDirection::Left | gesture::SwipeDirection::Right
                         if st.zoom_active =>
@@ -328,6 +368,11 @@ pub(super) fn on_release(
                     }
                     _ => {}
                 }
+                if st.selection.is_some() && swipe_dir != gesture::SwipeDirection::None {
+                    st.selection = None;
+                    reader.set_selection_active(false);
+                    st.text_dirty = true;
+                }
                 if swipe_dir == gesture::SwipeDirection::None
                     && super::link_nav::try_follow_link(st, reader, cmd_tx, ctx, dx, dy)
                 {
@@ -345,6 +390,10 @@ pub(super) fn on_release(
                         // on the tap. A second double-tap clears it.
                         st.pending_tap_at = None;
                         st.zoom_active = !st.zoom_active;
+                        if st.selection.is_some() {
+                            st.selection = None;
+                            reader.set_selection_active(false);
+                        }
                         if st.zoom_active {
                             let content_end = (PAD_TOP + ctx.content_h as usize).min(ctx.h);
                             st.zoom_center =
@@ -401,30 +450,116 @@ fn chapter_overlay_release(
             }
             return;
         }
-        if st.chapter_tab == crate::loop_state::ChapterTab::Words {
-            if st.search_word_selected {
-                st.search_results_active = true;
-                st.search_results_scroll = 0;
-                st.text_dirty = true;
-                ctx.window.request_redraw();
-            }
-        } else {
-            let preview = reader.get_chapter_preview_idx();
-            let idx = if preview >= 0 {
-                preview as usize
-            } else {
-                match crate::rendering::chapter_list::current_toc_row(
-                    &st.toc_rows,
-                    st.current_chapter,
-                ) {
-                    Some(i) => i,
-                    None => return,
+        match st.chapter_tab {
+            crate::loop_state::ChapterTab::Words => {
+                if st.search_word_selected {
+                    st.search_results_active = true;
+                    st.search_results_scroll = 0;
+                    st.text_dirty = true;
+                    ctx.window.request_redraw();
                 }
-            };
-            reader.set_chapter_overlay_open(false);
-            reader.set_chapter_preview_idx(-1);
-            cb.chapter_select_cell.set(Some(idx));
-            st.text_dirty = true;
+            }
+            crate::loop_state::ChapterTab::Marks => {
+                if st.armed_mark_idx != usize::MAX {
+                    let idx = st.armed_mark_idx;
+                    if idx < st.marks.len() {
+                        let m = &st.marks[idx];
+                        let target_chapter = m.chapter;
+                        let target_offset = m.start;
+                        st.armed_mark_idx = usize::MAX;
+                        crate::data::mark::remove_mark(&mut st.marks, idx);
+                        st.marks_dirty = true;
+                        reader.set_chapter_overlay_open(false);
+                        reader.set_chapter_preview_idx(-1);
+                        if target_chapter != st.current_chapter {
+                            super::switch_chapter(
+                                st,
+                                reader,
+                                ctx.cmd_tx,
+                                target_chapter,
+                                super::ChapterSwitchOpts {
+                                    to_last_page: false,
+                                    update_cursor: false,
+                                    load_audio: true,
+                                },
+                            );
+                        }
+                        if let Some(pg) =
+                            super::callbacks::bookmark::page_for_offset(st, target_offset)
+                        {
+                            st.current_page = pg;
+                            super::apply_page(
+                                reader,
+                                &st.state,
+                                st.current_page,
+                                &st.chapter_offsets,
+                                st.current_chapter,
+                            );
+                        }
+                        super::callbacks::bookmark::restore_cursor_line(st, reader, target_offset);
+                        st.text_dirty = true;
+                        ctx.window.request_redraw();
+                    }
+                } else if let Some(idx) = crate::rendering::marks_list::marks_list_hit_test(
+                    dy as i32,
+                    st.marks_scroll,
+                    st.marks.len(),
+                ) {
+                    if idx < st.marks.len() {
+                        let m = &st.marks[idx];
+                        let target_chapter = m.chapter;
+                        let target_offset = m.start;
+                        reader.set_chapter_overlay_open(false);
+                        reader.set_chapter_preview_idx(-1);
+                        if target_chapter != st.current_chapter {
+                            super::switch_chapter(
+                                st,
+                                reader,
+                                ctx.cmd_tx,
+                                target_chapter,
+                                super::ChapterSwitchOpts {
+                                    to_last_page: false,
+                                    update_cursor: false,
+                                    load_audio: true,
+                                },
+                            );
+                        }
+                        if let Some(pg) =
+                            super::callbacks::bookmark::page_for_offset(st, target_offset)
+                        {
+                            st.current_page = pg;
+                            super::apply_page(
+                                reader,
+                                &st.state,
+                                st.current_page,
+                                &st.chapter_offsets,
+                                st.current_chapter,
+                            );
+                        }
+                        super::callbacks::bookmark::restore_cursor_line(st, reader, target_offset);
+                        st.text_dirty = true;
+                        ctx.window.request_redraw();
+                    }
+                }
+            }
+            crate::loop_state::ChapterTab::Chapters => {
+                let preview = reader.get_chapter_preview_idx();
+                let idx = if preview >= 0 {
+                    preview as usize
+                } else {
+                    match crate::rendering::chapter_list::current_toc_row(
+                        &st.toc_rows,
+                        st.current_chapter,
+                    ) {
+                        Some(i) => i,
+                        None => return,
+                    }
+                };
+                reader.set_chapter_overlay_open(false);
+                reader.set_chapter_preview_idx(-1);
+                cb.chapter_select_cell.set(Some(idx));
+                st.text_dirty = true;
+            }
         }
         return;
     }
