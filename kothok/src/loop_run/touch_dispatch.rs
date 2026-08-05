@@ -532,18 +532,35 @@ pub(super) fn poll_and_dispatch_touch(st: &mut LoopState, ctx: &mut LoopContext)
                                 && !st.panel_open
                                 && !st.picker_active
                             {
-                                let cur = reader.get_cur_start().max(0) as usize;
-                                let (anchor, head) = st
-                                    .chapters
-                                    .get(st.current_chapter)
-                                    .map(|c| {
-                                        crate::rendering::text_overlay::word_boundary(&c.body, cur)
-                                    })
-                                    .unwrap_or((cur, cur));
-                                st.selection = Some(crate::loop_state::Selection { anchor, head });
-                                reader.set_selection_active(true);
-                                st.text_dirty = true;
-                                ctx.window.request_redraw();
+                                let started = st.chapters.get(st.current_chapter).and_then(|c| {
+                                    let pv = crate::rendering::text_overlay::PageView {
+                                        w: ctx.w,
+                                        h: ctx.h,
+                                        rows: &st.state.all_rows,
+                                        page: st.current_page,
+                                        pages: &st.state.pages,
+                                        content_top: PAD_TOP,
+                                        row_heights: &st.state.row_heights,
+                                        decoded_images: &st.state.decoded_images,
+                                        body_px: st.body_px,
+                                        head_px: st.head_px,
+                                        line_h: st.line_h,
+                                        style_runs: &st.state.style_runs,
+                                    };
+                                    crate::rendering::text_overlay::anchor_at_touch(
+                                        &pv,
+                                        press_dx as usize,
+                                        press_dy as usize,
+                                        c.body.as_str(),
+                                    )
+                                });
+                                if let Some((anchor, head)) = started {
+                                    st.selection =
+                                        Some(crate::loop_state::Selection { anchor, head });
+                                    reader.set_selection_active(true);
+                                    st.text_dirty = true;
+                                    ctx.window.request_redraw();
+                                }
                             }
                         } else {
                             ctx.window.window().dispatch_event(

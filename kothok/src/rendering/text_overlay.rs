@@ -228,6 +228,21 @@ pub fn offset_at_point(pv: &PageView, tap_x: usize, tap_y: usize) -> Option<usiz
     None
 }
 
+/// `[start, end)` of the word under a long-press point, for C1 ("selects the
+/// word under the finger"). Composes `offset_at_point` with `word_boundary`.
+/// `None` means the press was not on body text -- no selection is started there,
+/// rather than falling back to the reading cursor, which would select a word the
+/// reader never touched.
+pub fn anchor_at_touch(
+    pv: &PageView,
+    press_x: usize,
+    press_y: usize,
+    body: &str,
+) -> Option<(usize, usize)> {
+    let off = offset_at_point(pv, press_x, press_y)?;
+    Some(word_boundary(body, off))
+}
+
 /// Offset under `tap_x` on a justified row, using the same gap arithmetic
 /// `blit_justified` draws with.
 fn justified_offset_at(
@@ -822,5 +837,72 @@ mod word_boundary_tests {
         let text2 = "hello";
         assert_eq!(word_boundary(text2, 0), (0, 5));
         assert_eq!(word_boundary(text2, 4), (0, 5));
+    }
+}
+
+#[cfg(test)]
+mod anchor_at_touch_tests {
+    use super::{anchor_at_touch, PageView};
+
+    /// C1: a long press selects the word under the finger, not the word under the
+    /// TTS cursor. Two rows ("hello", then "world"); pressing row 1 must yield
+    /// "world"'s range. A cursor-anchored implementation -- word_boundary(body,
+    /// cursor) with the cursor on row 0 -- returns "hello" and fails this.
+    /// Row 0 occupies band [10, 30); row 1 occupies [30, 50). A press left of the
+    /// text origin snaps to the row's start offset, so the assertion does not
+    /// depend on font metrics.
+    #[test]
+    fn follows_the_finger_not_the_cursor() {
+        use slint::SharedString;
+        let body = "hello world";
+        let rows = vec![
+            crate::Row {
+                text: SharedString::from("hello "),
+                start: 0,
+                end: 6,
+                kind: 0,
+                tag: 0,
+            },
+            crate::Row {
+                text: SharedString::from("world"),
+                start: 6,
+                end: 11,
+                kind: 0,
+                tag: 0,
+            },
+        ];
+        let row_heights = vec![20i32, 20];
+        let pages = vec![(0usize, 2usize)];
+        let decoded_images = std::collections::HashMap::new();
+        let style_runs: Vec<kobo_core::html_text::StyleRun> = Vec::new();
+        let pv = PageView {
+            w: 600,
+            h: 800,
+            rows: &rows,
+            page: 0,
+            pages: &pages,
+            content_top: 10,
+            row_heights: &row_heights,
+            decoded_images: &decoded_images,
+            body_px: 36.0,
+            head_px: 36.0,
+            line_h: 20,
+            style_runs: &style_runs,
+        };
+        assert_eq!(
+            anchor_at_touch(&pv, 0, 40, body),
+            Some((6, 11)),
+            "press on row 1 must select 'world'"
+        );
+        assert_eq!(
+            anchor_at_touch(&pv, 0, 15, body),
+            Some((0, 5)),
+            "press on row 0 must select 'hello'"
+        );
+        assert_eq!(
+            anchor_at_touch(&pv, 0, 5, body),
+            None,
+            "press off the text must start no selection"
+        );
     }
 }
