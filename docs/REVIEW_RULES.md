@@ -75,6 +75,14 @@ Format: `[source] rule text`
 - [seed] Remedy: assert against the external constant directly (`23 + 3*seg_w + 2*gap <= w - 99 - gap`). Where a measurement is involved, demote it from an input of the formula to the fit check on the result (`measure_text("Chapters", font_px) <= seg_w`), per `about.rs:604-618`.
 - [seed] Applies beyond geometry: a serializer tested by round-tripping through its own parser, a hash checked against a value the same function produced, a cache test whose expected value is read from the cache.
 
+### Reference-port completeness
+
+- [seed] When a fix is ported from a reference site (a sibling file, an earlier commit, a "same as X" instruction), enumerate every site the reference touched before porting. A reference fix is usually multi-site; porting the facet that is easiest to locate leaves the rest, and the ticket reports the concern as closed.
+- [seed] Diagnostic: diff the reference fix and list its changed hunks. Every hunk is a claim about what the concern required. If the port has fewer hunks than the reference, name which reference hunk each missing one corresponds to and why it does not apply here. "Does not apply" is a finding to state, not a gap to leave silent.
+- [seed] Concrete case: `marks.rs` fixed book keying at two sites -- the save-side filter (bare `starts_with(book_path)` -> `starts_with("{book_path}|")`) and the load-side parse (`splitn(8)`). The port to `position.rs` applied only the load-side facet; `splitn(8)` satisfied the word "keying" in the requirement while the save-side prefix collision shipped unfixed through a green gate and an ACCEPTED review.
+- [seed] A loosely-named concern in the requirement is the enabling condition. "Fix the keying" names a topic, not a site set. Where a requirement names a concern rather than sites, the plan must enumerate the sites before implementation, and the reviewer verifies the enumeration -- not just the fix.
+- [seed] Test the defect's real shape, not the surface touched. The keying defect requires two books whose paths share a prefix; no existing test constructed that, so the gate was blind by construction. Prove a new test discriminates by running it against unfixed code and watching it fail before the fix lands.
+
 ## Learned rules
 
 - [feat/word-list-select-open-flow|0] UI mocks use Pencil CLI (pen.dev) by default. Read `pen_cli` from `.agentic/config.md` for the binary name (default: `pen`). Write mock.md with device dimensions, prompt, design decisions, interactive states. Generate with `<pen_cli> --out mock.pen --prompt-file mock.md --enable-preview`. Export preview with `<pen_cli> --in mock.pen --export mock-preview.png`. If Pencil unavailable, fall back to mock.html with device dimensions.
