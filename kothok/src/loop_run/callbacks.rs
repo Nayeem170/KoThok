@@ -106,7 +106,6 @@ pub(super) fn process_loop_callbacks(st: &mut LoopState, ctx: &mut LoopContext) 
         if st.selection.is_some() {
             st.selection = None;
             reader.set_selection_active(false);
-            reader.set_selection_active(false);
         }
         // Turning a page retires whatever the footer was saying.
         //
@@ -288,6 +287,7 @@ pub(super) fn process_loop_callbacks(st: &mut LoopState, ctx: &mut LoopContext) 
         st.marks_scroll = 0;
         st.armed_mark_idx = usize::MAX;
         st.selection = None;
+        reader.set_selection_active(false);
         let requested = cb.overlay_requested_tab_cell.replace(-1);
         let tab = match requested {
             2 => crate::loop_state::ChapterTab::Marks,
