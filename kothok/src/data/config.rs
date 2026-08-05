@@ -252,10 +252,12 @@ mod tests {
     #[test]
     fn config_roundtrip() {
         let p = tmp_path("roundtrip");
-        let mut cfg = AppConfig::default();
-        cfg.font_size = 44;
-        cfg.tts_rate = 70;
-        cfg.brightness = 30;
+        let cfg = AppConfig {
+            font_size: 44,
+            tts_rate: 70,
+            brightness: 30,
+            ..AppConfig::default()
+        };
         save_config_to(&cfg, &p);
         let loaded = load_config_from_base(&p, 36);
         assert_eq!(loaded, cfg);
@@ -360,8 +362,10 @@ mod tests {
     #[test]
     fn config_reading_auto_sleep_roundtrip() {
         let p = tmp_path("sleep");
-        let mut cfg = AppConfig::default();
-        cfg.reading_auto_sleep_secs = 300;
+        let cfg = AppConfig {
+            reading_auto_sleep_secs: 300,
+            ..AppConfig::default()
+        };
         save_config_to(&cfg, &p);
         let loaded = load_config_from_base(&p, 36);
         assert_eq!(loaded.reading_auto_sleep_secs, 300);
@@ -390,8 +394,10 @@ mod tests {
     #[test]
     fn onboarding_version_roundtrip() {
         let p = tmp_path("onboarding");
-        let mut cfg = AppConfig::default();
-        cfg.onboarding_version = "v0.2.0".into();
+        let cfg = AppConfig {
+            onboarding_version: "v0.2.0".into(),
+            ..AppConfig::default()
+        };
         save_config_to(&cfg, &p);
         let loaded = load_config_from_base(&p, 36);
         assert_eq!(loaded.onboarding_version, "v0.2.0");

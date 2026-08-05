@@ -336,10 +336,6 @@ mod tests {
             None,
             "only one chapter exists"
         );
-        assert_eq!(
-            chapter_list_hit_test(bottom, 0, 1).unwrap_or(0) < 1 || true,
-            true
-        );
     }
 
     #[test]
@@ -631,7 +627,7 @@ mod tests {
         let scroll_max = list_scroll_max(item_count, track_h);
         let tt = thumb_top(top, track_h, item_count, scroll_max);
         let (th, _) = thumb_metrics(track_h, item_count);
-        let grab_offset = (bottom as i32) - tt - (th / 2);
+        let grab_offset = bottom - tt - (th / 2);
         let result = scrollbar_y_to_scroll(bottom, top, bottom, item_count, grab_offset);
         assert_eq!(result, scroll_max);
     }
