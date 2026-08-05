@@ -11,7 +11,7 @@ Read from `.agentic/config.md` commands:
 - preflight_fix: `Start-Process Docker Desktop.exe`
 - build: `cross build --target armv7-unknown-linux-musleabihf --release -p kothok-app` (workdir: `kothok/`)
 - test: `cross test -p kothok-app --target armv7-unknown-linux-musleabihf`
-- lint: `cross clippy -p kothok-app --target armv7-unknown-linux-musleabihf -D warnings`
+- lint: `cross clippy -p kothok-app --target armv7-unknown-linux-musleabihf --all-targets -- -D warnings`
 - fmt check: `cargo fmt --manifest-path kothok/Cargo.toml -- --check`
 
 ### Build log format (build-latest.log)
