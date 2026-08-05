@@ -18,8 +18,10 @@ pub struct Mark {
 }
 
 pub const MARKS_FILE: &str = "/mnt/onboard/.adds/marks";
+#[allow(dead_code)]
 pub const MAX_MARKS_PER_BOOK: usize = 200;
 
+#[allow(dead_code)]
 pub fn add_mark(marks: &mut Vec<Mark>, m: Mark) -> Result<(), &'static str> {
     if marks.len() >= MAX_MARKS_PER_BOOK {
         return Err("Marks limit reached (200/book)");

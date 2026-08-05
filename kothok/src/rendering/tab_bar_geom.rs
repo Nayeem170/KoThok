@@ -1,8 +1,5 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (c) 2026 Nayeem Bin Ahsan
-use kobo_core::rendering::draw::measure_text;
-
-const TAB_LABELS: &[&str] = &["Chapters", "Words", "Marks"];
 
 pub fn tab_bar_geom(w: usize) -> (usize, usize, f32) {
     let s = w as f32 / 1264.0;
@@ -17,6 +14,7 @@ pub fn tab_bar_geom(w: usize) -> (usize, usize, f32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use kobo_core::rendering::draw::measure_text;
 
     const FLEET: &[(&str, usize)] = &[
         ("Touch/Mini", 600),
