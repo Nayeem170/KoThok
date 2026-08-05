@@ -39,11 +39,15 @@ pub fn load_marks(marks_file: &Path, book_path: &str) -> Vec<crate::data::mark::
     marks
 }
 
-pub fn save_marks(marks_file: &Path, book_path: &str, marks: &[crate::data::mark::Mark]) {
+pub fn save_marks(
+    marks_file: &Path,
+    book_path: &str,
+    marks: &[crate::data::mark::Mark],
+) -> std::io::Result<()> {
     let existing = match fs::read_to_string(marks_file) {
         Ok(s) => s,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
-        Err(_) => return,
+        Err(e) => return Err(e),
     };
     let prefix = format!("{book_path}|");
     let mut lines: Vec<String> = existing
@@ -68,13 +72,7 @@ pub fn save_marks(marks_file: &Path, book_path: &str, marks: &[crate::data::mark
             escape_excerpt(&m.excerpt),
         ));
     }
-    if let Err(e) = fs::write(marks_file, lines.join("\n")) {
-        log::error!(
-            "save_marks: failed to write {}: {}",
-            marks_file.display(),
-            e
-        );
-    }
+    fs::write(marks_file, lines.join("\n"))
 }
 
 fn escape_excerpt(s: &str) -> String {
@@ -127,29 +125,28 @@ fn unescape_excerpt(s: &str) -> String {
     out
 }
 
-#[allow(dead_code)]
 pub fn migrate_bookmark(
-    _marks_file: &Path,
+    marks_file: &Path,
     positions_file: &Path,
     book_path: &str,
     chapter_count: usize,
     marks: &mut Vec<crate::data::mark::Mark>,
     now: u64,
     current_page: usize,
-) {
+) -> std::io::Result<bool> {
     let bm_field = crate::data::persistence::load_bookmark_field(positions_file, book_path);
     let bm = match bm_field {
         Some(b) => b,
-        None => return,
+        None => return Ok(false),
     };
     if bm.chapter >= chapter_count {
-        return;
+        return Ok(false);
     }
     let already = marks
         .iter()
         .any(|m| m.kind == crate::data::mark::MarkKind::Bookmark && m.chapter == bm.chapter);
     if already {
-        return;
+        return Ok(false);
     }
     marks.push(crate::data::mark::Mark {
         kind: crate::data::mark::MarkKind::Bookmark,
@@ -160,7 +157,9 @@ pub fn migrate_bookmark(
         created: now,
         excerpt: String::new(),
     });
+    save_marks(marks_file, book_path, marks)?;
     crate::data::persistence::clear_bookmark_field(positions_file, book_path);
+    Ok(true)
 }
 
 #[allow(dead_code)]
@@ -214,7 +213,8 @@ mod tests {
             &mut marks,
             1000,
             0,
-        );
+        )
+        .unwrap();
         let bookmarks: Vec<_> = marks
             .iter()
             .filter(|m| m.kind == crate::data::mark::MarkKind::Bookmark)
@@ -240,7 +240,8 @@ mod tests {
             &mut marks,
             1000,
             0,
-        );
+        )
+        .unwrap();
         assert!(marks.is_empty(), "short line must not produce marks");
     }
 
@@ -263,7 +264,8 @@ mod tests {
             &mut marks,
             1000,
             0,
-        );
+        )
+        .unwrap();
         assert!(marks.is_empty(), "out-of-range chapter must be dropped");
     }
 
@@ -286,7 +288,8 @@ mod tests {
             &mut marks,
             1000,
             0,
-        );
+        )
+        .unwrap();
         assert_eq!(marks.len(), 1);
         assert_eq!(marks[0].kind, crate::data::mark::MarkKind::Bookmark);
         assert_eq!(marks[0].chapter, 2);
@@ -305,7 +308,8 @@ mod tests {
             &mut marks,
             1001,
             0,
-        );
+        )
+        .unwrap();
         assert_eq!(
             marks.len(),
             count_after_first,
@@ -425,7 +429,7 @@ mod tests {
                 excerpt: "highlighted text".into(),
             },
         ];
-        save_marks(&marks_file, book_path, &marks);
+        save_marks(&marks_file, book_path, &marks).unwrap();
         let loaded = load_marks(&marks_file, book_path);
         assert_eq!(loaded.len(), 2);
         assert_eq!(loaded[0].kind, crate::data::mark::MarkKind::Bookmark);
@@ -455,7 +459,7 @@ mod tests {
             created: 200,
             excerpt: String::new(),
         }];
-        save_marks(&marks_file, path_a, &marks);
+        save_marks(&marks_file, path_a, &marks).unwrap();
         let loaded_b = load_marks(&marks_file, path_b);
         assert_eq!(
             loaded_b.len(),
@@ -481,7 +485,7 @@ mod tests {
             created: 1,
             excerpt: excerpt.to_string(),
         }];
-        save_marks(&marks_file, book_path, &marks);
+        save_marks(&marks_file, book_path, &marks).unwrap();
         let content = fs::read_to_string(&marks_file).unwrap();
         assert!(
             !content.contains('\n'),
@@ -510,12 +514,44 @@ mod tests {
     fn save_error_does_not_wipe_on_bad_read() {
         let dir = setup_temp("save_err");
         let marks_file = dir.join("marks");
-        fs::write(&marks_file, "other.epub|b|0|0|0|0|1|stub\n").unwrap();
-        save_marks(&dir, "/mnt/onboard/Test.epub", &[]);
-        let remaining = fs::read_to_string(&marks_file).unwrap();
+        fs::write(&marks_file, b"other.epub|b|0|0|0|0|1|\xff\xfe\n").unwrap();
+        let res = save_marks(&marks_file, "/mnt/onboard/Test.epub", &[]);
         assert!(
-            remaining.contains("other.epub"),
-            "save must abort on read error, not wipe the file"
+            res.is_err(),
+            "save must fail on invalid UTF-8 read, not silently proceed"
+        );
+        let remaining = fs::read(&marks_file).unwrap();
+        assert!(
+            remaining.starts_with(b"other.epub"),
+            "save must not overwrite the file when read fails"
+        );
+    }
+
+    #[test]
+    fn migrate_preserves_positions_when_save_not_durable() {
+        let dir = setup_temp("mig_durability");
+        let marks_file = dir.join("no_write_dir").join("marks");
+        let pos_file = dir.join("positions");
+        fs::write(
+            &pos_file,
+            "/mnt/onboard/Dur.epub|2|3|100|200|2:3:80|r|0.2500\n",
+        )
+        .unwrap();
+        let mut marks: Vec<crate::data::mark::Mark> = Vec::new();
+        let res = migrate_bookmark(
+            &marks_file,
+            &pos_file,
+            "/mnt/onboard/Dur.epub",
+            10,
+            &mut marks,
+            1000,
+            0,
+        );
+        assert!(res.is_err(), "save to nonexistent dir must fail");
+        let pos_after = fs::read_to_string(&pos_file).unwrap();
+        assert!(
+            pos_after.contains("2:3:80"),
+            "bookmark field must NOT be cleared if marks save failed"
         );
     }
 
