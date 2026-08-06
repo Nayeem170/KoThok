@@ -154,6 +154,16 @@ pub struct LoopState {
     pub disk_settle: bool,
     pub prev_playing: bool,
 
+    /// TTS sleep timer: mirrored mode (from cfg) + countdown state. Pauses audio
+    /// only; see loop_run::tts_sleep. deadline=None & remaining=None = disarmed.
+    pub tts_sleep_mode: crate::data::config::TtsSleepMode,
+    /// True between arm (Event::Playing) and fire/stop. End-of-chapter mode has
+    /// no deadline yet is still armed, so deadline/remaining alone cannot tell it
+    /// apart from disarmed.
+    pub tts_sleep_armed: bool,
+    pub tts_sleep_deadline: Option<Instant>,
+    pub tts_sleep_paused_remaining: Option<std::time::Duration>,
+
     pub prev_down: bool,
     pub frame_down: bool,
     pub frame_x: i32,
