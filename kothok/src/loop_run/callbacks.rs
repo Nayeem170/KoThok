@@ -159,6 +159,7 @@ pub(super) fn process_loop_callbacks(st: &mut LoopState, ctx: &mut LoopContext) 
         reader.set_sleep_label(
             crate::panel::callbacks::sleep::sleep_label(ctx.cfg.reading_auto_sleep_secs).into(),
         );
+        reader.set_tts_sleep_label(ctx.cfg.tts_sleep_mode.label().into());
         if let Some(ref path) = ctx.fl_path {
             if let Some(hw) = frontlight_get(path) {
                 reader.set_brightness_val(hw as i32);

@@ -22,6 +22,7 @@ pub struct Callbacks {
     pub wifi_cycle_cell: Rc<Cell<i32>>,
     pub bt_cycle_cell: Rc<Cell<i32>>,
     pub sleep_cycle_cell: Rc<Cell<i32>>,
+    pub tts_sleep_cycle_cell: Rc<Cell<i32>>,
     pub play_toggle_cell: Rc<Cell<bool>>,
     pub chapter_panel_cell: Rc<Cell<bool>>,
     pub chapter_select_cell: Rc<Cell<Option<usize>>>,
@@ -207,6 +208,12 @@ pub fn register(reader: &Reader) -> Callbacks {
         sc.set(if dir == "prev" { 2 } else { 1 });
     });
 
+    let tts_sleep_cycle_cell = Rc::new(Cell::new(0i32));
+    let tsc = tts_sleep_cycle_cell.clone();
+    reader.on_panel_tts_sleep_cycle(move |dir: SharedString| {
+        tsc.set(if dir == "prev" { 2 } else { 1 });
+    });
+
     let play_toggle_cell = Rc::new(Cell::new(false));
     let ppc = play_toggle_cell.clone();
     reader.on_play_pause_toggle(move || {
@@ -293,6 +300,7 @@ pub fn register(reader: &Reader) -> Callbacks {
         wifi_cycle_cell,
         bt_cycle_cell,
         sleep_cycle_cell,
+        tts_sleep_cycle_cell,
         play_toggle_cell,
         chapter_panel_cell: chapter.panel_cell,
         chapter_select_cell: chapter.select_cell,

@@ -71,6 +71,11 @@ export component Reader inherits Window {
     in-out property <string> wifi-connected-name: "";
     in-out property <string> bt-connected-name: "";
     in-out property <string> sleep-label: "Off";
+    // The panel SETTING label ("Off"/"15 min"/.../"end of chapter").
+    in-out property <string> tts-sleep-label: "Off";
+    // The ARMED display string ("Sleep 9:20 PM"/"Sleep ch. end"/"" when off).
+    // Drives the audio caption swap; empty reverts the caption to page info.
+    in-out property <string> sleep-timer-label: "";
     in-out property <bool> chapter-overlay-open: false;
     in-out property <int> current-chapter-idx: 0;
     in-out property <int> chapter-count: 1;
@@ -112,6 +117,7 @@ export component Reader inherits Window {
     callback panel-wifi-cycle(string);
     callback panel-bt-cycle(string);
     callback panel-sleep-cycle(string);
+    callback panel-tts-sleep-cycle(string);
     callback panel-text-align-toggle();
     callback panel-header-toggle();
     callback panel-check-updates();
@@ -210,6 +216,7 @@ export component Reader inherits Window {
         header-visible: root.header-visible;
         locked: root.audio-locked;
         title-overflow: root.title_overflow;
+        sleep-timer-label: root.sleep-timer-label;
         brand-green: root.brand-green;
         brand-red: root.brand-red;
         mode-toggle => { root.mode-toggle(); }
@@ -252,6 +259,7 @@ export component Reader inherits Window {
         wifi-connected-name: root.wifi-connected-name;
         bt-connected-name: root.bt-connected-name;
         sleep-label: root.sleep-label;
+        tts-sleep-label: root.tts-sleep-label;
         clock: root.clock;
         battery-pct: root.battery-pct;
         book-title: root.book-title;
@@ -288,6 +296,7 @@ export component Reader inherits Window {
         panel-wifi-cycle(s) => { root.panel-wifi-cycle(s); }
         panel-bt-cycle(s) => { root.panel-bt-cycle(s); }
         panel-sleep-cycle(s) => { root.panel-sleep-cycle(s); }
+        panel-tts-sleep-cycle(s) => { root.panel-tts-sleep-cycle(s); }
         panel-text-align-toggle => { root.panel-text-align-toggle(); }
         panel-header-toggle => { root.panel-header-toggle(); }
         panel-check-updates => { root.panel-check-updates(); }

@@ -34,12 +34,19 @@ pub fn process_audio_events(
                 // Clear any idle hint / notice now that playback is underway; the
                 // sentence band takes over the status line.
                 reader.set_status("".into());
+                // Arm the TTS sleep timer (fresh, or resume from a frozen
+                // remaining). No-op when the mode is Off.
+                crate::loop_run::tts_sleep::arm(st, reader);
                 ui_changed = true;
             }
             Event::Paused => {
                 reader.set_playing(false);
                 reader.set_paused(true);
                 reader.set_status("".into());
+                // Freeze a running countdown (move remaining out of the deadline
+                // so the per-frame poll cannot fire while paused). No-op when the
+                // timer is disarmed or in end-of-chapter mode.
+                crate::loop_run::tts_sleep::freeze(st);
                 ui_changed = true;
             }
             Event::Stopped => {
@@ -51,6 +58,8 @@ pub fn process_audio_events(
                 // raced the book-open restore (Cmd::Stop -> Stopped arrives after
                 // the saved cursor was set), leaving the page with no cursor and
                 // making Play resume from the page top instead of the saved line.
+                crate::loop_run::tts_sleep::disarm(st);
+                reader.set_sleep_timer_label("".into());
                 ui_changed = true;
             }
             Event::Ended => {
@@ -165,6 +174,21 @@ fn handle_audio_ended(st: &mut LoopState, reader: &Reader, cmd_tx: &Sender<Cmd>)
     let mut text_dirty = false;
 
     if matches!(st.view_mode, crate::ViewMode::Audio) {
+        // End-of-chapter sleep timer: pause at the chapter boundary instead of
+        // auto-advancing. Only in audio mode (whole-chapter playback); reading
+        // mode's per-page TTS is driven by PageBreak, not Ended.
+        if st.tts_sleep_armed
+            && matches!(
+                st.tts_sleep_mode,
+                crate::data::config::TtsSleepMode::EndOfChapter
+            )
+        {
+            best_effort_send(cmd_tx, Cmd::Pause);
+            crate::loop_run::tts_sleep::disarm(st);
+            reader.set_sleep_timer_label("".into());
+            log::info!("tts-sleep: end-of-chapter reached, pausing");
+            return (false, true);
+        }
         if st.current_chapter + 1 < st.chapter_count {
             let nc = st.current_chapter + 1;
             switch_chapter(

@@ -6,8 +6,8 @@
 //! end-of-chapter trigger are event-driven and live in app::events. This runs
 //! from run_loop right after render_and_present / alongside power::auto_sleep,
 //! mirroring that sibling timer.
-use crate::audio::Cmd;
 use crate::audio::glue::best_effort_send;
+use crate::audio::Cmd;
 use crate::loop_run::LoopContext;
 use crate::loop_state::LoopState;
 use crate::Reader;
@@ -25,21 +25,62 @@ pub fn tts_sleep_timer(st: &mut LoopState, ctx: &LoopContext, had_event: bool) {
 
     // R6: a touch restarts a running countdown. The label is the end-time, so
     // this repaints once - a discrete refresh on touch, not a per-second tick.
-    if had_event {
+    // Only while actually playing: a touch while paused must not restart a
+    // frozen countdown (the frozen remaining is restored on resume).
+    if had_event && ctx.reader.get_playing() {
         if let Some(dur) = st.tts_sleep_mode.duration() {
             st.tts_sleep_deadline = Some(now + dur);
             set_end_time_label(ctx.reader, dur);
         }
     }
 
-    // Timed fire.
+    // Fire only while playing. A frozen (paused) countdown holds its remaining
+    // for resume; firing it during the pause would disarm a timer the reader
+    // expects to resume from.
     if let Some(deadline) = st.tts_sleep_deadline {
-        if deadline <= now {
+        if deadline <= now && ctx.reader.get_playing() {
             best_effort_send(ctx.cmd_tx, Cmd::Pause);
             disarm(st);
             ctx.reader.set_sleep_timer_label("".into());
             log::info!("tts-sleep: timed deadline reached, pausing");
         }
+    }
+}
+
+/// Arm (or re-arm) the timer for the current mode. Called on `Event::Playing`
+/// (fresh arm, or resume from a frozen remaining) and on a panel mode change
+/// while already armed. Off disarms and clears the label; a timed mode paints
+/// the end-time caption once; end-of-chapter arms without a deadline.
+pub fn arm(st: &mut LoopState, reader: &Reader) {
+    use crate::data::config::TtsSleepMode;
+    match st.tts_sleep_mode {
+        TtsSleepMode::Off => {
+            disarm(st);
+            reader.set_sleep_timer_label("".into());
+        }
+        TtsSleepMode::EndOfChapter => {
+            st.tts_sleep_armed = true;
+            st.tts_sleep_deadline = None;
+            st.tts_sleep_paused_remaining = None;
+            reader.set_sleep_timer_label("Sleep ch. end".into());
+        }
+        timed => {
+            st.tts_sleep_armed = true;
+            let full = timed.duration().unwrap();
+            let dur = st.tts_sleep_paused_remaining.take().unwrap_or(full);
+            st.tts_sleep_deadline = Some(std::time::Instant::now() + dur);
+            set_end_time_label(reader, dur);
+        }
+    }
+}
+
+/// Freeze a running countdown on a user pause: move the remaining time out of
+/// the deadline so the per-frame poll cannot fire while paused. Resume (`arm`)
+/// restores it. A no-op for end-of-chapter (no deadline) and when not armed.
+pub fn freeze(st: &mut LoopState) {
+    if let Some(deadline) = st.tts_sleep_deadline.take() {
+        st.tts_sleep_paused_remaining =
+            Some(deadline.saturating_duration_since(std::time::Instant::now()));
     }
 }
 

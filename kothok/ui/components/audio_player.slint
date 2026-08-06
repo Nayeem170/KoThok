@@ -34,6 +34,9 @@ export component AudioPlayer inherits Rectangle {
     in property <bool> header-visible: true;
     in property <bool> locked: false;
     in property <bool> title-overflow: false;
+    // When non-empty, replaces the page-in-chapter caption (a sleep timer is
+    // armed). Empty reverts the caption. See mock.md (Option 1).
+    in property <string> sleep-timer-label: "";
     in property <color> brand-green: #006A4E;
     in property <color> brand-red: #F42A41;
 
@@ -256,7 +259,9 @@ export component AudioPlayer inherits Rectangle {
         visible: root.chapter-name-img-h == 0;
     }
     Text {
-        text: "Page " + root.chapter-page + " of " + root.chapter-page-count + " in chapter";
+        text: root.sleep-timer-label != ""
+            ? root.sleep-timer-label
+            : "Page " + root.chapter-page + " of " + root.chapter-page-count + " in chapter";
         color: #999999; font-size: 30px;
         horizontal-alignment: center; vertical-alignment: center;
         x: 140px; width: root.width - 280px;

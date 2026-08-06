@@ -66,6 +66,7 @@ pub(crate) use status::save_position_now;
 mod search;
 mod touch_dispatch;
 mod touch_release;
+pub(crate) mod tts_sleep;
 
 pub(super) enum LoopFlow {
     Normal,
@@ -170,6 +171,11 @@ pub fn run_loop(st: &mut LoopState, ctx: &mut LoopContext) {
         status::autosave_position(st, ctx);
 
         render_and_present(st, ctx, had_event, ui_changed, page_changed);
+
+        // Per-frame TTS sleep-timer poll (timed fire + touch reset). Runs after
+        // the present and alongside power::auto_sleep, mirroring that sibling
+        // timer. Event-driven arming/freeze/disarm live in app::events.
+        tts_sleep::tts_sleep_timer(st, ctx, had_event);
 
         match power::auto_sleep(st, ctx) {
             LoopFlow::Continue => continue,
