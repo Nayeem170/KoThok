@@ -94,25 +94,6 @@ pub fn render_and_present(
                     line_h: st.line_h,
                     style_runs: &st.state.style_runs,
                 };
-                let text_side = layout::pad_left() + layout::GUTTER_W + layout::GUTTER_PAD;
-                crate::rendering::highlight::paint_highlight_bands(
-                    &mut st.buffer,
-                    &pv,
-                    &st.marks,
-                    st.current_chapter,
-                    text_side,
-                    text_side,
-                );
-                if let Some(ref sel) = st.selection {
-                    crate::rendering::highlight::paint_selection_band(
-                        &mut st.buffer,
-                        &pv,
-                        sel.anchor,
-                        sel.head,
-                        text_side,
-                        text_side,
-                    );
-                }
                 composite_text(
                     &mut st.buffer,
                     &st.text_cache,
@@ -211,16 +192,6 @@ pub fn render_and_present(
                                 usize::MAX
                             },
                             st.sb_dragging && st.sb_drag_tab == ChapterTab::Words,
-                        );
-                    }
-                    ChapterTab::Marks => {
-                        crate::rendering::marks_list::paint_marks_list(
-                            &mut st.buffer,
-                            &st.marks,
-                            st.marks_scroll,
-                            st.body_px,
-                            st.armed_mark_idx,
-                            st.sb_dragging && st.sb_drag_tab == ChapterTab::Marks,
                         );
                     }
                 }

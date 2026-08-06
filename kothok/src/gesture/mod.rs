@@ -176,16 +176,6 @@ pub fn classify_swipe(swipe_dx: f32, swipe_dy: f32, threshold: f32, dt_ms: u128)
     SwipeDirection::None
 }
 
-pub fn classify_body_long_press(
-    press_dx: f32,
-    press_dy: f32,
-    cur_dx: f32,
-    cur_dy: f32,
-    dt_ms: u128,
-) -> bool {
-    dt_ms >= 500 && (cur_dx - press_dx).abs() <= 20.0 && (cur_dy - press_dy).abs() <= 20.0
-}
-
 pub fn picker_hit_test(
     dx: f32,
     dy: f32,

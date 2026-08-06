@@ -20,50 +20,41 @@ pub(super) fn handle_bookmark_set(st: &mut LoopState, reader: &Reader, cb: &Call
     if !reader.get_playing() {
         restore_cursor_line(st, reader, off);
     }
-    let excerpt = excerpt_for_offset(st, off);
-    let count = crate::data::mark::toggle_bookmark(
-        &mut st.marks,
-        st.current_chapter,
-        off,
-        excerpt,
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0),
-        st.current_page,
-    );
-    let is_set = st.marks.iter().any(|m| {
-        m.kind == crate::data::mark::MarkKind::Bookmark
-            && m.chapter == st.current_chapter
-            && m.start == off
-    });
-    if is_set {
+    let already_here = st
+        .bookmark
+        .map(|bm| bm.chapter == st.current_chapter && bm.offset == off)
+        .unwrap_or(false);
+    if already_here {
+        st.bookmark = None;
+        reader.set_has_bookmark(false);
+    } else {
         st.bookmark = Some(crate::Bookmark {
             chapter: st.current_chapter,
             page: st.current_page,
             offset: off,
         });
         reader.set_has_bookmark(true);
-    } else {
-        st.bookmark = None;
-        reader.set_has_bookmark(false);
     }
-    st.marks_dirty = true;
     let global_page = st
         .chapter_offsets
         .get(st.current_chapter)
         .copied()
         .unwrap_or(0)
         + st.current_page;
-    reader.set_status(format!("Bookmarked page {} ({} marks)", global_page + 1, count).into());
+    let msg = if st.bookmark.is_some() {
+        format!("Bookmarked page {}", global_page + 1)
+    } else {
+        "Bookmark removed".to_string()
+    };
+    reader.set_status(msg.into());
     info!(
-        "bookmark-set: ch={} pg={} off={} playing={} on_page={} count={}",
+        "bookmark-set: ch={} pg={} off={} playing={} on_page={} set={}",
         st.current_chapter + 1,
         st.current_page + 1,
         off,
         reader.get_playing(),
         cursor_on_page,
-        count,
+        st.bookmark.is_some(),
     );
     true
 }
@@ -75,31 +66,17 @@ fn first_text_row_offset_on_page(st: &LoopState) -> Option<usize> {
     crate::reader::first_text_row(&st.state, *s, *e).map(|(start, _)| start as usize)
 }
 
-fn excerpt_for_offset(st: &LoopState, off: usize) -> String {
-    let ch = match st.chapters.get(st.current_chapter) {
-        Some(c) => &c.body,
-        None => return String::new(),
-    };
-    if off >= ch.len() {
-        return String::new();
-    }
-    let rest = &ch[off..];
-    let line_end = rest.find('\n').unwrap_or(rest.len()).min(60);
-    let line = &rest[..line_end];
-    let trimmed = line.trim_start_matches(|c: char| c.is_whitespace() || c == '\u{200B}');
-    let word_end = trimmed
-        .find(|c: char| c.is_whitespace())
-        .unwrap_or(trimmed.len())
-        .min(40);
-    trimmed[..word_end].to_string()
-}
-
-pub(super) fn handle_bookmark_jump(st: &mut LoopState, _reader: &Reader, cb: &Callbacks) -> bool {
+pub(super) fn handle_bookmark_jump(
+    st: &mut LoopState,
+    reader: &Reader,
+    cb: &Callbacks,
+    cmd_tx: &std::sync::mpsc::Sender<crate::audio::Cmd>,
+    ctx: &mut crate::loop_state::LoopContext,
+) -> bool {
     if !cb.bookmark_jump_cell.replace(false) || st.picker_active {
         return false;
     }
-    cb.overlay_requested_tab_cell.set(2);
-    cb.chapter_panel_cell.set(true);
+    super::jump::jump_to_bookmark(st, reader, cmd_tx, ctx);
     true
 }
 

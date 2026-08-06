@@ -5,9 +5,7 @@ pub mod chapter_list;
 pub mod common;
 pub mod covers;
 pub mod fb;
-pub mod highlight;
 pub mod layout;
-pub mod marks_list;
 pub mod picker;
 pub mod render;
 #[cfg(feature = "screenshot")]

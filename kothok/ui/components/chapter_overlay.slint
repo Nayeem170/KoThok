@@ -105,33 +105,6 @@ export component ChapterOverlay inherits Rectangle {
                     vertical-alignment: center;
                 }
             }
-
-            TouchArea {
-                x: 2 * (root.tab-seg-w + root.tab-gap);
-                y: 0px;
-                width: root.tab-seg-w;
-                height: 76px;
-                clicked => {
-                    root.active-tab = 2;
-                    root.tab-switch(2);
-                }
-            }
-            Rectangle {
-                x: 2 * (root.tab-seg-w + root.tab-gap);
-                y: 0px;
-                width: root.tab-seg-w;
-                height: 76px;
-                background: root.active-tab == 2 ? root.brand-green : #e8e8e8;
-                border-radius: 38px;
-                Text {
-                    text: "Marks";
-                    color: root.active-tab == 2 ? #ffffff : #222222;
-                    font-size: root.tab-font-px;
-                    font-weight: 700;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                }
-            }
         }
 
         ActionButton {

@@ -6,7 +6,7 @@ pub fn tab_bar_geom(w: usize) -> (usize, usize, f32) {
     let font_px = (33.0 * s).round().max(22.0);
     let gap = (16.0 * s).round().max(8.0) as usize;
     let close_left = w.saturating_sub(99);
-    let run_max = (close_left - 23 - 16 - 2 * gap) / 3;
+    let run_max = (close_left - 23 - 16 - gap) / 2;
     let seg_w = run_max.min((240.0 * font_px / 33.0).round() as usize);
     (seg_w, gap, font_px)
 }
@@ -36,9 +36,9 @@ mod tests {
                 "{name} (w={w}): \"Chapters\" ({label_w}px) does not fit seg_w ({seg_w}px)"
             );
             assert!(
-                23 + 3 * seg_w + 2 * gap <= w - 99 - gap,
+                23 + 2 * seg_w + gap <= w - 99 - gap,
                 "{name} (w={w}): bar end ({}) does not clear close button (w-99={})",
-                23 + 3 * seg_w + 2 * gap,
+                23 + 2 * seg_w + gap,
                 w - 99 - gap,
             );
         }

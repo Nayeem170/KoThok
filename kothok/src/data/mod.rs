@@ -2,6 +2,5 @@
 // Copyright (c) 2026 Nayeem Bin Ahsan
 pub mod config;
 pub mod library;
-pub mod mark;
 pub mod persistence;
 pub mod word_index;

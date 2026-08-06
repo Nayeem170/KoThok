@@ -43,10 +43,6 @@ pub struct Callbacks {
     pub overlay_tab_switch_cell: Rc<Cell<i32>>,
     pub overlay_back_from_results_cell: Rc<Cell<bool>>,
     pub overlay_requested_tab_cell: Rc<Cell<i32>>,
-    pub mark_jump_cell: Rc<Cell<bool>>,
-    pub mark_jump_idx_cell: Rc<Cell<usize>>,
-    pub highlight_selection_cell: Rc<Cell<bool>>,
-    pub cancel_selection_cell: Rc<Cell<bool>>,
 }
 
 struct ChapterCells {
@@ -57,10 +53,6 @@ struct ChapterCells {
     tab_switch_cell: Rc<Cell<i32>>,
     back_from_results_cell: Rc<Cell<bool>>,
     requested_tab_cell: Rc<Cell<i32>>,
-    mark_jump_cell: Rc<Cell<bool>>,
-    mark_jump_idx_cell: Rc<Cell<usize>>,
-    highlight_selection_cell: Rc<Cell<bool>>,
-    cancel_selection_cell: Rc<Cell<bool>>,
 }
 
 fn register_chapter(reader: &Reader, panel_open_cell: &Rc<Cell<bool>>) -> ChapterCells {
@@ -71,10 +63,6 @@ fn register_chapter(reader: &Reader, panel_open_cell: &Rc<Cell<bool>>) -> Chapte
     let tab_switch_cell = Rc::new(Cell::new(-1i32));
     let back_from_results_cell = Rc::new(Cell::new(false));
     let requested_tab_cell = Rc::new(Cell::new(-1i32));
-    let mark_jump_cell = Rc::new(Cell::new(false));
-    let mark_jump_idx_cell = Rc::new(Cell::new(0usize));
-    let highlight_selection_cell = Rc::new(Cell::new(false));
-    let cancel_selection_cell = Rc::new(Cell::new(false));
 
     let cp_jtr = jump_cell.clone();
     let cp_jtr_panel = panel_open_cell.clone();
@@ -91,8 +79,6 @@ fn register_chapter(reader: &Reader, panel_open_cell: &Rc<Cell<bool>>) -> Chapte
 
     let cp_ch_sel = select_cell.clone();
     let cp_word_open = word_open_cell.clone();
-    let cp_mark_jump = mark_jump_cell.clone();
-    let cp_mark_jump_idx = mark_jump_idx_cell.clone();
     let reader_clone = reader.as_weak();
     reader.on_chapter_selected(move |idx: i32, tab: i32| {
         let Some(reader) = reader_clone.upgrade() else {
@@ -100,14 +86,6 @@ fn register_chapter(reader: &Reader, panel_open_cell: &Rc<Cell<bool>>) -> Chapte
         };
         if tab == 1 {
             cp_word_open.set(true);
-            return;
-        }
-        if tab == 2 {
-            cp_ch_panel.set(false);
-            reader.set_chapter_overlay_open(false);
-            reader.set_chapter_preview_idx(-1);
-            cp_mark_jump.set(true);
-            cp_mark_jump_idx.set(idx as usize);
             return;
         }
         let idx = idx as usize;
@@ -130,16 +108,6 @@ fn register_chapter(reader: &Reader, panel_open_cell: &Rc<Cell<bool>>) -> Chapte
         bfr.set(true);
     });
 
-    let hl = highlight_selection_cell.clone();
-    reader.on_highlight_selection(move || {
-        hl.set(true);
-    });
-
-    let cs = cancel_selection_cell.clone();
-    reader.on_cancel_selection(move || {
-        cs.set(true);
-    });
-
     ChapterCells {
         panel_cell,
         select_cell,
@@ -148,10 +116,6 @@ fn register_chapter(reader: &Reader, panel_open_cell: &Rc<Cell<bool>>) -> Chapte
         tab_switch_cell,
         back_from_results_cell,
         requested_tab_cell,
-        mark_jump_cell,
-        mark_jump_idx_cell,
-        highlight_selection_cell,
-        cancel_selection_cell,
     }
 }
 
@@ -349,9 +313,5 @@ pub fn register(reader: &Reader) -> Callbacks {
         overlay_tab_switch_cell: chapter.tab_switch_cell,
         overlay_back_from_results_cell: chapter.back_from_results_cell,
         overlay_requested_tab_cell: chapter.requested_tab_cell,
-        mark_jump_cell: chapter.mark_jump_cell,
-        mark_jump_idx_cell: chapter.mark_jump_idx_cell,
-        highlight_selection_cell: chapter.highlight_selection_cell,
-        cancel_selection_cell: chapter.cancel_selection_cell,
     }
 }

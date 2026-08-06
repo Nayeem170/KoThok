@@ -32,6 +32,58 @@ pub(super) fn handle_jump_to_reading(
     }
 }
 
+/// Jump straight to the single bookmark from the bookmark-jump header button.
+/// Switches chapter if needed, lands on the bookmark's page, restores the
+/// reading cursor, and - in audio mode - reloads + seeks the driver so the
+/// page-break markers match the new layout.
+pub(super) fn jump_to_bookmark(
+    st: &mut LoopState,
+    reader: &Reader,
+    cmd_tx: &std::sync::mpsc::Sender<Cmd>,
+    ctx: &mut LoopContext,
+) {
+    let Some(bm) = st.bookmark.filter(|b| b.chapter < st.chapters.len()) else {
+        reader.set_status("No bookmark".into());
+        return;
+    };
+    if bm.chapter != st.current_chapter {
+        switch_chapter(
+            st,
+            reader,
+            cmd_tx,
+            bm.chapter,
+            ChapterSwitchOpts {
+                to_last_page: false,
+                update_cursor: false,
+                load_audio: true,
+            },
+        );
+    }
+    st.current_page = page_for_bookmark(st, &bm);
+    apply_page(
+        reader,
+        &st.state,
+        st.current_page,
+        &st.chapter_offsets,
+        st.current_chapter,
+    );
+    restore_cursor_line(st, reader, bm.offset);
+    let base = st
+        .chapter_offsets
+        .get(st.current_chapter)
+        .copied()
+        .unwrap_or(0);
+    reader.set_saved_page((base + st.current_page) as i32);
+    if matches!(st.view_mode, ViewMode::Audio) {
+        let utts = crate::audio::glue::page_utterances(st.current_page, &st.state);
+        let target = crate::audio::glue::utterance_index_for_offset(&utts, bm.offset);
+        best_effort_send(cmd_tx, Cmd::Reload(utts));
+        best_effort_send(cmd_tx, Cmd::Seek(target));
+    }
+    st.text_dirty = true;
+    ctx.window.request_redraw();
+}
+
 fn jump_audio_bookmark(
     st: &mut LoopState,
     reader: &Reader,

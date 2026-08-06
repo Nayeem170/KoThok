@@ -55,9 +55,6 @@ pub(super) fn handle_search_release(
             }
             return true;
         }
-        ChapterTab::Marks => {
-            return true;
-        }
         ChapterTab::Chapters => {}
     }
     false
@@ -216,12 +213,6 @@ mod tests {
             search_result_selected: false,
             press_search_scroll: 0,
             press_search_results_scroll: 0,
-            marks: Vec::new(),
-            marks_dirty: false,
-            armed_mark_idx: usize::MAX,
-            mark_armed_this_press: false,
-            marks_scroll: 0,
-            press_marks_scroll: 0,
             sb_dragging: false,
             sb_drag_tab: Default::default(),
             sb_grab_offset: 0,
@@ -292,7 +283,6 @@ mod tests {
             text_cache: vec![Rgb565Pixel(0); w * h],
             zoom_active: false,
             zoom_center: (0, 0),
-            selection: None,
             voice_rx: None,
             voice_fetch_attempted: false,
             wifi_bt_list_rx: None,
