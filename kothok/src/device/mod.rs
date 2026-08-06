@@ -42,8 +42,15 @@ pub fn build_stamp() -> String {
                 .map(|d| d.as_secs())
                 .unwrap_or(0);
             // Truncated to six digits: enough to separate any two builds made
-            // within eleven days, short enough to sit on one line.
-            format!("{}k/{}", meta.len() / 1024, secs % 1_000_000)
+            // within eleven days, short enough to sit on one line. The kc: suffix
+            // is the compile-time kobo-core version (read from Cargo.lock by
+            // build.rs) so the stamp self-describes which dependency is compiled in.
+            format!(
+                "{}k/{} kc:{}",
+                meta.len() / 1024,
+                secs % 1_000_000,
+                env!("KOBO_CORE_REV")
+            )
         })
         .clone()
 }
