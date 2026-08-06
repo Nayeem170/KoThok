@@ -78,31 +78,6 @@ pub(super) fn autosave_position(st: &mut LoopState, ctx: &LoopContext) {
         return;
     }
     save_position_now(st, reader);
-    save_marks_if_dirty(st);
-}
-
-fn save_marks_if_dirty(st: &mut LoopState) {
-    save_marks_if_dirty_at(
-        &mut st.marks_dirty,
-        &st.current_book_path,
-        &st.marks,
-        crate::data::persistence::marks_path(),
-    );
-}
-
-pub(crate) fn save_marks_if_dirty_at(
-    dirty: &mut bool,
-    book_path: &str,
-    marks: &[crate::data::mark::Mark],
-    marks_file: &std::path::Path,
-) {
-    if !*dirty || book_path.is_empty() {
-        return;
-    }
-    match crate::data::persistence::save_marks(marks_file, book_path, marks) {
-        Ok(()) => *dirty = false,
-        Err(e) => log::error!("save_marks_if_dirty_at: {e}"),
-    }
 }
 
 pub(super) fn handle_exit_button(st: &mut LoopState, ctx: &LoopContext) -> LoopFlow {
@@ -327,24 +302,5 @@ pub(super) fn poll_offset_rx(st: &mut LoopState, ctx: &LoopContext) {
             );
             st.text_dirty = true;
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn failed_save_keeps_marks_dirty() {
-        let dir = std::env::temp_dir().join(format!(
-            "kothok_test_status_marks_dirty_{}",
-            std::process::id()
-        ));
-        let _ = std::fs::create_dir_all(&dir);
-        let bad_path = dir.join("no_such_dir").join("marks");
-        let mut dirty = true;
-        let marks: Vec<crate::data::mark::Mark> = Vec::new();
-        save_marks_if_dirty_at(&mut dirty, "/mnt/onboard/Test.epub", &marks, &bad_path);
-        assert!(dirty, "dirty must remain true when save fails");
     }
 }

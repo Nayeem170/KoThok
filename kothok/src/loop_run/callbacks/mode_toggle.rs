@@ -31,10 +31,6 @@ pub(super) fn process_mode_toggle(
             st.state.utterances.len(),
         );
         st.view_mode = new_mode;
-        if st.selection.is_some() {
-            st.selection = None;
-            reader.set_selection_active(false);
-        }
         info!(
             "mode-toggle: set_audio_mode({})",
             new_mode == ViewMode::Audio

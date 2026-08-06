@@ -218,9 +218,6 @@ pub(super) fn poll_and_dispatch_touch(st: &mut LoopState, ctx: &mut LoopContext)
                                         crate::loop_state::ChapterTab::Words => {
                                             (st.word_index.words.len(), st.search_scroll)
                                         }
-                                        crate::loop_state::ChapterTab::Marks => {
-                                            (st.marks.len(), st.marks_scroll)
-                                        }
                                         crate::loop_state::ChapterTab::Chapters => {
                                             (st.toc_rows.len(), st.chapter_scroll)
                                         }
@@ -263,10 +260,6 @@ pub(super) fn poll_and_dispatch_touch(st: &mut LoopState, ctx: &mut LoopContext)
                                                         st.search_scroll = new_scroll;
                                                         st.press_search_scroll = new_scroll;
                                                     }
-                                                    crate::loop_state::ChapterTab::Marks => {
-                                                        st.marks_scroll = new_scroll;
-                                                        st.press_marks_scroll = new_scroll;
-                                                    }
                                                     crate::loop_state::ChapterTab::Chapters => {
                                                         st.chapter_scroll = new_scroll;
                                                         st.press_chapter_scroll = new_scroll;
@@ -298,10 +291,6 @@ pub(super) fn poll_and_dispatch_touch(st: &mut LoopState, ctx: &mut LoopContext)
                                                             st.search_scroll = new_scroll;
                                                             st.press_search_scroll = new_scroll;
                                                         }
-                                                        crate::loop_state::ChapterTab::Marks => {
-                                                            st.marks_scroll = new_scroll;
-                                                            st.press_marks_scroll = new_scroll;
-                                                        }
                                                         crate::loop_state::ChapterTab::Chapters => {
                                                             st.chapter_scroll = new_scroll;
                                                             st.press_chapter_scroll = new_scroll;
@@ -318,10 +307,6 @@ pub(super) fn poll_and_dispatch_touch(st: &mut LoopState, ctx: &mut LoopContext)
                                                         crate::loop_state::ChapterTab::Words => {
                                                             st.search_scroll = new_scroll;
                                                             st.press_search_scroll = new_scroll;
-                                                        }
-                                                        crate::loop_state::ChapterTab::Marks => {
-                                                            st.marks_scroll = new_scroll;
-                                                            st.press_marks_scroll = new_scroll;
                                                         }
                                                         crate::loop_state::ChapterTab::Chapters => {
                                                             st.chapter_scroll = new_scroll;
@@ -427,18 +412,6 @@ pub(super) fn poll_and_dispatch_touch(st: &mut LoopState, ctx: &mut LoopContext)
                                     st.search_scroll = new_scroll;
                                     st.press_search_scroll = new_scroll;
                                 }
-                                crate::loop_state::ChapterTab::Marks => {
-                                    let item_count = st.marks.len();
-                                    let new_scroll = scrollbar_y_to_scroll(
-                                        dy as i32,
-                                        list_top,
-                                        list_bottom,
-                                        item_count,
-                                        st.sb_grab_offset,
-                                    );
-                                    st.marks_scroll = new_scroll;
-                                    st.press_marks_scroll = new_scroll;
-                                }
                                 crate::loop_state::ChapterTab::Chapters => {
                                     let item_count = st.toc_rows.len();
                                     let new_scroll = scrollbar_y_to_scroll(
@@ -482,14 +455,6 @@ pub(super) fn poll_and_dispatch_touch(st: &mut LoopState, ctx: &mut LoopContext)
                                             .clamp(0, max_scroll);
                                         st.search_scroll = raw;
                                     }
-                                    crate::loop_state::ChapterTab::Marks => {
-                                        let list_h =
-                                            ctx.h as i32 - CH_LIST_TOP - CH_LIST_BOTTOM_PAD;
-                                        let max_scroll = list_scroll_max(st.marks.len(), list_h);
-                                        let raw = (st.press_marks_scroll - swipe_dy as i32)
-                                            .clamp(0, max_scroll);
-                                        st.marks_scroll = raw;
-                                    }
                                     crate::loop_state::ChapterTab::Chapters => {
                                         let item_count = st.chapters.len();
                                         let list_h =
@@ -505,71 +470,11 @@ pub(super) fn poll_and_dispatch_touch(st: &mut LoopState, ctx: &mut LoopContext)
                             ctx.window.request_redraw();
                         }
                     } else {
-                        let (press_dx, press_dy) = to_display(st.press_x, st.press_y);
-                        if gesture::classify_body_long_press(
-                            press_dx,
-                            press_dy,
-                            dx,
-                            dy,
-                            now.duration_since(st.press_time).as_millis(),
-                        ) {
-                            if reader.get_chapter_overlay_open()
-                                && st.chapter_tab == crate::loop_state::ChapterTab::Marks
-                                && !st.search_results_active
-                            {
-                                let list_bottom = ctx.h as i32 - CH_LIST_BOTTOM_PAD;
-                                if let Some(idx) = crate::rendering::marks_list::marks_list_hit_test(
-                                    dy as i32,
-                                    st.marks_scroll,
-                                    st.marks.len(),
-                                    list_bottom,
-                                ) {
-                                    st.armed_mark_idx = idx;
-                                    st.mark_armed_this_press = true;
-                                    st.text_dirty = true;
-                                    ctx.window.request_redraw();
-                                }
-                            } else if !reader.get_chapter_overlay_open()
-                                && !st.panel_open
-                                && !st.picker_active
-                            {
-                                let started = st.chapters.get(st.current_chapter).and_then(|c| {
-                                    let pv = crate::rendering::text_overlay::PageView {
-                                        w: ctx.w,
-                                        h: ctx.h,
-                                        rows: &st.state.all_rows,
-                                        page: st.current_page,
-                                        pages: &st.state.pages,
-                                        content_top: PAD_TOP,
-                                        row_heights: &st.state.row_heights,
-                                        decoded_images: &st.state.decoded_images,
-                                        body_px: st.body_px,
-                                        head_px: st.head_px,
-                                        line_h: st.line_h,
-                                        style_runs: &st.state.style_runs,
-                                    };
-                                    crate::rendering::text_overlay::anchor_at_touch(
-                                        &pv,
-                                        press_dx as usize,
-                                        press_dy as usize,
-                                        c.body.as_str(),
-                                    )
-                                });
-                                if let Some((anchor, head)) = started {
-                                    st.selection =
-                                        Some(crate::loop_state::Selection { anchor, head });
-                                    reader.set_selection_active(true);
-                                    st.text_dirty = true;
-                                    ctx.window.request_redraw();
-                                }
-                            }
-                        } else {
-                            ctx.window.window().dispatch_event(
-                                slint::platform::WindowEvent::PointerMoved {
-                                    position: slint::LogicalPosition::new(dx, dy),
-                                },
-                            );
-                        }
+                        ctx.window.window().dispatch_event(
+                            slint::platform::WindowEvent::PointerMoved {
+                                position: slint::LogicalPosition::new(dx, dy),
+                            },
+                        );
                     }
                 }
                 if !st.frame_down {
