@@ -328,7 +328,25 @@ else {
     $devFile  = Get-Item -LiteralPath $binaryOnDevice
     $epoch    = [int64](New-TimeSpan -Start ([datetime]'1970-01-01Z').ToUniversalTime() `
                                      -End $devFile.LastWriteTimeUtc).TotalSeconds
-    $stamp    = "$([int64]($devFile.Length / 1024))k/$($epoch % 1000000)"
+    # kc: suffix must match the binary's own BUILD stamp, which build.rs bakes
+    # from the kobo-core version resolved in Cargo.lock (not the local git rev --
+    # the path patch is gone; kobo-core comes from crates.io). Same source, or
+    # the host print and the device BUILD line disagree.
+    $lockFile = Join-Path $PSScriptRoot "../Cargo.lock"
+    $kcVer    = "?"
+    if (Test-Path $lockFile) {
+        $want = $false
+        foreach ($ln in Get-Content -LiteralPath $lockFile) {
+            $t = $ln.Trim()
+            if ($t -eq "[[package]]") { $want = $false }
+            elseif ($t.StartsWith('name = "kobo-core"')) { $want = $true }
+            elseif ($want -and $t.StartsWith("version =")) {
+                $kcVer = ($t -replace '^version =\s*"([^"]*)".*', '$1')
+                break
+            }
+        }
+    }
+    $stamp    = "$([int64]($devFile.Length / 1024))k/$($epoch % 1000000) kc:$kcVer"
 
     Write-Host ""
     Write-Host "  ============================" -ForegroundColor Green
