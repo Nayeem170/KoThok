@@ -9,6 +9,7 @@ export component ContentArea inherits Rectangle {
     in property <bool> playing: false;
     in property <bool> play-enabled: false;
     in property <string> status: "";
+    in property <string> sleep-timer-label: "";
     in property <string> header-title: "";
     in property <image> book-title-img;
     in property <int> book-title-img-h: 0;
@@ -262,7 +263,8 @@ export component ContentArea inherits Rectangle {
             text: root.status != ""
                   ? root.status
                   : ((root.playing || root.nav-recent || root.has-navigated)
-                     ? ("Page " + (root.page + 1) + " of " + root.page-count)
+                     ? ("Page " + (root.page + 1) + " of " + root.page-count
+                        + (root.sleep-timer-label != "" ? " - " + root.sleep-timer-label : ""))
                      : (root.play-enabled
 ? "Swipe down: menu - double-tap: play - swipe: pages"
                          : "Connect WiFi & Bluetooth to play - swipe down: menu"));

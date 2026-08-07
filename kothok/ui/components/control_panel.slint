@@ -132,7 +132,7 @@ export component ControlPanel inherits Rectangle {
         }
     }
 
-    // Device mode: brightness, sleep, volume, wifi, bt.
+    // Device mode: brightness, auto-off, volume, wifi, bt.
     if root.picker-active : VerticalLayout {
         padding-left: 24px; padding-right: 24px;
         padding-top: 124px; padding-bottom: 24px;
@@ -168,7 +168,7 @@ export component ControlPanel inherits Rectangle {
         }
 
         SelectorRow {
-            label: "Sleep: " + root.sleep-label;
+            label: "Auto-off: " + root.sleep-label;
             on-state: true;
             connected: true;
             center-toggle: false;
@@ -498,6 +498,19 @@ export component ControlPanel inherits Rectangle {
         }
 
         SelectorRow {
+            label: "Sleep timer: " + root.tts-sleep-label;
+            on-state: true;
+            connected: true;
+            center-toggle: false;
+            brand-green: root.brand-green;
+            brand-red: root.brand-red;
+            bg-off: root.bg-off;
+            bg-pressed: root.bg-pressed;
+            prev => { root.panel-tts-sleep-cycle("prev"); }
+            next => { root.panel-tts-sleep-cycle("next"); }
+        }
+
+        SelectorRow {
             label: root.tts-voice-label;
             on-state: true;
             connected: true;
@@ -518,19 +531,6 @@ export component ControlPanel inherits Rectangle {
             value-text: (root.tts-speed == 50 ? "1.0x" : (root.tts-speed > 50 ? "+" : "") + (root.tts-speed - 50) * 2 + "%");
             fill-frac: root.tts-speed / 100.0;
             set-frac(f) => { root.panel-frac(1, f); }
-        }
-
-        SelectorRow {
-            label: "Sleep: " + root.tts-sleep-label;
-            on-state: true;
-            connected: true;
-            center-toggle: false;
-            brand-green: root.brand-green;
-            brand-red: root.brand-red;
-            bg-off: root.bg-off;
-            bg-pressed: root.bg-pressed;
-            prev => { root.panel-tts-sleep-cycle("prev"); }
-            next => { root.panel-tts-sleep-cycle("next"); }
         }
 
         Rectangle { vertical-stretch: 1; }
