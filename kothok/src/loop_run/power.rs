@@ -381,3 +381,34 @@ pub(super) fn auto_sleep(st: &mut LoopState, ctx: &mut LoopContext) -> LoopFlow 
     }
     LoopFlow::Normal
 }
+
+/// Put the device to sleep because the TTS sleep timer fired. Auto-off is
+/// suppressed while audio plays, so the bedtime sleep is the timer's job: this
+/// is the same transition as the reading-mode sleep button (cover + frontlight
+/// off + Stop + radios off). Audio mode switches to reading first so the tested
+/// reading sleep/wake path restores the view on wake; the book position is
+/// saved either way.
+pub(super) fn sleep_from_timer(st: &mut LoopState, ctx: &mut LoopContext) {
+    let reader = ctx.reader;
+    let cb = ctx.cb;
+    if st.view_mode == crate::ViewMode::Audio {
+        st.view_mode = crate::ViewMode::Reading;
+        reader.set_audio_mode(false);
+    }
+    if st.panel_open {
+        st.panel_open = false;
+        cb.panel_open_cell.set(false);
+        reader.set_panel_open(false);
+    }
+    if reader.get_chapter_overlay_open() {
+        reader.set_chapter_overlay_open(false);
+        reader.set_chapter_preview_idx(-1);
+        reader.set_chapter_pending(-1);
+    }
+    st.saved_brightness = enter_sleep(st, ctx, st.picker_active);
+    st.system_state = SystemState::Asleep {
+        from_picker: st.picker_active,
+    };
+    info!("SLEEP (tts sleep timer; swipe-up to wake)");
+    st.last_activity = std::time::Instant::now();
+}

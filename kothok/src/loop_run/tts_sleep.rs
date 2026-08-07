@@ -6,8 +6,6 @@
 //! end-of-chapter trigger are event-driven and live in app::events. This runs
 //! from run_loop right after render_and_present / alongside power::auto_sleep,
 //! mirroring that sibling timer.
-use crate::audio::glue::best_effort_send;
-use crate::audio::Cmd;
 use crate::loop_run::LoopContext;
 use crate::loop_state::LoopState;
 use crate::Reader;
@@ -36,13 +34,15 @@ pub fn tts_sleep_timer(st: &mut LoopState, ctx: &LoopContext, had_event: bool) {
 
     // Fire only while playing. A frozen (paused) countdown holds its remaining
     // for resume; firing it during the pause would disarm a timer the reader
-    // expects to resume from.
+    // expects to resume from. On fire the device is put to sleep (auto-off is
+    // suppressed while audio plays), via the sleep_requested flag the run loop
+    // drains into power::sleep_from_timer.
     if let Some(deadline) = st.tts_sleep_deadline {
         if deadline <= now && ctx.reader.get_playing() {
-            best_effort_send(ctx.cmd_tx, Cmd::Pause);
             disarm(st);
             ctx.reader.set_sleep_timer_label("".into());
-            log::info!("tts-sleep: timed deadline reached, pausing");
+            st.sleep_requested = true;
+            log::info!("tts-sleep: timed deadline reached, requesting sleep");
         }
     }
 }

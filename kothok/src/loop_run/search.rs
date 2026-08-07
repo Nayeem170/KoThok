@@ -246,6 +246,7 @@ mod tests {
             tts_sleep_armed: false,
             tts_sleep_deadline: None,
             tts_sleep_paused_remaining: None,
+            sleep_requested: false,
             prev_down: false,
             frame_down: false,
             frame_x: 0,

@@ -183,10 +183,10 @@ fn handle_audio_ended(st: &mut LoopState, reader: &Reader, cmd_tx: &Sender<Cmd>)
                 crate::data::config::TtsSleepMode::EndOfChapter
             )
         {
-            best_effort_send(cmd_tx, Cmd::Pause);
             crate::loop_run::tts_sleep::disarm(st);
             reader.set_sleep_timer_label("".into());
-            log::info!("tts-sleep: end-of-chapter reached, pausing");
+            st.sleep_requested = true;
+            log::info!("tts-sleep: end-of-chapter reached, requesting sleep");
             return (false, true);
         }
         if st.current_chapter + 1 < st.chapter_count {

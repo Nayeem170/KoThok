@@ -177,6 +177,15 @@ pub fn run_loop(st: &mut LoopState, ctx: &mut LoopContext) {
         // timer. Event-driven arming/freeze/disarm live in app::events.
         tts_sleep::tts_sleep_timer(st, ctx, had_event);
 
+        // Drain a sleep request raised by the TTS sleep timer (timed deadline
+        // or end-of-chapter). Auto-off is suppressed while audio plays, so the
+        // timer owns the bedtime device-sleep itself.
+        if st.sleep_requested {
+            st.sleep_requested = false;
+            power::sleep_from_timer(st, ctx);
+            continue;
+        }
+
         match power::auto_sleep(st, ctx) {
             LoopFlow::Continue => continue,
             LoopFlow::Break => {
