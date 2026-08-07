@@ -178,8 +178,10 @@ pub fn run_loop(st: &mut LoopState, ctx: &mut LoopContext) {
         tts_sleep::tts_sleep_timer(st, ctx, had_event);
 
         // Drain a sleep request raised by the TTS sleep timer (timed deadline
-        // or end-of-chapter). Auto-off is suppressed while audio plays, so the
-        // timer owns the bedtime device-sleep itself.
+        // or end-of-chapter). Auto-off's activity clock is refreshed every tick
+        // while audio plays, so it can never elapse during playback - the timer
+        // owns the bedtime device-sleep itself. The Awake-only guard lives in
+        // sleep_from_timer (the entry point).
         if st.sleep_requested {
             st.sleep_requested = false;
             power::sleep_from_timer(st, ctx);

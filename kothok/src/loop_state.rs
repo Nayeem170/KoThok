@@ -164,8 +164,9 @@ pub struct LoopState {
     pub tts_sleep_deadline: Option<Instant>,
     pub tts_sleep_paused_remaining: Option<std::time::Duration>,
     /// Set by the TTS sleep timer (timed deadline or end-of-chapter) to ask the
-    /// run loop to put the device to sleep. Auto-off is suppressed while audio
-    /// plays, so the timer owns the bedtime sleep itself; the loop drains this
+    /// run loop to put the device to sleep. Auto-off's activity clock is
+    /// refreshed every tick while audio plays, so it can never elapse during
+    /// playback - the timer owns the bedtime sleep itself; the loop drains this
     /// flag into power::sleep_from_timer once per frame.
     pub sleep_requested: bool,
 

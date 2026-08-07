@@ -382,13 +382,24 @@ pub(super) fn auto_sleep(st: &mut LoopState, ctx: &mut LoopContext) -> LoopFlow 
     LoopFlow::Normal
 }
 
-/// Put the device to sleep because the TTS sleep timer fired. Auto-off is
-/// suppressed while audio plays, so the bedtime sleep is the timer's job: this
-/// is the same transition as the reading-mode sleep button (cover + frontlight
-/// off + Stop + radios off). Audio mode switches to reading first so the tested
-/// reading sleep/wake path restores the view on wake; the book position is
-/// saved either way.
+/// Put the device to sleep because the TTS sleep timer fired. Auto-off's
+/// activity clock is refreshed every loop tick while audio plays
+/// (`power.rs:291-293`), so it can never elapse during playback - the bedtime
+/// sleep is the timer's job. This is the same transition as the reading-mode
+/// sleep button (cover + frontlight off + Stop + radios off). Audio mode
+/// switches to reading first so the tested reading sleep/wake path restores the
+/// view on wake; the book position is saved either way.
+///
+/// Entry-point guard: only sleep when Awake. A request raised while Asleep is a
+/// stale re-fire (no double enter_sleep); one raised while Locked is deferred to
+/// auto_sleep's lock-timeout, because enter_sleep during a lock captures the
+/// lock's zero frontlight and would wake to a dark screen. This puts the
+/// no-double-sleep property at the entry point rather than relying on every
+/// setter to pre-check.
 pub(super) fn sleep_from_timer(st: &mut LoopState, ctx: &mut LoopContext) {
+    if !matches!(st.system_state, SystemState::Awake) {
+        return;
+    }
     let reader = ctx.reader;
     let cb = ctx.cb;
     if st.view_mode == crate::ViewMode::Audio {
