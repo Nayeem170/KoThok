@@ -260,7 +260,7 @@ export component AudioPlayer inherits Rectangle {
     }
     Text {
         text: "Page " + root.chapter-page + " of " + root.chapter-page-count + " in chapter";
-        color: #999999; font-size: 30px;
+        color: #333333; font-size: 30px;
         horizontal-alignment: center; vertical-alignment: center;
         x: 140px; width: root.width - 280px;
         y: root.disk-y + root.disk-box + 150px;
@@ -271,7 +271,7 @@ export component AudioPlayer inherits Rectangle {
     // a timer is armed (empty hides the line).
     Text {
         text: root.sleep-timer-label;
-        color: #999999; font-size: 30px;
+        color: #333333; font-size: 30px;
         horizontal-alignment: center; vertical-alignment: center;
         x: 140px; width: root.width - 280px;
         y: root.disk-y + root.disk-box + 195px;
