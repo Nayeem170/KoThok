@@ -42,7 +42,7 @@ pub fn tts_sleep_timer(st: &mut LoopState, ctx: &LoopContext, had_event: bool) {
     if let Some(deadline) = st.tts_sleep_deadline {
         if deadline <= now && ctx.reader.get_playing() {
             disarm(st);
-            ctx.reader.set_sleep_timer_label("".into());
+            set_sleep_label(ctx.reader, "");
             st.sleep_requested = true;
             log::info!("tts-sleep: timed deadline reached, requesting sleep");
         }
@@ -58,13 +58,13 @@ pub fn arm(st: &mut LoopState, reader: &Reader) {
     match st.tts_sleep_mode {
         TtsSleepMode::Off => {
             disarm(st);
-            reader.set_sleep_timer_label("".into());
+            set_sleep_label(reader, "");
         }
         TtsSleepMode::EndOfChapter => {
             st.tts_sleep_armed = true;
             st.tts_sleep_deadline = None;
             st.tts_sleep_paused_remaining = None;
-            reader.set_sleep_timer_label("Sleep ch. end".into());
+            set_sleep_label(reader, "Sleep ch. end");
         }
         timed => {
             st.tts_sleep_armed = true;
@@ -93,10 +93,26 @@ pub fn disarm(st: &mut LoopState) {
     st.tts_sleep_paused_remaining = None;
 }
 
+/// Set the sleep-timer display text in both forms: the string (the reading
+/// footer renders it as Slint Text) and a pre-rendered image (the audio caption
+/// - Slint Text does not render in the audio body on device). Empty clears both.
+pub fn set_sleep_label(reader: &Reader, text: &str) {
+    reader.set_sleep_timer_label(text.into());
+    if text.is_empty() {
+        reader.set_sleep_caption_img(slint::Image::default());
+        reader.set_sleep_caption_armed(false);
+        return;
+    }
+    let max_w = crate::w().saturating_sub(280).max(120);
+    let (img, _) = crate::rendering::render::text_image(text, 30.0, max_w, 1);
+    reader.set_sleep_caption_img(img);
+    reader.set_sleep_caption_armed(true);
+}
+
 /// Paint the end-time label once: the locale-correct clock advanced by the
 /// countdown duration.
 pub fn set_end_time_label(reader: &Reader, dur: std::time::Duration) {
-    reader.set_sleep_timer_label(end_time_string(dur).into());
+    set_sleep_label(reader, &end_time_string(dur));
 }
 
 fn end_time_string(dur: std::time::Duration) -> String {

@@ -59,7 +59,7 @@ pub fn process_audio_events(
                 // the saved cursor was set), leaving the page with no cursor and
                 // making Play resume from the page top instead of the saved line.
                 crate::loop_run::tts_sleep::disarm(st);
-                reader.set_sleep_timer_label("".into());
+                crate::loop_run::tts_sleep::set_sleep_label(reader, "");
                 ui_changed = true;
             }
             Event::Ended => {
@@ -184,7 +184,7 @@ fn handle_audio_ended(st: &mut LoopState, reader: &Reader, cmd_tx: &Sender<Cmd>)
             )
         {
             crate::loop_run::tts_sleep::disarm(st);
-            reader.set_sleep_timer_label("".into());
+            crate::loop_run::tts_sleep::set_sleep_label(reader, "");
             st.sleep_requested = true;
             log::info!("tts-sleep: end-of-chapter reached, requesting sleep");
             return (false, true);

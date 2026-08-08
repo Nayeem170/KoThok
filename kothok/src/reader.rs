@@ -91,6 +91,12 @@ pub fn apply_page(
     // redundant, so the disk caption is scoped to the current chapter.
     reader.set_chapter_page((page + 1) as i32);
     reader.set_chapter_page_count(state.pages.len().max(1) as i32);
+    // Pre-render the disk caption as an image: Slint Text does not render in
+    // the audio body on device.
+    let caption = format!("Page {} of {} in chapter", page + 1, state.pages.len().max(1));
+    let (caption_img, _) =
+        crate::rendering::render::text_image(&caption, 30.0, crate::w().saturating_sub(280).max(120), 1);
+    reader.set_page_info_img(caption_img);
     reader.set_current_chapter_idx(current_chapter as i32);
     if let Some((cs, ce)) = v.cursor {
         reader.set_cur_start(cs);

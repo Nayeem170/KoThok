@@ -74,8 +74,14 @@ export component Reader inherits Window {
     // The panel SETTING label ("Off"/"15 min"/.../"end of chapter").
     in-out property <string> tts-sleep-label: "Off";
     // The ARMED display string ("Sleep 9:20 PM"/"Sleep ch. end"/"" when off).
-    // Drives the audio caption swap; empty reverts the caption to page info.
+    // Drives the reading footer (content.slint); empty reverts it to page info.
     in-out property <string> sleep-timer-label: "";
+    // Pre-rendered captions for the audio screen (Slint Text does not render in
+    // the audio body on device). page-info-img always; sleep-caption-img + armed
+    // gate the sleep line.
+    in-out property <image> page-info-img;
+    in-out property <image> sleep-caption-img;
+    in-out property <bool> sleep-caption-armed: false;
     in-out property <bool> chapter-overlay-open: false;
     in-out property <int> current-chapter-idx: 0;
     in-out property <int> chapter-count: 1;
@@ -217,7 +223,9 @@ export component Reader inherits Window {
         header-visible: root.header-visible;
         locked: root.audio-locked;
         title-overflow: root.title_overflow;
-        sleep-timer-label: root.sleep-timer-label;
+        page-info-img: root.page-info-img;
+        sleep-caption-img: root.sleep-caption-img;
+        sleep-caption-armed: root.sleep-caption-armed;
         brand-green: root.brand-green;
         brand-red: root.brand-red;
         mode-toggle => { root.mode-toggle(); }

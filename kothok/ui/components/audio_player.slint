@@ -34,9 +34,12 @@ export component AudioPlayer inherits Rectangle {
     in property <bool> header-visible: true;
     in property <bool> locked: false;
     in property <bool> title-overflow: false;
-    // Sleep-timer end-time ("Sleep H:MM PM" / "Sleep ch. end"). Shown on its own
-    // line below the page-in-chapter caption while armed; empty hides the line.
-    in property <string> sleep-timer-label: "";
+    // Page-in-chapter and sleep-timer captions, pre-rendered as images (Slint
+    // Text does not draw in the audio body on device; Images do - same approach
+    // as the chapter name and book title). sleep-caption-armed gates line 2.
+    in property <image> page-info-img;
+    in property <image> sleep-caption-img;
+    in property <bool> sleep-caption-armed: false;
     in property <color> brand-green: #006A4E;
     in property <color> brand-red: #F42A41;
 
@@ -258,26 +261,25 @@ export component AudioPlayer inherits Rectangle {
         overflow: elide;
         visible: root.chapter-name-img-h == 0;
     }
-    Text {
-        text: "Page " + root.chapter-page + " of " + root.chapter-page-count + " in chapter";
-        color: #333333; font-size: 30px;
-        horizontal-alignment: center; vertical-alignment: center;
+    Image {
+        source: root.page-info-img;
         x: 140px; width: root.width - 280px;
         y: root.disk-y + root.disk-box + 150px;
         height: 38px;
-        overflow: elide;
+        image-fit: contain;
+        horizontal-alignment: center;
+        vertical-alignment: center;
     }
-    // Sleep-timer end-time on its own line below the page info, shown only while
-    // a timer is armed (empty hides the line).
-    Text {
-        text: root.sleep-timer-label;
-        color: #333333; font-size: 30px;
-        horizontal-alignment: center; vertical-alignment: center;
+    // Sleep-timer end-time, pre-rendered; shown only while a timer is armed.
+    Image {
+        source: root.sleep-caption-img;
         x: 140px; width: root.width - 280px;
         y: root.disk-y + root.disk-box + 195px;
         height: 38px;
-        overflow: elide;
-        visible: root.sleep-timer-label != "";
+        image-fit: contain;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        visible: root.sleep-caption-armed;
     }
 
     // Footer: mock 148px -> 371px.
