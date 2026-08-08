@@ -167,7 +167,8 @@ pub struct LoopState {
     /// run loop to put the device to sleep. Auto-off's activity clock is
     /// refreshed every tick while audio plays, so it can never elapse during
     /// playback - the timer owns the bedtime sleep itself; the loop drains this
-    /// flag into power::sleep_from_timer once per frame.
+    /// flag into sleep::sleep_from_timer once per frame (Awake -> sleep, Locked
+    /// -> pause, Asleep -> no-op).
     pub sleep_requested: bool,
 
     pub prev_down: bool,

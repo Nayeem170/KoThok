@@ -61,6 +61,7 @@ mod callbacks;
 mod link_nav;
 mod picker;
 mod power;
+mod sleep;
 mod status;
 pub(crate) use status::save_position_now;
 mod search;
@@ -180,11 +181,11 @@ pub fn run_loop(st: &mut LoopState, ctx: &mut LoopContext) {
         // Drain a sleep request raised by the TTS sleep timer (timed deadline
         // or end-of-chapter). Auto-off's activity clock is refreshed every tick
         // while audio plays, so it can never elapse during playback - the timer
-        // owns the bedtime device-sleep itself. The Awake-only guard lives in
-        // sleep_from_timer (the entry point).
+        // owns the bedtime device-sleep itself. sleep_from_timer is state-aware
+        // (Awake -> full sleep; Locked -> pause audio only; Asleep -> no-op).
         if st.sleep_requested {
             st.sleep_requested = false;
-            power::sleep_from_timer(st, ctx);
+            sleep::sleep_from_timer(st, ctx);
             continue;
         }
 
