@@ -55,7 +55,11 @@ pub(super) fn handle_tts_sleep_cycle(
     // mode is meaningless for the new one.
     st.tts_sleep_paused_remaining = None;
     reader.set_tts_sleep_label(SharedString::from(mode.label()));
-    if st.tts_sleep_armed {
+    // Arm immediately when audio is playing: a mode change off->timed mid-playback
+    // would otherwise wait for the next Event::Playing (pause/resume), so the
+    // caption would never appear. When not playing, arming is deferred to the
+    // next Event::Playing, which reads the mode just set.
+    if reader.get_playing() {
         crate::loop_run::tts_sleep::arm(st, reader);
     }
     log::info!("panel: tts-sleep cycle to {}", mode.label());
