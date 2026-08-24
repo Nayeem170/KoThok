@@ -166,9 +166,9 @@ pub struct LoopState {
     /// Set by the TTS sleep timer (timed deadline) to ask the run loop to put
     /// the device to sleep. Auto-off's activity clock is refreshed every tick
     /// while audio plays, so it can never elapse during playback - the timer
-    /// owns the bedtime sleep itself; the loop drains this
-    /// flag into sleep::sleep_from_timer once per frame (Awake -> sleep, Locked
-    /// -> pause, Asleep -> no-op).
+    /// owns the bedtime sleep itself; the loop drains this flag into
+    /// sleep::sleep_from_timer once per frame (Awake and Locked alike ->
+    /// device sleep keeping the current view; Asleep -> no-op).
     pub sleep_requested: bool,
 
     pub prev_down: bool,

@@ -38,8 +38,8 @@ pub fn tts_sleep_timer(st: &mut LoopState, ctx: &LoopContext, had_event: bool) {
     // expects to resume from. On fire the device is put to sleep (auto-off's
     // activity clock is refreshed every tick while audio plays, so it can never
     // elapse during playback), via the sleep_requested flag the run loop drains
-    // into sleep::sleep_from_timer (Awake -> device sleep; Locked -> pause audio
-    // only; Asleep -> no-op).
+    // into sleep::sleep_from_timer (Awake and Locked alike -> device sleep,
+    // keeping the current view; Asleep -> no-op).
     if let Some(deadline) = st.tts_sleep_deadline {
         if deadline <= now && ctx.reader.get_playing() {
             disarm(st);

@@ -181,8 +181,8 @@ pub fn run_loop(st: &mut LoopState, ctx: &mut LoopContext) {
         // Drain a sleep request raised by the TTS sleep timer (timed
         // deadline). Auto-off's activity clock is refreshed every tick
         // while audio plays, so it can never elapse during playback - the timer
-        // owns the bedtime device-sleep itself. sleep_from_timer is state-aware
-        // (Awake -> full sleep; Locked -> pause audio only; Asleep -> no-op).
+        // owns the bedtime device-sleep itself. sleep_from_timer sleeps from
+        // every system state, keeping the current view (Asleep -> no-op).
         if st.sleep_requested {
             st.sleep_requested = false;
             sleep::sleep_from_timer(st, ctx);
