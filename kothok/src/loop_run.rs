@@ -178,8 +178,8 @@ pub fn run_loop(st: &mut LoopState, ctx: &mut LoopContext) {
         // timer. Event-driven arming/freeze/disarm live in app::events.
         tts_sleep::tts_sleep_timer(st, ctx, had_event);
 
-        // Drain a sleep request raised by the TTS sleep timer (timed deadline
-        // or end-of-chapter). Auto-off's activity clock is refreshed every tick
+        // Drain a sleep request raised by the TTS sleep timer (timed
+        // deadline). Auto-off's activity clock is refreshed every tick
         // while audio plays, so it can never elapse during playback - the timer
         // owns the bedtime device-sleep itself. sleep_from_timer is state-aware
         // (Awake -> full sleep; Locked -> pause audio only; Asleep -> no-op).

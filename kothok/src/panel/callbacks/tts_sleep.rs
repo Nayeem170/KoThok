@@ -8,15 +8,15 @@ use crate::data::config::{AppConfig, TtsSleepMode};
 use crate::loop_state::LoopState;
 use crate::Reader;
 
-/// The six sleep-timer modes in cycle order. `Off` is first so a fresh reader
-/// starts there, and forward/back cycle wraps around the ends.
-const MODES: [TtsSleepMode; 6] = [
+/// The five sleep-timer modes in cycle order. `Off` is first so a fresh reader
+/// starts there, and forward/back cycle wraps around the ends. Timed-only by
+/// design: one countdown, identical behaviour in reading and audio mode.
+const MODES: [TtsSleepMode; 5] = [
     TtsSleepMode::Off,
     TtsSleepMode::Mins15,
     TtsSleepMode::Mins30,
     TtsSleepMode::Mins45,
     TtsSleepMode::Mins60,
-    TtsSleepMode::EndOfChapter,
 ];
 
 /// Cycle the TTS sleep-timer mode. Global setting (not per-book): the timer is

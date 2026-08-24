@@ -6,8 +6,8 @@
 //! the lock's zero frontlight and would wake dark.
 use super::*;
 
-/// Drain a `sleep_requested` flag raised by the TTS sleep timer (timed deadline
-/// or end-of-chapter). Auto-off's activity clock is refreshed every tick while
+/// Drain a `sleep_requested` flag raised by the TTS sleep timer (timed
+/// deadline). Auto-off's activity clock is refreshed every tick while
 /// audio plays (`power.rs:291-293`), so it can never elapse during playback -
 /// the bedtime sleep is the timer's job.
 ///

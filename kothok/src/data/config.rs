@@ -48,10 +48,10 @@ const TTS_RATE_DEFAULT: i32 = 60;
 const VOLUME_DEFAULT: i32 = 100;
 const BRIGHTNESS_DEFAULT: i32 = 50;
 
-/// TTS sleep-timer mode. Pauses audio only (independent of the device
-/// auto-sleep, which sleeps the whole device). Persisted via from_key/as_key
-/// and mirrored into LoopState so the audio-event handlers - which take `st`,
-/// not `cfg` - can read it.
+/// TTS sleep-timer mode. One setting, one countdown, identical in both modes;
+/// on expiry the device sleeps (Awake) or the audio pauses (audio-mode lock).
+/// Persisted via from_key/as_key and mirrored into LoopState so the
+/// audio-event handlers - which take `st`, not `cfg` - can read it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum TtsSleepMode {
     #[default]
@@ -60,13 +60,13 @@ pub enum TtsSleepMode {
     Mins30,
     Mins45,
     Mins60,
-    EndOfChapter,
 }
 
 impl TtsSleepMode {
     /// Recover any unknown / hand-edited key to Off (safe: timer off). This is
     /// an explicit, tested recovery - it does NOT silently trap like
-    /// PanelTransition::from_key's `_ => PanelTransition::default()`.
+    /// PanelTransition::from_key's `_ => PanelTransition::default()`. The
+    /// legacy "eoc" key (dropped end-of-chapter mode) lands here too.
     pub fn from_key(s: &str) -> Self {
         match s {
             "off" => Self::Off,
@@ -74,7 +74,6 @@ impl TtsSleepMode {
             "30" => Self::Mins30,
             "45" => Self::Mins45,
             "60" => Self::Mins60,
-            "eoc" => Self::EndOfChapter,
             _ => Self::Off,
         }
     }
@@ -86,14 +85,13 @@ impl TtsSleepMode {
             Self::Mins30 => "30",
             Self::Mins45 => "45",
             Self::Mins60 => "60",
-            Self::EndOfChapter => "eoc",
         }
     }
 
-    /// Countdown duration for timed modes; None for Off and end-of-chapter.
+    /// Countdown duration for timed modes; None for Off.
     pub fn duration(self) -> Option<std::time::Duration> {
         match self {
-            Self::Off | Self::EndOfChapter => None,
+            Self::Off => None,
             Self::Mins15 => Some(std::time::Duration::from_secs(15 * 60)),
             Self::Mins30 => Some(std::time::Duration::from_secs(30 * 60)),
             Self::Mins45 => Some(std::time::Duration::from_secs(45 * 60)),
@@ -109,7 +107,6 @@ impl TtsSleepMode {
             Self::Mins30 => "30 min",
             Self::Mins45 => "45 min",
             Self::Mins60 => "60 min",
-            Self::EndOfChapter => "end of chapter",
         }
     }
 }
@@ -497,7 +494,6 @@ mod tests {
             TtsSleepMode::Mins30,
             TtsSleepMode::Mins45,
             TtsSleepMode::Mins60,
-            TtsSleepMode::EndOfChapter,
         ] {
             let p = tmp_path("tts_sleep");
             let cfg = AppConfig {
@@ -521,9 +517,17 @@ mod tests {
     }
 
     #[test]
+    fn tts_sleep_mode_legacy_eoc_key_recovers_to_off() {
+        let p = tmp_path("tts_sleep_eoc");
+        std::fs::write(&p, "tts_sleep=eoc\n").unwrap();
+        let cfg = load_config_from_base(&p, 36);
+        assert_eq!(cfg.tts_sleep_mode, TtsSleepMode::Off, "legacy eoc -> Off");
+        let _ = std::fs::remove_file(&p);
+    }
+
+    #[test]
     fn tts_sleep_mode_duration() {
         assert_eq!(TtsSleepMode::Off.duration(), None);
-        assert_eq!(TtsSleepMode::EndOfChapter.duration(), None);
         assert_eq!(
             TtsSleepMode::Mins15.duration(),
             Some(std::time::Duration::from_secs(15 * 60))

@@ -163,10 +163,10 @@ pub struct LoopState {
     pub tts_sleep_armed: bool,
     pub tts_sleep_deadline: Option<Instant>,
     pub tts_sleep_paused_remaining: Option<std::time::Duration>,
-    /// Set by the TTS sleep timer (timed deadline or end-of-chapter) to ask the
-    /// run loop to put the device to sleep. Auto-off's activity clock is
-    /// refreshed every tick while audio plays, so it can never elapse during
-    /// playback - the timer owns the bedtime sleep itself; the loop drains this
+    /// Set by the TTS sleep timer (timed deadline) to ask the run loop to put
+    /// the device to sleep. Auto-off's activity clock is refreshed every tick
+    /// while audio plays, so it can never elapse during playback - the timer
+    /// owns the bedtime sleep itself; the loop drains this
     /// flag into sleep::sleep_from_timer once per frame (Awake -> sleep, Locked
     /// -> pause, Asleep -> no-op).
     pub sleep_requested: bool,

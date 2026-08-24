@@ -71,9 +71,9 @@ export component Reader inherits Window {
     in-out property <string> wifi-connected-name: "";
     in-out property <string> bt-connected-name: "";
     in-out property <string> sleep-label: "Off";
-    // The panel SETTING label ("Off"/"15 min"/.../"end of chapter").
+    // The panel SETTING label ("Off"/"15 min"/.../"60 min").
     in-out property <string> tts-sleep-label: "Off";
-    // The ARMED display string ("Sleep 9:20 PM"/"Sleep ch. end"/"" when off).
+    // The ARMED display string ("Sleep 9:20 PM"/"" when off).
     // Drives the reading footer (content.slint); empty reverts it to page info.
     in-out property <string> sleep-timer-label: "";
     // Pre-rendered captions for the audio screen (Slint Text does not render in

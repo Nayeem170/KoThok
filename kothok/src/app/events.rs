@@ -44,8 +44,8 @@ pub fn process_audio_events(
                 reader.set_paused(true);
                 reader.set_status("".into());
                 // Freeze a running countdown (move remaining out of the deadline
-                // so the per-frame poll cannot fire while paused). No-op when the
-                // timer is disarmed or in end-of-chapter mode.
+                // so the per-frame poll cannot fire while paused). No-op when
+                // the timer is disarmed.
                 crate::loop_run::tts_sleep::freeze(st);
                 ui_changed = true;
             }
@@ -174,21 +174,6 @@ fn handle_audio_ended(st: &mut LoopState, reader: &Reader, cmd_tx: &Sender<Cmd>)
     let mut text_dirty = false;
 
     if matches!(st.view_mode, crate::ViewMode::Audio) {
-        // End-of-chapter sleep timer: pause at the chapter boundary instead of
-        // auto-advancing. Only in audio mode (whole-chapter playback); reading
-        // mode's per-page TTS is driven by PageBreak, not Ended.
-        if st.tts_sleep_armed
-            && matches!(
-                st.tts_sleep_mode,
-                crate::data::config::TtsSleepMode::EndOfChapter
-            )
-        {
-            crate::loop_run::tts_sleep::disarm(st);
-            crate::loop_run::tts_sleep::set_sleep_label(reader, "");
-            st.sleep_requested = true;
-            log::info!("tts-sleep: end-of-chapter reached, requesting sleep");
-            return (false, true);
-        }
         if st.current_chapter + 1 < st.chapter_count {
             let nc = st.current_chapter + 1;
             switch_chapter(

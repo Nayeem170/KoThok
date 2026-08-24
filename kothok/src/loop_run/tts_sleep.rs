@@ -2,10 +2,11 @@
 // Copyright (c) 2026 Nayeem Bin Ahsan
 //! TTS sleep timer: the per-frame poll (timed fire + touch reset).
 //!
-//! Arming (on Event::Playing), user-pause freeze, stop disarm, and the
-//! end-of-chapter trigger are event-driven and live in app::events. This runs
-//! from run_loop right after render_and_present / alongside power::auto_sleep,
-//! mirroring that sibling timer.
+//! Arming (on Event::Playing), user-pause freeze, and stop disarm are
+//! event-driven and live in app::events. This runs from run_loop right after
+//! render_and_present / alongside power::auto_sleep, mirroring that sibling
+//! timer. The countdown is mode-independent: identical in reading and audio
+//! mode.
 use crate::loop_run::LoopContext;
 use crate::loop_state::LoopState;
 use crate::Reader;
@@ -52,19 +53,13 @@ pub fn tts_sleep_timer(st: &mut LoopState, ctx: &LoopContext, had_event: bool) {
 /// Arm (or re-arm) the timer for the current mode. Called on `Event::Playing`
 /// (fresh arm, or resume from a frozen remaining) and on a panel mode change
 /// while already armed. Off disarms and clears the label; a timed mode paints
-/// the end-time caption once; end-of-chapter arms without a deadline.
+/// the end-time caption once.
 pub fn arm(st: &mut LoopState, reader: &Reader) {
     use crate::data::config::TtsSleepMode;
     match st.tts_sleep_mode {
         TtsSleepMode::Off => {
             disarm(st);
             set_sleep_label(reader, "");
-        }
-        TtsSleepMode::EndOfChapter => {
-            st.tts_sleep_armed = true;
-            st.tts_sleep_deadline = None;
-            st.tts_sleep_paused_remaining = None;
-            set_sleep_label(reader, "Sleep ch. end");
         }
         timed => {
             st.tts_sleep_armed = true;
@@ -78,7 +73,7 @@ pub fn arm(st: &mut LoopState, reader: &Reader) {
 
 /// Freeze a running countdown on a user pause: move the remaining time out of
 /// the deadline so the per-frame poll cannot fire while paused. Resume (`arm`)
-/// restores it. A no-op for end-of-chapter (no deadline) and when not armed.
+/// restores it. A no-op when not armed.
 pub fn freeze(st: &mut LoopState) {
     if let Some(deadline) = st.tts_sleep_deadline.take() {
         st.tts_sleep_paused_remaining =
