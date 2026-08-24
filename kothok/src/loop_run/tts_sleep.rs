@@ -2,11 +2,12 @@
 // Copyright (c) 2026 Nayeem Bin Ahsan
 //! TTS sleep timer: the per-frame poll (timed fire + touch reset).
 //!
-//! Arming (on Event::Playing), user-pause freeze, and stop disarm are
-//! event-driven and live in app::events. This runs from run_loop right after
-//! render_and_present / alongside power::auto_sleep, mirroring that sibling
-//! timer. The countdown is mode-independent: identical in reading and audio
-//! mode.
+//! Arming on `Event::Playing` (`arm_on_play`: start, resume, or keep per
+//! `play_arm_decision`), user-pause freeze, stop disarm, and the panel's
+//! explicit restart (`arm`) are event-driven and live in app::events and
+//! panel::callbacks. This runs from run_loop right after render_and_present /
+//! alongside power::auto_sleep, mirroring that sibling timer. The countdown is
+//! mode-independent: identical in reading and audio mode.
 use crate::loop_run::LoopContext;
 use crate::loop_state::LoopState;
 use crate::Reader;
@@ -50,10 +51,75 @@ pub fn tts_sleep_timer(st: &mut LoopState, ctx: &LoopContext, had_event: bool) {
     }
 }
 
-/// Arm (or re-arm) the timer for the current mode. Called on `Event::Playing`
-/// (fresh arm, or resume from a frozen remaining) and on a panel mode change
-/// while already armed. Off disarms and clears the label; a timed mode paints
-/// the end-time caption once.
+/// What a Play event should do with the timer. Pure, so the
+/// restart-vs-continuation policy is unit-testable.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum PlayArm {
+    /// Mode Off: disarm and clear the caption.
+    Clear,
+    /// Playback continuation restart (auto chapter advance, A2DP sink reopen):
+    /// the armed deadline stands - no reset, no repaint.
+    Keep,
+    /// Resume from a user pause: restore the frozen remaining from now.
+    Restore(std::time::Duration),
+    /// Fresh countdown from the full duration.
+    Fresh(std::time::Duration),
+}
+
+/// The Play-event policy: a continuation restart must not extend bedtime.
+///
+/// `Event::Playing` fires for four distinct situations and only the first two
+/// may move the deadline: a user-initiated start (fresh), a resume from a user
+/// pause (restore frozen remaining). A playback continuation restart - the
+/// chapter queue drained and the app sent `Cmd::Play` after `Event::Ended`, or
+/// the A2DP sink reopened after a write error - keeps the existing deadline;
+/// resetting there let every chapter boundary push sleep a full duration away.
+pub(crate) fn play_arm_decision(
+    mode: crate::data::config::TtsSleepMode,
+    frozen: Option<std::time::Duration>,
+    deadline: Option<std::time::Instant>,
+) -> PlayArm {
+    use crate::data::config::TtsSleepMode;
+    match mode {
+        TtsSleepMode::Off => PlayArm::Clear,
+        timed => {
+            if let Some(dur) = frozen {
+                PlayArm::Restore(dur)
+            } else if deadline.is_some() {
+                PlayArm::Keep
+            } else {
+                PlayArm::Fresh(timed.duration().unwrap())
+            }
+        }
+    }
+}
+
+/// Handle `Event::Playing`: start, resume, or keep the timer per
+/// `play_arm_decision`.
+pub fn arm_on_play(st: &mut LoopState, reader: &Reader) {
+    let action = play_arm_decision(
+        st.tts_sleep_mode,
+        st.tts_sleep_paused_remaining,
+        st.tts_sleep_deadline,
+    );
+    match action {
+        PlayArm::Clear => {
+            disarm(st);
+            set_sleep_label(reader, "");
+        }
+        PlayArm::Keep => {}
+        PlayArm::Restore(dur) | PlayArm::Fresh(dur) => {
+            st.tts_sleep_armed = true;
+            st.tts_sleep_paused_remaining = None;
+            st.tts_sleep_deadline = Some(std::time::Instant::now() + dur);
+            set_end_time_label(reader, dur);
+        }
+    }
+}
+
+/// Fresh full countdown for the current mode. Called on a panel mode change
+/// while playing - an explicit user restart - where a new countdown from now
+/// is what "30 min" means. Off disarms and clears the label.
 pub fn arm(st: &mut LoopState, reader: &Reader) {
     use crate::data::config::TtsSleepMode;
     match st.tts_sleep_mode {
@@ -62,18 +128,18 @@ pub fn arm(st: &mut LoopState, reader: &Reader) {
             set_sleep_label(reader, "");
         }
         timed => {
-            st.tts_sleep_armed = true;
             let full = timed.duration().unwrap();
-            let dur = st.tts_sleep_paused_remaining.take().unwrap_or(full);
-            st.tts_sleep_deadline = Some(std::time::Instant::now() + dur);
-            set_end_time_label(reader, dur);
+            st.tts_sleep_armed = true;
+            st.tts_sleep_deadline = Some(std::time::Instant::now() + full);
+            set_end_time_label(reader, full);
         }
     }
 }
 
 /// Freeze a running countdown on a user pause: move the remaining time out of
-/// the deadline so the per-frame poll cannot fire while paused. Resume (`arm`)
-/// restores it. A no-op when not armed.
+/// the deadline so the per-frame poll cannot fire while paused. Resume
+/// (`arm_on_play`'s Restore) shifts the end time by the pause length - by
+/// design: the timer measures playing time. A no-op when not armed.
 pub fn freeze(st: &mut LoopState) {
     if let Some(deadline) = st.tts_sleep_deadline.take() {
         st.tts_sleep_paused_remaining =
@@ -156,10 +222,75 @@ fn parse_clock(s: &str) -> Option<(u32, u32)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::data::config::TtsSleepMode;
 
     fn fmt(clock: &str, mins: u32) -> String {
         let (h24, m) = parse_clock(clock).unwrap();
         format_end_time(h24, m, mins)
+    }
+
+    // --- play_arm_decision: continuation restarts must not extend bedtime ---
+
+    #[test]
+    fn play_continuation_restart_keeps_deadline() {
+        // Chapter advance / sink reopen while armed: deadline exists, nothing
+        // frozen. Old code re-armed to the FULL duration here.
+        assert_eq!(
+            play_arm_decision(TtsSleepMode::Mins15, None, Some(std::time::Instant::now())),
+            PlayArm::Keep
+        );
+    }
+
+    #[test]
+    fn play_resume_restores_frozen_remaining() {
+        assert_eq!(
+            play_arm_decision(
+                TtsSleepMode::Mins30,
+                Some(std::time::Duration::from_secs(300)),
+                None
+            ),
+            PlayArm::Restore(std::time::Duration::from_secs(300))
+        );
+    }
+
+    #[test]
+    fn play_first_start_arms_fresh() {
+        assert_eq!(
+            play_arm_decision(TtsSleepMode::Mins60, None, None),
+            PlayArm::Fresh(std::time::Duration::from_secs(3600))
+        );
+    }
+
+    #[test]
+    fn play_with_mode_off_clears() {
+        assert_eq!(
+            play_arm_decision(TtsSleepMode::Off, None, None),
+            PlayArm::Clear
+        );
+        // Even mid-pause: Off wins.
+        assert_eq!(
+            play_arm_decision(
+                TtsSleepMode::Off,
+                Some(std::time::Duration::from_secs(60)),
+                None
+            ),
+            PlayArm::Clear
+        );
+    }
+
+    // Frozen remaining outranks a live deadline (freeze always empties the
+    // deadline, so the pair cannot co-occur in practice; the ordering is still
+    // pinned so a future refactor cannot silently swap it).
+    #[test]
+    fn play_frozen_outranks_deadline() {
+        assert_eq!(
+            play_arm_decision(
+                TtsSleepMode::Mins45,
+                Some(std::time::Duration::from_secs(120)),
+                Some(std::time::Instant::now())
+            ),
+            PlayArm::Restore(std::time::Duration::from_secs(120))
+        );
     }
 
     #[test]

@@ -34,9 +34,12 @@ pub fn process_audio_events(
                 // Clear any idle hint / notice now that playback is underway; the
                 // sentence band takes over the status line.
                 reader.set_status("".into());
-                // Arm the TTS sleep timer (fresh, or resume from a frozen
-                // remaining). No-op when the mode is Off.
-                crate::loop_run::tts_sleep::arm(st, reader);
+                // TTS sleep timer per play_arm_decision: fresh start when
+                // disarmed, resume from a frozen pause, or KEEP the armed
+                // deadline on a continuation restart (chapter advance, sink
+                // reopen) so bedtime cannot drift later mid-listen. No-op when
+                // the mode is Off.
+                crate::loop_run::tts_sleep::arm_on_play(st, reader);
                 ui_changed = true;
             }
             Event::Paused => {
