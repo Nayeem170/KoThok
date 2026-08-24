@@ -232,7 +232,12 @@ export component AudioPlayer inherits Rectangle {
         image-fit: contain;
     }
 
-    // Chapter + page, 70px below the disk (mock margin-top 28 + padding 8).
+    // Caption block: chapter name, page-in-chapter, sleep-timer end time.
+    // Tight, even spacing so the three lines sit as one compact group high in
+    // the disk-to-footer band and the sleep line clears the footer divider.
+    // Offsets below the disk bottom: chapter +48 (h50), page +102 (h38),
+    // sleep +146 (h38); sleep bottom = disk_bottom + 184, well above the footer
+    // top at disk_bottom + ~259 on 1264x1680.
     //
     // Bangla arrives as a pre-rendered image, exactly as the book title above
     // and the chapter name in the control panel already do: Slint's bundled
@@ -264,7 +269,7 @@ export component AudioPlayer inherits Rectangle {
     Image {
         source: root.page-info-img;
         x: 140px; width: root.width - 280px;
-        y: root.disk-y + root.disk-box + 138px;
+        y: root.disk-y + root.disk-box + 102px;
         height: 38px;
         image-fit: contain;
         horizontal-alignment: center;
@@ -274,7 +279,7 @@ export component AudioPlayer inherits Rectangle {
     Image {
         source: root.sleep-caption-img;
         x: 140px; width: root.width - 280px;
-        y: root.disk-y + root.disk-box + 183px;
+        y: root.disk-y + root.disk-box + 146px;
         height: 38px;
         image-fit: contain;
         horizontal-alignment: center;
