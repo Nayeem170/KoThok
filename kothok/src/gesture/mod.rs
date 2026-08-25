@@ -28,6 +28,7 @@ pub enum HeaderZone {
 pub enum PickerTarget {
     None,
     Logo,
+    Settings,
     Exit,
     Book(usize),
     Filter(LibraryFilter),
@@ -76,10 +77,21 @@ pub fn classify_header_zone(dx: f32, dy: f32, w: f32) -> HeaderZone {
     if dy >= HEADER_H {
         return HeaderZone::None;
     }
-    if dx < PAD + BTN {
+    // Every control lives in one right-hand cluster, so the left of the header
+    // is the title and answers no tap. Mirrors `content.slint` exactly: move a
+    // button there and this must move with it, or the glyph and the zone that
+    // activates it drift apart.
+    //
+    // Right to left: library | chapters, gear, sleep | jump, bookmark, toggle
+    let mut left = w - PAD - BTN;
+    if dx >= left {
         return HeaderZone::Library;
     }
-    let mut left = w - PAD - BTN;
+    left -= SEP;
+    if dx >= left {
+        return HeaderZone::None;
+    }
+    left -= BTN;
     if dx >= left {
         return HeaderZone::Chapters;
     }
@@ -179,13 +191,21 @@ pub fn picker_hit_test(
         const EXIT_TOP: f32 = 17.0;
         let exit_left = screen_w - EXIT_BTN_PX - EXIT_PAD;
         let exit_right = screen_w - EXIT_PAD;
-        if dx >= exit_left && dx < exit_right && dy >= EXIT_TOP && dy < EXIT_TOP + EXIT_BTN_PX {
+        if dx >= exit_left && dx < exit_right && (EXIT_TOP..EXIT_TOP + EXIT_BTN_PX).contains(&dy) {
             return PickerTarget::Exit;
+        }
+        const GEAR_GAP: f32 = 10.0;
+        const PIPE_W: f32 = 3.0;
+        const GEAR_BTN_PX: f32 = 76.0;
+        let gear_left = exit_left - GEAR_GAP - PIPE_W - GEAR_GAP - GEAR_BTN_PX;
+        let gear_right = gear_left + GEAR_BTN_PX;
+        if dx >= gear_left && dx < gear_right && (EXIT_TOP..EXIT_TOP + GEAR_BTN_PX).contains(&dy) {
+            return PickerTarget::Settings;
         }
         const LOGO_PX: f32 = 76.0;
         const LOGO_X: f32 = 23.0;
         const LOGO_Y: f32 = 17.0;
-        if dx >= LOGO_X && dx < LOGO_X + LOGO_PX && dy >= LOGO_Y && dy < LOGO_Y + LOGO_PX {
+        if (LOGO_X..LOGO_X + LOGO_PX).contains(&dx) && (LOGO_Y..LOGO_Y + LOGO_PX).contains(&dy) {
             return PickerTarget::Logo;
         }
         return PickerTarget::None;

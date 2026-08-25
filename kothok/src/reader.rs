@@ -91,6 +91,20 @@ pub fn apply_page(
     // redundant, so the disk caption is scoped to the current chapter.
     reader.set_chapter_page((page + 1) as i32);
     reader.set_chapter_page_count(state.pages.len().max(1) as i32);
+    // Pre-render the disk caption as an image: Slint Text does not render in
+    // the audio body on device.
+    let caption = format!(
+        "Page {} of {} in chapter",
+        page + 1,
+        state.pages.len().max(1)
+    );
+    let (caption_img, _) = crate::rendering::render::text_image(
+        &caption,
+        30.0,
+        crate::w().saturating_sub(280).max(120),
+        1,
+    );
+    reader.set_page_info_img(caption_img);
     reader.set_current_chapter_idx(current_chapter as i32);
     if let Some((cs, ce)) = v.cursor {
         reader.set_cur_start(cs);
@@ -120,7 +134,7 @@ pub fn switch_chapter(
     let Some(chapter) = st.chapters.get_mut(nc) else {
         return;
     };
-    st.state = build_state(chapter, body_px, head_px, line_h);
+    st.state = build_state(chapter, body_px, head_px, line_h, st.text_justify);
     st.current_page = if opts.to_last_page {
         st.state.pages.len().saturating_sub(1)
     } else {
@@ -205,10 +219,6 @@ pub fn jump_to_link_target(
             },
         );
     }
-    // The anchor is a chapter-text offset; rows are keyed by `body` offsets and
-    // the two differ wherever a block contributes no text (an image) or extra
-    // text (a list marker). Seeking by page keeps the jump on a real boundary
-    // rather than trusting the two to coincide.
     let dest_offset = kobo_core::formats::epub::anchor_offset(&st.chapters, target);
     st.current_page = st
         .state

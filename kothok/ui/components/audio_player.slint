@@ -26,14 +26,20 @@ export component AudioPlayer inherits Rectangle {
     in property <bool> playing: false;
     in property <bool> play-enabled: false;
     in property <bool> has-bookmark: false;
-    /// Book-level, matching the bottom bar's scope and reading mode's marker.
-    in property <float> bookmark-frac: -1.0;
+    /// Book-level, matching the bottom bar's scope and reading mode's markers.
+    in property <[float]> bookmark-fracs: [];
     /// Book-level progress for the bottom bar. The ring carries chapter-level
     /// progress; the two scopes are deliberately different.
     in property <float> bar-progress: 0.0;
     in property <bool> header-visible: true;
     in property <bool> locked: false;
     in property <bool> title-overflow: false;
+    // Page-in-chapter and sleep-timer captions, pre-rendered as images (Slint
+    // Text does not draw in the audio body on device; Images do - same approach
+    // as the chapter name and book title). sleep-caption-armed gates line 2.
+    in property <image> page-info-img;
+    in property <image> sleep-caption-img;
+    in property <bool> sleep-caption-armed: false;
     in property <color> brand-green: #006A4E;
     in property <color> brand-red: #F42A41;
 
@@ -72,30 +78,16 @@ export component AudioPlayer inherits Rectangle {
         width: root.width;
         background: #ffffff;
 
-        // Library (red), mock hbc 30px -> 76px, left padding 9px -> 23px.
-        Rectangle {
-            x: 23px; y: 17px;
-            width: 76px; height: 76px;
-            border-radius: 38px;
-            background: root.brand-red;
-            Image {
-                source: @image-url("assets/library.svg");
-                image-fit: contain;
-                width: 38px; height: 38px;
-                x: 19px; y: 19px;
-            }
-            TouchArea { width: 76px; height: 76px; clicked => { root.library(); } }
-        }
-
-        // Title fills the space between the two icon groups, as in the mock's flex:1.
+        // Title owns the left edge; every control is in the right-hand cluster,
+        // matching reading mode and both overlays.
         Image {
             source: root.book-title-img;
-            x: 119px;
-            width: root.width - 686px;
+            x: 23px;
+            width: root.width - 710px;
             height: 76px;
             y: 17px;
             image-fit: contain;
-            horizontal-alignment: center;
+            horizontal-alignment: left;
             vertical-alignment: center;
             visible: root.book-title-img-h > 0;
         }
@@ -103,14 +95,14 @@ export component AudioPlayer inherits Rectangle {
             txt: root.header-title;
             txt-color: #666666; font-size: 33px; bold: true;
             overflow: root.title-overflow;
-            x: 119px; width: root.width - 686px; y: 17px; height: 76px;
+            x: 23px; width: root.width - 710px; y: 17px; height: 76px;
             visible: root.book-title-img-h == 0;
         }
 
         // Right group: Chapters, Settings, Lock, separator, Jump, Bookmark, ModeToggle
         // Identical to reading mode - only the Lock icon differs from Sleep.
         Rectangle {
-            x: root.width - 99px; y: 17px;
+            x: root.width - 213px; y: 17px;
             width: 76px; height: 76px;
             border-radius: 38px;
             background: root.brand-green;
@@ -124,7 +116,7 @@ export component AudioPlayer inherits Rectangle {
         }
 
         Rectangle {
-            x: root.width - 185px; y: 17px;
+            x: root.width - 299px; y: 17px;
             width: 76px; height: 76px;
             border-radius: 38px;
             background: root.brand-green;
@@ -138,7 +130,7 @@ export component AudioPlayer inherits Rectangle {
         }
 
         Rectangle {
-            x: root.width - 271px; y: 17px;
+            x: root.width - 385px; y: 17px;
             width: 76px; height: 76px;
             border-radius: 38px;
             background: root.brand-green;
@@ -152,13 +144,13 @@ export component AudioPlayer inherits Rectangle {
         }
 
         Rectangle {
-            x: root.width - 290px; y: 30px;
+            x: root.width - 404px; y: 30px;
             width: 3px; height: 50px;
             background: #d0d0d0;
         }
 
         Rectangle {
-            x: root.width - 385px; y: 17px;
+            x: root.width - 499px; y: 17px;
             width: 76px; height: 76px;
             border-radius: 38px;
             background: root.brand-green;
@@ -172,7 +164,7 @@ export component AudioPlayer inherits Rectangle {
         }
 
         Rectangle {
-            x: root.width - 471px; y: 17px;
+            x: root.width - 585px; y: 17px;
             width: 76px; height: 76px;
             border-radius: 38px;
             background: root.brand-green;
@@ -186,7 +178,7 @@ export component AudioPlayer inherits Rectangle {
         }
 
         Rectangle {
-            x: root.width - 557px; y: 17px;
+            x: root.width - 671px; y: 17px;
             width: 76px; height: 76px;
             border-radius: 38px;
             background: root.brand-green;
@@ -197,6 +189,28 @@ export component AudioPlayer inherits Rectangle {
                 x: 19px; y: 19px;
             }
             TouchArea { width: 76px; height: 76px; clicked => { root.mode-toggle(); } }
+        }
+
+        Rectangle {
+            x: root.width - 118px; y: 30px;
+            width: 3px; height: 50px;
+            background: #d0d0d0;
+        }
+
+        // Library is the one control that leaves the book, so it keeps its red
+        // and sits past a divider at the far right.
+        Rectangle {
+            x: root.width - 99px; y: 17px;
+            width: 76px; height: 76px;
+            border-radius: 38px;
+            background: root.brand-red;
+            Image {
+                source: @image-url("assets/library.svg");
+                image-fit: contain;
+                width: 38px; height: 38px;
+                x: 19px; y: 19px;
+            }
+            TouchArea { width: 76px; height: 76px; clicked => { root.library(); } }
         }
 
         Rectangle {
@@ -218,7 +232,12 @@ export component AudioPlayer inherits Rectangle {
         image-fit: contain;
     }
 
-    // Chapter + page, 70px below the disk (mock margin-top 28 + padding 8).
+    // Caption block: chapter name, page-in-chapter, sleep-timer end time.
+    // Tight, even spacing so the three lines sit as one compact group high in
+    // the disk-to-footer band and the sleep line clears the footer divider.
+    // Offsets below the disk bottom: chapter +48 (h50), page +102 (h38),
+    // sleep +146 (h38); sleep bottom = disk_bottom + 184, well above the footer
+    // top at disk_bottom + ~259 on 1264x1680.
     //
     // Bangla arrives as a pre-rendered image, exactly as the book title above
     // and the chapter name in the control panel already do: Slint's bundled
@@ -230,7 +249,7 @@ export component AudioPlayer inherits Rectangle {
     Image {
         source: root.chapter-name-img;
         x: 140px; width: root.width - 280px;
-        y: root.disk-y + root.disk-box + 90px;
+        y: root.disk-y + root.disk-box + 48px;
         height: 50px;
         image-fit: contain;
         horizontal-alignment: center;
@@ -242,18 +261,30 @@ export component AudioPlayer inherits Rectangle {
         color: #111111; font-size: 40px; font-weight: 700;
         horizontal-alignment: center; vertical-alignment: center;
         x: 140px; width: root.width - 280px;
-        y: root.disk-y + root.disk-box + 90px;
+        y: root.disk-y + root.disk-box + 48px;
         height: 50px;
         overflow: elide;
         visible: root.chapter-name-img-h == 0;
     }
-    Text {
-        text: "Page " + root.chapter-page + " of " + root.chapter-page-count + " in chapter";
-        color: #999999; font-size: 30px;
-        horizontal-alignment: center; vertical-alignment: center;
+    Image {
+        source: root.page-info-img;
         x: 140px; width: root.width - 280px;
-        y: root.disk-y + root.disk-box + 150px;
+        y: root.disk-y + root.disk-box + 102px;
         height: 38px;
+        image-fit: contain;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    // Sleep-timer end-time, pre-rendered; shown only while a timer is armed.
+    Image {
+        source: root.sleep-caption-img;
+        x: 140px; width: root.width - 280px;
+        y: root.disk-y + root.disk-box + 146px;
+        height: 38px;
+        image-fit: contain;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        visible: root.sleep-caption-armed;
     }
 
     // Footer: mock 148px -> 371px.
@@ -286,18 +317,16 @@ export component AudioPlayer inherits Rectangle {
                 border-radius: 5px;
             }
 
-            // Bookmark marker, parked off-screen when unset. Declared BEFORE the
-            // thumb so the thumb draws on top, matching reading mode -- the knob
-            // sits above the tick when the two coincide.
-            Rectangle {
-                x: root.has-bookmark && root.bookmark-frac >= 0.0
-                    ? root.bookmark-frac * parent.width - 7px : -400px;
+            // Bookmark markers, one per bookmark. Declared BEFORE the thumb so
+            // the thumb draws on top, matching reading mode -- the knob sits
+            // above the tick when the two coincide.
+            for f in root.bookmark-fracs : Rectangle {
+                x: f * parent.width - 7px;
                 y: -13px;
                 width: 15px;
                 height: 36px;
                 background: root.brand-green;
                 border-radius: 5px;
-                visible: root.has-bookmark && root.bookmark-frac >= 0.0;
             }
 
             Rectangle {

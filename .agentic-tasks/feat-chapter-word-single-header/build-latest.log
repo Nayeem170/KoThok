@@ -1,0 +1,16 @@
+HEAD: (uncommitted, feat/chapter-word-single-header)
+BRANCH: feat/chapter-word-single-header
+TOTAL PASSED: 334
+
+Build: cross build --target armv7-unknown-linux-musleabihf --release -p kothok-app
+  Status: SUCCESS (0 warnings, 0 errors)
+
+Test: cross test -p kothok-app --target armv7-unknown-linux-musleabihf
+  Status: 334 passed, 0 failed, 0 ignored
+  Baseline: 336 (2 tests removed: active_tab_is_inked_and_inactive_is_not, tab_bar_fits_left_of_close_button)
+
+Lint: cross clippy -p kothok-app --target armv7-unknown-linux-musleabihf -- -D warnings
+  Status: SUCCESS (0 warnings)
+
+Fmt: cargo fmt -p kothok-app -- --check
+  Status: CLEAN

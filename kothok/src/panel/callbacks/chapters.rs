@@ -20,6 +20,12 @@ pub(super) fn handle_chapter_overlay(
         reader.set_chapter_overlay_open(true);
     }
 
+    if cb.word_open_cell.replace(false) && !st.picker_active && st.search_word_selected {
+        st.search_results_active = true;
+        st.search_results_scroll = 0;
+        text_dirty = true;
+    }
+
     // `nc` is a flattened TOC row index, not a spine chapter index (issue 11).
     // Resolve it to the chapter it names and, if it carries a `#fragment`, the
     // page within that chapter -- `jump_to_link_target` is the same

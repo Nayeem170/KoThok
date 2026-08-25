@@ -15,11 +15,20 @@ use crate::callbacks::Callbacks;
 use crate::capabilities::KoboCapabilities;
 use crate::data::config::AppConfig;
 use crate::data::library::{EpubEntry, FlatTocRow};
+use crate::data::word_index::WordIndex;
 use crate::device::touch::TouchConfig;
 use crate::rendering::fb::Fb;
 use crate::rendering::layout::{ChapterState, OffsetComputation};
 use crate::rendering::render::{CoverCache, GridCell, LibraryFilter};
 use crate::{Bookmark, Reader, SystemState, ViewMode};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ChapterTab {
+    #[default]
+    Chapters,
+    Words,
+    Bookmarks,
+}
 
 pub struct LoopState {
     pub current_chapter: usize,
@@ -37,6 +46,8 @@ pub struct LoopState {
     pub body_px: f32,
     pub head_px: f32,
     pub line_h: i32,
+    pub line_spacing_pct: i32,
+    pub text_justify: bool,
 
     pub current_book_path: String,
 
@@ -62,6 +73,23 @@ pub struct LoopState {
     pub cover_page_visible: bool,
     pub chapter_scroll: i32,
     pub press_chapter_scroll: i32,
+
+    pub word_index: WordIndex,
+    pub chapter_tab: ChapterTab,
+    pub search_scroll: i32,
+    pub search_results_active: bool,
+    pub search_results_scroll: i32,
+    pub search_selected_word: usize,
+    pub search_word_selected: bool,
+    pub search_selected_result: usize,
+    pub search_result_selected: bool,
+    pub press_search_scroll: i32,
+    pub press_search_results_scroll: i32,
+
+    pub sb_dragging: bool,
+    pub sb_drag_tab: ChapterTab,
+    pub sb_grab_offset: i32,
+
     pub bt_fail_count: u32,
     pub text_dirty: bool,
 
@@ -79,7 +107,25 @@ pub struct LoopState {
     /// the whole screen, so it needs a full GC16 present; a partial refresh
     /// leaves the outgoing mode's pixels ghosted on the panel.
     pub prev_view_mode: ViewMode,
-    pub bookmark: Option<Bookmark>,
+    /// Bookmarks in set order; the LAST is the most recently set (the header
+    /// jump button's target). The overlay lists them sorted by position.
+    pub bookmarks: Vec<Bookmark>,
+    /// Scroll offset of the overlay's Bookmarks tab and its press-time copy
+    /// for drag restore, mirroring chapter_scroll/search_scroll.
+    pub bookmark_scroll: i32,
+    pub press_bookmark_scroll: i32,
+    /// Index into `bookmarks` of the row a finger went down on in the
+    /// overlay's Bookmarks tab. Consumed on release: a hold deletes that
+    /// bookmark, a tap selects it.
+    pub bm_press: Option<usize>,
+    /// Selected bookmark row in the overlay's Bookmarks tab (index into
+    /// `bookmarks`). Cleared when the overlay opens or its bookmark is
+    /// deleted; drives the row highlight and the Open button's target.
+    pub bm_selected: Option<usize>,
+    /// Fracs currently pushed to the Slint marker model. The model set is
+    /// skipped unless this changes, so the per-frame refresh cannot dirty the
+    /// window and spin the render loop.
+    pub pushed_bookmark_fracs: Vec<f32>,
     pub lock_time: Option<Instant>,
     pub saved_brightness: u32,
     /// True when the lock disconnected BT and/or WiFi (entered while paused), so
@@ -127,6 +173,23 @@ pub struct LoopState {
     pub disk_settle: bool,
     pub prev_playing: bool,
 
+    /// TTS sleep timer: mirrored mode (from cfg) + countdown state. Pauses audio
+    /// only; see loop_run::tts_sleep. deadline=None & remaining=None = disarmed.
+    pub tts_sleep_mode: crate::data::config::TtsSleepMode,
+    /// True between arm (Event::Playing) and fire/stop. End-of-chapter mode has
+    /// no deadline yet is still armed, so deadline/remaining alone cannot tell it
+    /// apart from disarmed.
+    pub tts_sleep_armed: bool,
+    pub tts_sleep_deadline: Option<Instant>,
+    pub tts_sleep_paused_remaining: Option<std::time::Duration>,
+    /// Set by the TTS sleep timer (timed deadline) to ask the run loop to put
+    /// the device to sleep. Auto-off's activity clock is refreshed every tick
+    /// while audio plays, so it can never elapse during playback - the timer
+    /// owns the bedtime sleep itself; the loop drains this flag into
+    /// sleep::sleep_from_timer once per frame (Awake and Locked alike ->
+    /// device sleep keeping the current view; Asleep -> no-op).
+    pub sleep_requested: bool,
+
     pub prev_down: bool,
     pub frame_down: bool,
     pub frame_x: i32,
@@ -152,6 +215,10 @@ pub struct LoopState {
     pub sleep_pressed: bool,
     pub chapter_pressed: bool,
     pub header_visible: bool,
+    /// When the reader last tapped the page to bring the header back, while
+    /// auto-hide is on. `None` means the header is not on a countdown -- either
+    /// it is pinned open (auto-hide off) or already retracted.
+    pub header_revealed_at: Option<std::time::Instant>,
     pub pending_tap_at: Option<Instant>,
     pub press_dispatched: bool,
     pub press_x: i32,
@@ -187,6 +254,8 @@ pub struct LoopState {
 
     pub wifi_bt_list_rx: Option<Receiver<crate::panel::WifiBtListResult>>,
 
+    /// In-flight reader-initiated update check, polled by the settings panel.
+    pub update_check_rx: Option<std::sync::mpsc::Receiver<crate::update_check::ManualCheck>>,
     pub font_download_rx: Option<Receiver<crate::device::font_download::FontDownloadResult>>,
 
     pub wifi_list: Vec<(String, u32)>,

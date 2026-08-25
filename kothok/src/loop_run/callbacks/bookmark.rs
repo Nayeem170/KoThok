@@ -1,13 +1,10 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (c) 2026 Nayeem Bin Ahsan
-use log::{info, warn};
+use log::info;
 
-use crate::audio::Cmd;
 use crate::callbacks::Callbacks;
 use crate::loop_state::LoopState;
 use crate::Reader;
-
-use super::super::{apply_page, best_effort_send, switch_chapter, ChapterSwitchOpts};
 
 pub(super) fn handle_bookmark_set(st: &mut LoopState, reader: &Reader, cb: &Callbacks) -> bool {
     if !cb.bookmark_set_cell.replace(false) || st.picker_active {
@@ -15,43 +12,66 @@ pub(super) fn handle_bookmark_set(st: &mut LoopState, reader: &Reader, cb: &Call
     }
     let cur = reader.get_cur_start().max(0) as usize;
     let cursor_on_page = page_for_offset(st, cur) == Some(st.current_page);
-    // Anchor the bookmark to the live TTS line when playing, or to a cursor
-    // that still sits on this page (paused mid-sentence). Otherwise the
-    // cursor is stale -- manual page turns preserve the old cursor -- so fall
-    // back to the first line of the current page.
     let off = if reader.get_playing() || cursor_on_page {
         cur
     } else {
         first_text_row_offset_on_page(st).unwrap_or(cur)
     };
-    // Without active playback there is no sentence band to show the mark, so
-    // place the visible reading cursor on the bookmarked line. Otherwise the
-    // progress bar moves but the page gives no sign of where it landed.
     if !reader.get_playing() {
         restore_cursor_line(st, reader, off);
     }
-    st.bookmark = Some(crate::Bookmark {
-        chapter: st.current_chapter,
-        page: st.current_page,
-        offset: off,
-    });
-    reader.set_has_bookmark(true);
+    let added = toggle_bookmark_at(
+        &mut st.bookmarks,
+        crate::Bookmark {
+            chapter: st.current_chapter,
+            page: st.current_page,
+            offset: off,
+        },
+    );
+    reader.set_has_bookmark(!st.bookmarks.is_empty());
     let global_page = st
         .chapter_offsets
         .get(st.current_chapter)
         .copied()
         .unwrap_or(0)
         + st.current_page;
-    reader.set_status(format!("Bookmarked page {}", global_page + 1).into());
+    let msg = if added {
+        format!("Bookmarked page {}", global_page + 1)
+    } else {
+        "Bookmark removed".to_string()
+    };
+    reader.set_status(msg.into());
     info!(
-        "bookmark-set: ch={} pg={} off={} playing={} on_page={}",
+        "bookmark-set: ch={} pg={} off={} playing={} on_page={} added={} total={}",
         st.current_chapter + 1,
         st.current_page + 1,
         off,
         reader.get_playing(),
         cursor_on_page,
+        added,
+        st.bookmarks.len(),
     );
     true
+}
+
+/// Toggle a bookmark at `cur`'s spot. Identity is chapter + offset (the page
+/// number is a repagination-volatile estimate), so re-setting a bookmark whose
+/// page drifted after a font change still removes the original entry. Returns
+/// true when the bookmark was added, false when an existing one was removed.
+pub(crate) fn toggle_bookmark_at(bms: &mut Vec<crate::Bookmark>, cur: crate::Bookmark) -> bool {
+    match bms
+        .iter()
+        .position(|b| b.chapter == cur.chapter && b.offset == cur.offset)
+    {
+        Some(i) => {
+            bms.remove(i);
+            false
+        }
+        None => {
+            bms.push(cur);
+            true
+        }
+    }
 }
 
 /// Byte offset of the first text-bearing row on the current page. Used as the
@@ -65,86 +85,13 @@ pub(super) fn handle_bookmark_jump(
     st: &mut LoopState,
     reader: &Reader,
     cb: &Callbacks,
-    cmd_tx: &std::sync::mpsc::Sender<Cmd>,
+    cmd_tx: &std::sync::mpsc::Sender<crate::audio::Cmd>,
+    ctx: &mut crate::loop_state::LoopContext,
 ) -> bool {
     if !cb.bookmark_jump_cell.replace(false) || st.picker_active {
         return false;
     }
-    if let Some(bm) = st.bookmark {
-        if bm.chapter >= st.chapters.len() {
-            st.bookmark = None;
-            reader.set_has_bookmark(false);
-            reader.set_status("That bookmark is no longer in this book".into());
-            warn!(
-                "bookmark-jump: ch {} out of range ({} chapters), cleared",
-                bm.chapter,
-                st.chapters.len()
-            );
-        } else {
-            if bm.chapter != st.current_chapter {
-                switch_chapter(
-                    st,
-                    reader,
-                    cmd_tx,
-                    bm.chapter,
-                    ChapterSwitchOpts {
-                        to_last_page: false,
-                        update_cursor: false,
-                        load_audio: true,
-                    },
-                );
-            }
-            st.current_page = page_for_bookmark(st, &bm);
-            apply_page(
-                reader,
-                &st.state,
-                st.current_page,
-                &st.chapter_offsets,
-                st.current_chapter,
-            );
-            let restored = restore_cursor_line(st, reader, bm.offset);
-            let base = st
-                .chapter_offsets
-                .get(st.current_chapter)
-                .copied()
-                .unwrap_or(0);
-            reader.set_saved_page((base + st.current_page) as i32);
-            if matches!(st.view_mode, crate::ViewMode::Audio) {
-                // Audio mode: the full chapter is already queued (by
-                // switch_chapter or a prior load). Seek to the utterance
-                // matching the bookmark offset within the chapter -- do NOT
-                // reload, which would replace the chapter with one page.
-                let chapter_utts = crate::audio::glue::chapter_utterances(&st.state);
-                let target =
-                    crate::audio::glue::utterance_index_for_offset(&chapter_utts, bm.offset);
-                best_effort_send(cmd_tx, Cmd::Seek(target));
-            } else {
-                let utts = crate::audio::glue::page_utterances(st.current_page, &st.state);
-                let target = crate::audio::glue::utterance_index_for_offset(&utts, bm.offset);
-                best_effort_send(cmd_tx, Cmd::Reload(utts));
-                best_effort_send(cmd_tx, Cmd::Seek(target));
-            }
-            st.text_dirty = true;
-            reader.set_status(
-                if restored {
-                    format!("Back to page {}", base + st.current_page + 1)
-                } else {
-                    format!("Back to page {} (line moved)", base + st.current_page + 1)
-                }
-                .into(),
-            );
-            info!(
-                "bookmark-jump: ch={} pg={} off={} line_restored={} audio_mode={}",
-                bm.chapter + 1,
-                st.current_page + 1,
-                bm.offset,
-                restored,
-                matches!(st.view_mode, crate::ViewMode::Audio),
-            );
-        }
-    } else {
-        reader.set_status("No bookmark yet - tap the ribbon to set one".into());
-    }
+    super::jump::jump_to_bookmark(st, reader, cmd_tx, ctx);
     true
 }
 
@@ -172,11 +119,11 @@ pub(super) fn page_for_bookmark(st: &LoopState, bm: &crate::Bookmark) -> usize {
 }
 
 /// Index of the page whose rows cover `offset`, if any.
-pub(super) fn page_for_offset(st: &LoopState, offset: usize) -> Option<usize> {
+pub(crate) fn page_for_offset(st: &LoopState, offset: usize) -> Option<usize> {
     st.state.page_for_offset(offset)
 }
 
-pub(super) fn restore_cursor_line(st: &LoopState, reader: &Reader, offset: usize) -> bool {
+pub(crate) fn restore_cursor_line(st: &LoopState, reader: &Reader, offset: usize) -> bool {
     let mut restored = false;
     if let Some((s, e)) = st.state.pages.get(st.current_page) {
         if let Some(rows) = st.state.all_rows.get(*s..*e) {
@@ -201,4 +148,43 @@ pub(super) fn restore_cursor_line(st: &LoopState, reader: &Reader, offset: usize
         }
     }
     restored
+}
+
+#[cfg(test)]
+mod tests {
+    use super::toggle_bookmark_at;
+    use crate::Bookmark;
+
+    fn bm(chapter: usize, page: usize, offset: usize) -> Bookmark {
+        Bookmark {
+            chapter,
+            page,
+            offset,
+        }
+    }
+
+    #[test]
+    fn toggle_adds_new_spot_and_removes_existing() {
+        let mut bms = vec![bm(0, 5, 100), bm(2, 1, 900)];
+        assert!(toggle_bookmark_at(&mut bms, bm(1, 2, 400)));
+        assert_eq!(bms.len(), 3);
+        // Same spot as an existing entry (page estimate differs): removes it.
+        assert!(!toggle_bookmark_at(&mut bms, bm(2, 9, 900)));
+        assert_eq!(bms, vec![bm(0, 5, 100), bm(1, 2, 400)]);
+    }
+
+    #[test]
+    fn identity_is_chapter_and_offset_not_page() {
+        let mut bms = vec![bm(1, 4, 500)];
+        // Same text spot, repaginated page estimate: still the same bookmark.
+        assert!(!toggle_bookmark_at(&mut bms, bm(1, 7, 500)));
+        assert!(bms.is_empty());
+    }
+
+    #[test]
+    fn same_offset_in_other_chapter_is_a_new_bookmark() {
+        let mut bms = vec![bm(1, 4, 500)];
+        assert!(toggle_bookmark_at(&mut bms, bm(3, 0, 500)));
+        assert_eq!(bms.len(), 2);
+    }
 }

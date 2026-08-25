@@ -3,3 +3,4 @@
 pub mod config;
 pub mod library;
 pub mod persistence;
+pub mod word_index;

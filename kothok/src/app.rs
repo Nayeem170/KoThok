@@ -24,10 +24,6 @@ pub struct AudioFlags {
     pub text_dirty: bool,
 }
 
-// Let the sleep-cover waveform finish before dimming the frontlight, so the
-// cover isn't captured mid-refresh.
-const SLEEP_COVER_SETTLE_MS: u64 = 400;
-
 /// Updated reading cursor after a play/pause toggle (so "Reading" can return
 /// to the line that resumed).
 pub struct PlayToggle {
@@ -39,8 +35,16 @@ pub struct PlayToggle {
 
 /// Toggle playback with the same resume rules as the centre double-tap:
 ///  - playing -> pause
-///  - paused/idle -> resume from the cursor if it's on this page, else from the
+///  - paused/idle -> play from the cursor if it's on this page, else from the
 ///    page's first line. Shared by the footer Play/Pause button.
+///
+/// Resume never trusts the driver's queue position. Browsing (swipe, progress
+/// drag, jump-to-reading) reloads the driver with the browsed-to page at
+/// utterance 0 while the cursor stays where the reader stopped, so a bare
+/// `Cmd::Play` resumed at the top of that page instead of at the cursor. The
+/// queue is rebuilt from the cursor on every start; a pause/resume with no
+/// navigation in between replays the current sentence from its beginning
+/// (its PCM is cached, so nothing is re-synthesised).
 pub fn toggle_playback(
     reader: &Reader,
     cmd_tx: &std::sync::mpsc::Sender<Cmd>,
@@ -60,35 +64,18 @@ pub fn toggle_playback(
             end: reader.get_cur_end().max(0) as usize,
         };
     }
-    if reader.get_paused() {
-        best_effort_send(cmd_tx, Cmd::Play);
-        reader.set_playing(true);
-        reader.set_paused(false);
-        return PlayToggle {
-            ch: current_chapter,
-            pg: current_page,
-            off: reader.get_cur_start().max(0) as usize,
-            end: reader.get_cur_end().max(0) as usize,
-        };
-    }
     let cur = reader.get_cur_start().max(0) as usize;
-    let page = state.page_for_offset(cur).unwrap_or(current_page);
-    let page_utts = page_utterances(page, state);
-    let target = resolve_start_target(cur, &page_utts);
-    if target == 0
-        && !page_utts.is_empty()
-        && !page_utts.iter().any(|u| cur >= u.start && cur < u.end)
-    {
-        let (rs, re) = state.pages.get(page).copied().unwrap_or((0, 0));
-        if let Some(rows) = state.all_rows.get(rs..re) {
-            for row in rows {
-                if row.start < row.end {
-                    reader.set_cur_start(row.start);
-                    reader.set_cur_end(row.end);
-                    break;
-                }
-            }
-        }
+    let page = current_page;
+    let play_utts = queue_from_cursor(cur, page_utterances(page, state));
+    match play_utts.first() {
+        Some(u) => log::info!(
+            "play-start: cursor={cur} page={} queue={} head=[{},{})",
+            page + 1,
+            play_utts.len(),
+            u.start,
+            u.end
+        ),
+        None => log::info!("play-start: cursor={cur} page={} queue empty", page + 1),
     }
     reader.set_saved_page((*chapter_offsets.get(current_chapter).unwrap_or(&0) + page) as i32);
     let cs = reader.get_cur_start();
@@ -97,8 +84,8 @@ pub fn toggle_playback(
     } else {
         (0, 0)
     };
-    best_effort_send(cmd_tx, Cmd::Reload(page_utts));
-    best_effort_send(cmd_tx, Cmd::Seek(target));
+    best_effort_send(cmd_tx, Cmd::Reload(play_utts));
+    best_effort_send(cmd_tx, Cmd::Seek(0));
     best_effort_send(cmd_tx, Cmd::Play);
     reader.set_playing(true);
     reader.set_paused(false);
@@ -133,8 +120,6 @@ fn friendly_error(m: &str) -> String {
 /// without a framebuffer or live radios. `wifi_on`/`bt_on` are user-intent
 /// flags, not live connection status.
 pub struct SleepPlan {
-    /// `true` = show the book cover; `false` = the KoThok splash (library lock).
-    pub show_cover: bool,
     /// Power the frontlight off on sleep.
     pub frontlight_off: bool,
     /// Power wifi off on sleep (only when the user had it on).
@@ -145,18 +130,45 @@ pub struct SleepPlan {
     pub bt_off: bool,
 }
 
-pub fn sleep_plan(
-    from_picker: bool,
-    fl_path: &Option<std::path::PathBuf>,
-    wifi_on: bool,
-    bt_on: bool,
-) -> SleepPlan {
+pub fn sleep_plan(fl_path: &Option<std::path::PathBuf>, wifi_on: bool, bt_on: bool) -> SleepPlan {
     SleepPlan {
-        show_cover: !from_picker,
         frontlight_off: fl_path.is_some(),
         wifi_off: wifi_on,
         bt_off: bt_on,
     }
+}
+
+/// Pure: the queue to hand the driver when playback starts at `cursor`.
+///
+/// Utterances before the cursor are dropped so the queue head is what plays
+/// first (`Cmd::Seek(0)`), and the head is trimmed to the cursor so a start
+/// from mid-sentence does not re-read the words already heard. `page_break` is
+/// an offset from the utterance start, so trimming shifts it by the same amount
+/// or the auto page-turn fires early.
+pub fn queue_from_cursor(
+    cursor: usize,
+    mut utts: Vec<crate::audio::Utterance>,
+) -> Vec<crate::audio::Utterance> {
+    let target = resolve_start_target(cursor, &utts);
+    let mut queue = if target > 0 && target < utts.len() {
+        utts.split_off(target)
+    } else {
+        utts
+    };
+    if let Some(first) = queue.first_mut() {
+        // Only trim when the cursor is genuinely inside the head utterance. A
+        // cursor left on another page is past every offset here, and trimming
+        // by that difference cut the sentence at a meaningless byte.
+        if cursor > first.start && cursor < first.end {
+            let off = cursor - first.start;
+            if off < first.text.len() && first.text.is_char_boundary(off) {
+                first.text = first.text[off..].to_string();
+                first.page_break = first.page_break.map(|b| b.saturating_sub(off));
+                first.start = cursor;
+            }
+        }
+    }
+    queue
 }
 
 /// Pure: which utterance index to seek to when starting playback from `cursor`.

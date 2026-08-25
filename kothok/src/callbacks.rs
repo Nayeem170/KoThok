@@ -22,9 +22,11 @@ pub struct Callbacks {
     pub wifi_cycle_cell: Rc<Cell<i32>>,
     pub bt_cycle_cell: Rc<Cell<i32>>,
     pub sleep_cycle_cell: Rc<Cell<i32>>,
+    pub tts_sleep_cycle_cell: Rc<Cell<i32>>,
     pub play_toggle_cell: Rc<Cell<bool>>,
     pub chapter_panel_cell: Rc<Cell<bool>>,
     pub chapter_select_cell: Rc<Cell<Option<usize>>>,
+    pub word_open_cell: Rc<Cell<bool>>,
     pub jump_to_reading_cell: Rc<Cell<bool>>,
     pub font_pending_val: Rc<Cell<Option<i32>>>,
     pub font_last_change: Rc<Cell<Option<std::time::Instant>>>,
@@ -35,18 +37,33 @@ pub struct Callbacks {
     pub skip_forward_cell: Rc<Cell<bool>>,
     pub skip_rewind_cell: Rc<Cell<bool>>,
     pub settings_cell: Rc<Cell<bool>>,
+    pub text_align_cell: Rc<Cell<bool>>,
+    pub header_toggle_cell: Rc<Cell<bool>>,
+    pub update_check_cell: Rc<Cell<bool>>,
+    pub reset_book_cell: Rc<Cell<bool>>,
+    pub overlay_tab_switch_cell: Rc<Cell<i32>>,
+    pub overlay_back_from_results_cell: Rc<Cell<bool>>,
+    pub overlay_requested_tab_cell: Rc<Cell<i32>>,
 }
 
 struct ChapterCells {
     panel_cell: Rc<Cell<bool>>,
     select_cell: Rc<Cell<Option<usize>>>,
+    word_open_cell: Rc<Cell<bool>>,
     jump_cell: Rc<Cell<bool>>,
+    tab_switch_cell: Rc<Cell<i32>>,
+    back_from_results_cell: Rc<Cell<bool>>,
+    requested_tab_cell: Rc<Cell<i32>>,
 }
 
 fn register_chapter(reader: &Reader, panel_open_cell: &Rc<Cell<bool>>) -> ChapterCells {
     let panel_cell = Rc::new(Cell::new(false));
     let select_cell = Rc::new(Cell::new(None::<usize>));
+    let word_open_cell = Rc::new(Cell::new(false));
     let jump_cell = Rc::new(Cell::new(false));
+    let tab_switch_cell = Rc::new(Cell::new(-1i32));
+    let back_from_results_cell = Rc::new(Cell::new(false));
+    let requested_tab_cell = Rc::new(Cell::new(-1i32));
 
     let cp_jtr = jump_cell.clone();
     let cp_jtr_panel = panel_open_cell.clone();
@@ -62,11 +79,16 @@ fn register_chapter(reader: &Reader, panel_open_cell: &Rc<Cell<bool>>) -> Chapte
     });
 
     let cp_ch_sel = select_cell.clone();
+    let cp_word_open = word_open_cell.clone();
     let reader_clone = reader.as_weak();
-    reader.on_chapter_selected(move |idx: i32| {
+    reader.on_chapter_selected(move |idx: i32, tab: i32| {
         let Some(reader) = reader_clone.upgrade() else {
             return;
         };
+        if tab == 1 {
+            cp_word_open.set(true);
+            return;
+        }
         let idx = idx as usize;
         if idx < reader.get_toc_row_count() as usize {
             reader.set_chapter_overlay_open(false);
@@ -77,10 +99,24 @@ fn register_chapter(reader: &Reader, panel_open_cell: &Rc<Cell<bool>>) -> Chapte
         }
     });
 
+    let ts = tab_switch_cell.clone();
+    reader.on_tab_switch(move |tab: i32| {
+        ts.set(tab);
+    });
+
+    let bfr = back_from_results_cell.clone();
+    reader.on_back_from_results(move || {
+        bfr.set(true);
+    });
+
     ChapterCells {
         panel_cell,
         select_cell,
+        word_open_cell,
         jump_cell,
+        tab_switch_cell,
+        back_from_results_cell,
+        requested_tab_cell,
     }
 }
 
@@ -97,8 +133,12 @@ pub fn register(reader: &Reader) -> Callbacks {
 
     let panel_open_cell = Rc::new(Cell::new(false));
     let poc = panel_open_cell.clone();
+    let reader_weak = reader.as_weak();
     reader.on_panel_close(move || {
         poc.set(false);
+        if let Some(reader) = reader_weak.upgrade() {
+            reader.set_panel_open(false);
+        }
     });
 
     // The audio-mode gear must open the panel through Rust: setting Slint's
@@ -139,12 +179,14 @@ pub fn register(reader: &Reader) -> Callbacks {
     let wifi_toggle_cell = Rc::new(Cell::new(false));
     let wt = wifi_toggle_cell.clone();
     reader.on_panel_wifi_toggle(move || {
+        log::info!("callback: panel_wifi_toggle fired");
         wt.set(true);
     });
 
     let bt_toggle_cell = Rc::new(Cell::new(false));
     let bt = bt_toggle_cell.clone();
     reader.on_panel_bt_toggle(move || {
+        log::info!("callback: panel_bt_toggle fired");
         bt.set(true);
     });
 
@@ -164,6 +206,12 @@ pub fn register(reader: &Reader) -> Callbacks {
     let sc = sleep_cycle_cell.clone();
     reader.on_panel_sleep_cycle(move |dir: SharedString| {
         sc.set(if dir == "prev" { 2 } else { 1 });
+    });
+
+    let tts_sleep_cycle_cell = Rc::new(Cell::new(0i32));
+    let tsc = tts_sleep_cycle_cell.clone();
+    reader.on_panel_tts_sleep_cycle(move |dir: SharedString| {
+        tsc.set(if dir == "prev" { 2 } else { 1 });
     });
 
     let play_toggle_cell = Rc::new(Cell::new(false));
@@ -212,6 +260,30 @@ pub fn register(reader: &Reader) -> Callbacks {
         src.set(true);
     });
 
+    let text_align_cell = Rc::new(Cell::new(false));
+    let tac = text_align_cell.clone();
+    reader.on_panel_text_align_toggle(move || {
+        tac.set(true);
+    });
+
+    let header_toggle_cell = Rc::new(Cell::new(false));
+    let htc = header_toggle_cell.clone();
+    reader.on_panel_header_toggle(move || {
+        htc.set(true);
+    });
+
+    let update_check_cell = Rc::new(Cell::new(false));
+    let ucc = update_check_cell.clone();
+    reader.on_panel_check_updates(move || {
+        ucc.set(true);
+    });
+
+    let reset_book_cell = Rc::new(Cell::new(false));
+    let rbc = reset_book_cell.clone();
+    reader.on_panel_reset_book(move || {
+        rbc.set(true);
+    });
+
     Callbacks {
         page_delta,
         quit,
@@ -228,9 +300,11 @@ pub fn register(reader: &Reader) -> Callbacks {
         wifi_cycle_cell,
         bt_cycle_cell,
         sleep_cycle_cell,
+        tts_sleep_cycle_cell,
         play_toggle_cell,
         chapter_panel_cell: chapter.panel_cell,
         chapter_select_cell: chapter.select_cell,
+        word_open_cell: chapter.word_open_cell,
         jump_to_reading_cell: chapter.jump_cell,
         font_pending_val,
         font_last_change,
@@ -240,5 +314,12 @@ pub fn register(reader: &Reader) -> Callbacks {
         lock_tap_cell,
         skip_forward_cell,
         skip_rewind_cell,
+        text_align_cell,
+        header_toggle_cell,
+        update_check_cell,
+        reset_book_cell,
+        overlay_tab_switch_cell: chapter.tab_switch_cell,
+        overlay_back_from_results_cell: chapter.back_from_results_cell,
+        overlay_requested_tab_cell: chapter.requested_tab_cell,
     }
 }

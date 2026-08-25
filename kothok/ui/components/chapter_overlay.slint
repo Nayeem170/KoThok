@@ -8,46 +8,150 @@ export component ChapterOverlay inherits Rectangle {
     in property <color> text-primary: #111111;
     in property <color> text-secondary: #666666;
     in property <color> brand-red: #F42A41;
+    in property <color> brand-green: #006A4E;
     in property <color> track-color: #d0d0d0;
 
-    callback chapter-selected(int);
+    in-out property <int> active-tab: 0;
+    in-out property <bool> results-active: false;
+    in-out property <string> results-title: "";
+
+    in property <length> tab-seg-w: 148px;
+    in property <length> tab-gap: 8px;
+    in property <length> tab-font-px: 22px;
+
+    callback chapter-selected(int, int);
     callback close-to-book();
+    callback tab-switch(int);
+    callback back-from-results();
 
     visible: root.visible-flag;
     background: #ffffff;
 
-    // Full-screen touch backdrop: blocks touches from reaching the underlying
-    // progress bar while the chapter list is open.
     TouchArea {
         width: root.width;
         height: root.height;
     }
 
-    // Shared header geometry: 110px tall, 76px buttons, 23px edge padding.
     Rectangle {
         y: 0px; height: 110px; width: root.width;
         background: #ffffff;
 
+        if root.results-active : Text {
+            x: 23px; width: root.width - 240px; height: 110px;
+            text: root.results-title;
+            color: root.text-secondary;
+            font-size: 33px; font-weight: 700;
+            horizontal-alignment: left;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+
+        if !root.results-active : Rectangle {
+            x: 23px;
+            y: 17px;
+            height: 76px;
+            width: 3 * root.tab-seg-w + 2 * root.tab-gap;
+
+            TouchArea {
+                x: 0px;
+                y: 0px;
+                width: root.tab-seg-w;
+                height: 76px;
+                clicked => {
+                    root.active-tab = 0;
+                    root.tab-switch(0);
+                }
+            }
+            Rectangle {
+                x: 0px;
+                y: 0px;
+                width: root.tab-seg-w;
+                height: 76px;
+                background: root.active-tab == 0 ? root.brand-green : #e8e8e8;
+                border-radius: 38px;
+                Text {
+                    text: "Chapters";
+                    color: root.active-tab == 0 ? #ffffff : #222222;
+                    font-size: root.tab-font-px;
+                    font-weight: 700;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+
+            TouchArea {
+                x: root.tab-seg-w + root.tab-gap;
+                y: 0px;
+                width: root.tab-seg-w;
+                height: 76px;
+                clicked => {
+                    root.active-tab = 1;
+                    root.tab-switch(1);
+                }
+            }
+            Rectangle {
+                x: root.tab-seg-w + root.tab-gap;
+                y: 0px;
+                width: root.tab-seg-w;
+                height: 76px;
+                background: root.active-tab == 1 ? root.brand-green : #e8e8e8;
+                border-radius: 38px;
+                Text {
+                    text: "Words";
+                    color: root.active-tab == 1 ? #ffffff : #222222;
+                    font-size: root.tab-font-px;
+                    font-weight: 700;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+
+            TouchArea {
+                x: 2 * (root.tab-seg-w + root.tab-gap);
+                y: 0px;
+                width: root.tab-seg-w;
+                height: 76px;
+                clicked => {
+                    root.active-tab = 2;
+                    root.tab-switch(2);
+                }
+            }
+            Rectangle {
+                x: 2 * (root.tab-seg-w + root.tab-gap);
+                y: 0px;
+                width: root.tab-seg-w;
+                height: 76px;
+                background: root.active-tab == 2 ? root.brand-green : #e8e8e8;
+                border-radius: 38px;
+                Text {
+                    text: "Bookmarks";
+                    color: root.active-tab == 2 ? #ffffff : #222222;
+                    font-size: root.tab-font-px;
+                    font-weight: 700;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
         ActionButton {
-            x: 23px; y: 17px;
+            x: root.width - 99px; y: 17px;
             width: 76px; height: 76px;
-            icon: @image-url("assets/back.svg");
+            icon: root.results-active
+                ? @image-url("assets/back.svg")
+                : @image-url("assets/close.svg");
             bg: root.brand-red;
             radius: 38px;
             clicked => {
                 root.chapter-preview-idx = -1;
                 root.chapter-pending = -1;
-                root.visible-flag = false;
-                root.close-to-book();
+                if root.results-active {
+                    root.back-from-results();
+                } else {
+                    root.visible-flag = false;
+                    root.close-to-book();
+                }
             }
-        }
-
-        Text {
-            text: "Chapters";
-            color: root.text-secondary; font-size: 33px; font-weight: 700;
-            horizontal-alignment: center; vertical-alignment: center;
-            x: 119px; width: root.width - 238px; height: 110px;
-            overflow: elide;
         }
 
         Rectangle {
@@ -71,7 +175,7 @@ export component ChapterOverlay inherits Rectangle {
             label: "Open";
             font-size: 32px;
             clicked => {
-                root.chapter-selected(root.chapter-preview-idx >= 0 ? root.chapter-preview-idx : root.current-chapter-idx);
+                root.chapter-selected(root.chapter-preview-idx >= 0 ? root.chapter-preview-idx : root.current-chapter-idx, root.active-tab);
             }
         }
     }

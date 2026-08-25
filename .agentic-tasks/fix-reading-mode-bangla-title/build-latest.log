@@ -1,0 +1,17 @@
+=== HEAD: 83c3e2aa2529ad38f8ce015315dbaf360ca4401a | 2026-07-31T18:40:57+06:00 ===
+=== TREE: CLEAN ===
+=== TOTAL PASSED: 336 ===
+
+Build: cross build --target armv7-unknown-linux-musleabihf --release -p kothok-app
+Result: Finished `release` profile [optimized] target(s) in 2m 51s
+
+Test: cross test -p kothok-app --target armv7-unknown-linux-musleabihf
+Result: test result: ok. 336 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.38s
+
+Lint: cross clippy -p kothok-app --target armv7-unknown-linux-musleabihf -- -D warnings
+Result: Finished `dev` profile [unoptimized + debuginfo] target(s) in 3m 02s
+
+Fmt: cargo fmt --manifest-path kothok/Cargo.toml -- --check
+Result: pre-existing diffs in chapter_list.rs:584 and search_results.rs:73 (NOT from this change). Working tree clean.
+
+Gitleaks: Passed (pre-commit hook)

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (c) 2026 Nayeem Bin Ahsan
 use super::*;
+use crate::rendering::chapter_list::CH_LIST_BOTTOM_PAD;
 use crate::rendering::common::rgb565_as_bytes_ref;
 
 pub(super) fn on_release(
@@ -21,6 +22,13 @@ pub(super) fn on_release(
     if st.shot_armed {
         st.shot_armed = false;
         st.shot_done = false;
+        return;
+    }
+
+    if st.sb_dragging {
+        st.sb_dragging = false;
+        st.text_dirty = true;
+        ctx.window.request_redraw();
         return;
     }
 
@@ -46,6 +54,7 @@ pub(super) fn on_release(
     } else if st.menu_pressed {
         st.menu_pressed = false;
         st.panel_open = true;
+        crate::debug_log::log("panel: swipe-up opened panel");
         cb.panel_open_cell.set(true);
         reader.set_panel_open(true);
         st.text_dirty = true;
@@ -70,6 +79,19 @@ pub(super) fn on_release(
         let (press_dx, press_dy) = touch::to_display(st.press_x, st.press_y, ctx.touch_cfg);
         let swipe_dx = dx - press_dx;
         let swipe_dy = dy - press_dy;
+        if reader.get_chapter_overlay_open() {
+            if st.press_dispatched {
+                st.press_dispatched = false;
+                ctx.window
+                    .window()
+                    .dispatch_event(slint::platform::WindowEvent::PointerReleased {
+                        position: slint::LogicalPosition::new(dx, dy),
+                        button: slint::platform::PointerEventButton::Left,
+                    });
+            }
+            chapter_overlay_release(st, ctx, dx, dy, swipe_dx, swipe_dy, dt.as_millis());
+            return;
+        }
         if st.press_dispatched {
             st.press_dispatched = false;
             ctx.window
@@ -145,26 +167,41 @@ pub(super) fn on_release(
                     _ => {}
                 }
             }
-            if reader.get_chapter_overlay_open() {
-                match gesture::chapter_overlay_target(
-                    dy,
-                    swipe_dy,
-                    swipe_dx,
-                    st.chapter_scroll,
-                    st.toc_rows.len(),
-                ) {
-                    gesture::ChapterOverlayAction::Scroll => {
-                        st.text_dirty = true;
-                        ctx.window.request_redraw();
-                    }
-                    gesture::ChapterOverlayAction::Select(idx) => {
-                        reader.set_chapter_preview_idx(idx as i32);
-                        st.text_dirty = true;
-                        ctx.window.request_redraw();
-                    }
-                    gesture::ChapterOverlayAction::None => {}
+        } else if st.picker_active
+            && !st.panel_open
+            && swipe_dy > SWIPE_THRESHOLD_PX
+            && swipe_dy.abs() > swipe_dx.abs()
+        {
+            st.panel_open = true;
+            cb.panel_open_cell.set(true);
+            reader.set_panel_open(true);
+            reader.set_battery_pct(caps.battery_pct());
+            reader.set_clock(SharedString::from(caps.current_clock()));
+            reader.set_sleep_label(
+                crate::panel::callbacks::sleep::sleep_label(ctx.cfg.reading_auto_sleep_secs).into(),
+            );
+            let wifi = caps.network_available();
+            let bt = caps.audio_sink_available();
+            reader.set_wifi_on(wifi);
+            if !crate::device::bt_reconnect_busy() {
+                reader.set_bt_on(bt);
+                if bt {
+                    st.bt_fail_count = 0;
+                }
+                if let Some(n) = caps.bt_name() {
+                    reader.set_bt_connected_name(SharedString::from(n));
                 }
             }
+            reader.set_play_enabled(wifi && bt);
+            if let Some(n) = caps.wifi_name() {
+                reader.set_wifi_connected_name(SharedString::from(n));
+            }
+            if let Some(ref path) = ctx.fl_path {
+                if let Some(hw) = frontlight_get(path) {
+                    reader.set_brightness_val(hw as i32);
+                }
+            }
+            st.text_dirty = true;
         } else if !st.picker_active {
             let swipe_down = swipe_dy > SWIPE_THRESHOLD_PX && swipe_dy.abs() > swipe_dx.abs();
             if st.cover_page_visible && !swipe_down {
@@ -207,17 +244,17 @@ pub(super) fn on_release(
                 );
                 st.prev_buffer.copy_from_slice(&st.buffer);
                 if matches!(st.view_mode, crate::ViewMode::Audio) {
-                    crate::audio::glue::load_chapter_audio(&st.state, &cmd_tx);
+                    crate::audio::glue::load_chapter_audio(&st.state, cmd_tx);
                     let off = reader.get_cur_start().max(0) as usize;
                     if off > 0 {
                         let idx = crate::audio::glue::utterance_index_for_offset(
                             &st.state.utterances,
                             off,
                         );
-                        crate::audio::glue::best_effort_send(&cmd_tx, Cmd::Seek(idx));
+                        crate::audio::glue::best_effort_send(cmd_tx, Cmd::Seek(idx));
                     }
                 } else {
-                    load_page_audio(st.current_page, &st.state, &cmd_tx);
+                    load_page_audio(st.current_page, &st.state, cmd_tx);
                 }
             } else if !st.picker_active
                 && !st.panel_open
@@ -260,14 +297,9 @@ pub(super) fn on_release(
                     best_effort_send(cmd_tx, Cmd::Pause);
                 }
             } else if st.panel_open
-                && swipe_dy < -SWIPE_THRESHOLD_PX
-                && swipe_dy.abs() > swipe_dx.abs()
+                && (swipe_dy < -SWIPE_THRESHOLD_PX && swipe_dy.abs() > swipe_dx.abs()
+                    || press_dy > 500.0)
             {
-                st.panel_open = false;
-                cb.panel_open_cell.set(false);
-                reader.set_panel_open(false);
-                st.text_dirty = true;
-            } else if st.panel_open && press_dy > 500.0 {
                 st.panel_open = false;
                 cb.panel_open_cell.set(false);
                 reader.set_panel_open(false);
@@ -321,6 +353,16 @@ pub(super) fn on_release(
                         st.text_dirty = true;
                     } else {
                         st.pending_tap_at = Some(now);
+                        // A tap on the page is how a retracted header is
+                        // recalled. Only meaningful while auto-hide is on --
+                        // otherwise the header is already up and this would
+                        // restart a countdown that must never run.
+                        if ctx.cfg.auto_hide_header && !st.header_visible {
+                            st.header_visible = true;
+                            reader.set_header_visible(true);
+                            st.header_revealed_at = Some(now);
+                            st.text_dirty = true;
+                        }
                     }
                 }
             }
@@ -337,6 +379,150 @@ pub(super) fn on_release(
                 .set(cb.picker_scroll_delta.get() + delta);
         }
     }
+}
+
+/// Hold time after which releasing on a Bookmarks-tab row deletes the
+/// bookmark instead of selecting it. Above any realistic tap dwell, below
+/// the point a hold starts to feel broken.
+const BM_DELETE_HOLD_MS: u128 = 550;
+
+fn chapter_overlay_release(
+    st: &mut LoopState,
+    ctx: &mut LoopContext,
+    dx: f32,
+    dy: f32,
+    swipe_dx: f32,
+    swipe_dy: f32,
+    hold_ms: u128,
+) {
+    let reader = ctx.reader;
+    let cb = ctx.cb;
+    let cmd_tx = ctx.cmd_tx;
+    let list_bottom = (ctx.h as f32) - CH_LIST_BOTTOM_PAD as f32;
+    if dy >= list_bottom {
+        if st.search_results_active {
+            if st.search_result_selected {
+                let idx = st.search_selected_result;
+                search::jump_to_occurrence(st, reader, ctx.cmd_tx, idx);
+                ctx.window.request_redraw();
+            }
+            return;
+        }
+        match st.chapter_tab {
+            crate::loop_state::ChapterTab::Words => {
+                if st.search_word_selected {
+                    st.search_results_active = true;
+                    st.search_results_scroll = 0;
+                    st.text_dirty = true;
+                    ctx.window.request_redraw();
+                }
+            }
+            crate::loop_state::ChapterTab::Chapters => {
+                let preview = reader.get_chapter_preview_idx();
+                let idx = if preview >= 0 {
+                    preview as usize
+                } else {
+                    match crate::rendering::chapter_list::current_toc_row(
+                        &st.toc_rows,
+                        st.current_chapter,
+                    ) {
+                        Some(i) => i,
+                        None => return,
+                    }
+                };
+                reader.set_chapter_overlay_open(false);
+                reader.set_chapter_preview_idx(-1);
+                cb.chapter_select_cell.set(Some(idx));
+                st.text_dirty = true;
+            }
+            // Open jumps to the selected row, or to the most recently set
+            // bookmark when nothing is selected (same target as the header
+            // jump button).
+            crate::loop_state::ChapterTab::Bookmarks => {
+                if st.bookmarks.is_empty() {
+                    return;
+                }
+                let idx = st
+                    .bm_selected
+                    .filter(|&i| i < st.bookmarks.len())
+                    .unwrap_or(st.bookmarks.len() - 1);
+                reader.set_chapter_overlay_open(false);
+                reader.set_chapter_preview_idx(-1);
+                st.bm_press = None;
+                super::callbacks::jump::jump_to_bookmark_idx(st, reader, cmd_tx, ctx, idx);
+            }
+        }
+        return;
+    }
+    if search::handle_search_release(st, ctx, dx, dy) {
+        return;
+    }
+    if st.chapter_tab == crate::loop_state::ChapterTab::Bookmarks {
+        bookmark_row_release(st, ctx, swipe_dx, swipe_dy, hold_ms);
+        return;
+    }
+    match gesture::chapter_overlay_target(
+        dy,
+        swipe_dy,
+        swipe_dx,
+        st.chapter_scroll,
+        st.toc_rows.len(),
+    ) {
+        gesture::ChapterOverlayAction::Scroll => {
+            st.text_dirty = true;
+            ctx.window.request_redraw();
+        }
+        gesture::ChapterOverlayAction::Select(idx) => {
+            reader.set_chapter_preview_idx(idx as i32);
+            st.text_dirty = true;
+            ctx.window.request_redraw();
+        }
+        gesture::ChapterOverlayAction::None => {}
+    }
+}
+
+/// Release on a Bookmarks-tab row. A hold on the row pressed at touchdown
+/// deletes that bookmark; a tap selects it (the Open strip jumps to the
+/// selection). A flick keeps the drag-scroll and selects nothing. Selection
+/// and delete act on the row the finger went DOWN on, not the release
+/// position: at a scroll boundary the clamp breaks the press/release
+/// cancellation, and a re-hit-test there picks a row the user never touched.
+fn bookmark_row_release(
+    st: &mut LoopState,
+    ctx: &mut LoopContext,
+    swipe_dx: f32,
+    swipe_dy: f32,
+    hold_ms: u128,
+) {
+    let Some(orig) = st.bm_press.take() else {
+        return;
+    };
+    if swipe_dy.abs() > 40.0 && swipe_dy.abs() > swipe_dx.abs() {
+        return;
+    }
+    if hold_ms >= BM_DELETE_HOLD_MS {
+        let bm = st.bookmarks.remove(orig);
+        st.bm_selected =
+            crate::rendering::bookmark_list::selected_after_remove(st.bm_selected, orig);
+        let list_h =
+            (ctx.h as i32) - crate::rendering::chapter_list::CH_LIST_TOP - CH_LIST_BOTTOM_PAD;
+        let max_scroll =
+            crate::rendering::chapter_list::list_scroll_max(st.bookmarks.len(), list_h);
+        st.bookmark_scroll = st.bookmark_scroll.min(max_scroll);
+        info!(
+            "bookmark-delete: ch={} off={} hold={}ms remaining={}",
+            bm.chapter + 1,
+            bm.offset,
+            hold_ms,
+            st.bookmarks.len(),
+        );
+        st.text_dirty = true;
+        ctx.window.request_redraw();
+        return;
+    }
+    st.bm_selected = Some(orig);
+    st.text_dirty = true;
+    ctx.window.request_redraw();
 }
 
 /// Clamp a raw tap position into the content region for the zoom crop centre.

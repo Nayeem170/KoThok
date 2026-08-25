@@ -27,7 +27,7 @@ fn current_position(st: &LoopState, reader: &Reader) -> persistence::ReadingPosi
         cur_start: reader.get_cur_start().max(0) as usize,
         cur_end: reader.get_cur_end().max(0) as usize,
         view_mode: st.view_mode,
-        bookmark: st.bookmark,
+        bookmarks: st.bookmarks.clone(),
         progress: reader.get_book_progress(),
     }
 }
@@ -39,11 +39,13 @@ pub(crate) fn save_position_now(st: &mut LoopState, reader: &Reader) {
         return;
     }
     let pos = current_position(st, reader);
-    save_position(
+    if let Err(e) = save_position(
         std::path::Path::new(POSITIONS_FILE),
         &st.current_book_path,
         &pos,
-    );
+    ) {
+        log::error!("save_position_now: {e}");
+    }
     st.saved_pos = Some((pos.chapter, pos.page, pos.cur_start));
     st.saved_pos_at = Some(std::time::Instant::now());
 }
@@ -158,6 +160,11 @@ pub(super) fn handle_quit_button(st: &mut LoopState, ctx: &mut LoopContext) -> L
         st.picker_active = true;
         st.panel_open = false;
         reader.set_panel_open(false);
+        {
+            let device_font = (ctx.w as i32 / 38).clamp(20, 60);
+            *ctx.cfg = load_config_from_base(CONFIG_FILE, device_font);
+            push_book_settings_to_ui(reader, ctx.cfg);
+        }
         st.picker_entered = Some(std::time::Instant::now());
         st.picker_cells = picker_scroll_cells(ctx.all_books, st.picker_scroll, st.library_filter);
         st.prev_buffer.copy_from_slice(&st.buffer);
@@ -183,8 +190,27 @@ pub(super) fn refresh_status(st: &mut LoopState, ctx: &LoopContext) {
     if st.last_status_refresh.elapsed().as_millis() as u64 >= STATUS_REFRESH_MS {
         st.last_status_refresh = std::time::Instant::now();
         let wifi = ctx.caps.network_available();
+        let prev_wifi = ctx.reader.get_wifi_on();
         crate::crash_report::try_upload_if_wifi();
+        crate::debug_log::try_upload_if_wifi();
         let bt = ctx.caps.audio_sink_available();
+        let prev_bt = ctx.reader.get_bt_on();
+        if wifi != prev_wifi {
+            crate::debug_log::log(&format!(
+                "wifi: status changed {} -> {} (toggle_age={}ms)",
+                prev_wifi,
+                wifi,
+                crate::device::wifi_toggle_age_ms()
+            ));
+        }
+        if bt != prev_bt {
+            crate::debug_log::log(&format!(
+                "bt: status changed {} -> {} (reconnect_busy={})",
+                prev_bt,
+                bt,
+                crate::device::bt_reconnect_busy()
+            ));
+        }
         if crate::device::wifi_toggle_age_ms() >= WIFI_TOGGLE_GRACE_MS {
             ctx.reader.set_wifi_on(wifi);
         }

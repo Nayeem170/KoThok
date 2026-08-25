@@ -5,9 +5,13 @@ use kobo_core::{Chapter, EpubBook, TocEntry};
 use log::{info, warn};
 
 use crate::data::config::{BOOK_CACHE_DIR, ELABEL_PATH_FILTER, POSITIONS_FILE};
+use crate::data::word_index::build_word_index;
+use crate::rendering::layout::state::build_chapter_body;
 
 pub use crate::data::config::{BOOK_DIR, DEVICE_BOOK};
 pub use kobo_core::formats::{detect_language, progress_from_offsets};
+
+pub use crate::data::word_index::WordIndex;
 
 /// On-disk cache of a fully-parsed EPUB (issue 2): the expensive part of opening
 /// a large book is the per-chapter XHTML extraction (`html_text::extract`). This
@@ -23,6 +27,8 @@ struct CachedBook {
     /// since `CACHE_FORMAT` was bumped alongside it, but cheap insurance.
     #[serde(default)]
     toc_tree: Vec<TocEntry>,
+    #[serde(default)]
+    word_index: WordIndex,
 }
 
 /// One row of the chapter-overlay list after the TOC tree is flattened for
@@ -44,22 +50,18 @@ pub struct FlatTocRow {
 /// row's text off the edge of the column entirely.
 const MAX_TOC_DEPTH: usize = 6;
 
-/// Flatten `toc_tree` into paintable rows, or fall back to one row per spine
-/// chapter when the book ships no NCX/nav at all -- today's only behaviour,
-/// so a book without a TOC does not regress.
+/// Flatten `toc_tree` into paintable rows, merged with the spine so every
+/// chapter file is reachable even when the book's nav only names a few.
+///
+/// The NCX is flattened in document order, then walked once. Each nav entry
+/// that points at chapter `c` first emits synthesised rows for any spine file
+/// before `c` that no entry has covered, then the entry itself wins for that
+/// file. Divider entries (`chapter: None`, e.g. "Part One") are emitted as-is.
+/// Spine files the nav never names are synthesised at the end, titled from the
+/// chapter itself. This is a single path, not a fallback: there is no "is the
+/// nav good enough?" test, because that test is what left unnamed files
+/// unreachable.
 pub fn toc_rows(toc_tree: &[TocEntry], chapters: &[Chapter]) -> Vec<FlatTocRow> {
-    if toc_tree.is_empty() {
-        return chapters
-            .iter()
-            .enumerate()
-            .map(|(i, ch)| FlatTocRow {
-                label: chapter_display_title(ch, i),
-                depth: 0,
-                chapter: Some(i),
-                anchor: None,
-            })
-            .collect();
-    }
     fn walk(entries: &[TocEntry], out: &mut Vec<FlatTocRow>) {
         for e in entries {
             out.push(FlatTocRow {
@@ -71,8 +73,37 @@ pub fn toc_rows(toc_tree: &[TocEntry], chapters: &[Chapter]) -> Vec<FlatTocRow> 
             walk(&e.children, out);
         }
     }
+    fn spine_row(chapters: &[Chapter], i: usize) -> FlatTocRow {
+        FlatTocRow {
+            label: chapter_display_title(&chapters[i], i),
+            depth: 0,
+            chapter: Some(i),
+            anchor: None,
+        }
+    }
+
+    let mut flat = Vec::new();
+    walk(toc_tree, &mut flat);
+
     let mut out = Vec::new();
-    walk(toc_tree, &mut out);
+    let mut next_spine = 0usize;
+    for e in flat {
+        if let Some(c) = e.chapter {
+            while next_spine < c && next_spine < chapters.len() {
+                out.push(spine_row(chapters, next_spine));
+                next_spine += 1;
+            }
+            // `.max`, not `= c + 1`: several entries may point into the same
+            // file (a chapter and its sections). Advancing only forwards keeps
+            // the file's row from being re-synthesised on the second entry.
+            next_spine = next_spine.max(c.saturating_add(1));
+        }
+        out.push(e);
+    }
+    while next_spine < chapters.len() {
+        out.push(spine_row(chapters, next_spine));
+        next_spine += 1;
+    }
     out
 }
 
@@ -88,7 +119,7 @@ pub fn fnv1a(s: &str) -> u64 {
 /// length prefix read at the wrong offset asks for an allocation the device
 /// cannot serve. A version that is part of the path means an outdated cache is
 /// never opened at all.
-const CACHE_FORMAT: u32 = 3;
+const CACHE_FORMAT: u32 = 7;
 
 pub fn book_cache_path(path: &str) -> std::path::PathBuf {
     let h = fnv1a(path);
@@ -148,17 +179,33 @@ fn save_cached_book(
     language: &Option<String>,
     chapters: &[Chapter],
     toc_tree: &[TocEntry],
+    word_index: &WordIndex,
 ) {
-    // best-effort: cache write; a failure (read-only fs, full disk) only means
-    // the next open re-parses - the reader still works from the in-memory copy.
     if let Err(e) = std::fs::create_dir_all(BOOK_CACHE_DIR) {
         warn!("bookcache mkdir failed: {e}");
     }
+    let chapters: Vec<Chapter> = chapters
+        .iter()
+        .map(|ch| {
+            if ch.body.is_empty() && !ch.segments.is_empty() {
+                let built = build_chapter_body(ch);
+                let mut c = ch.clone();
+                c.body = built.body;
+                c.seg_body_start = built.seg_body_start;
+                c.body_styles = built.styles;
+                c.body_links = built.links;
+                c
+            } else {
+                ch.clone()
+            }
+        })
+        .collect();
     let cached = CachedBook {
         mtime,
         language: language.clone(),
-        chapters: chapters.to_vec(),
+        chapters,
         toc_tree: toc_tree.to_vec(),
+        word_index: word_index.clone(),
     };
     if let Ok(bytes) = bincode::serialize(&cached) {
         if let Err(e) = std::fs::write(book_cache_path(path), bytes) {
@@ -312,7 +359,8 @@ fn epub_metadata(path: &str) -> (String, Option<String>) {
     }
 }
 
-pub fn open_book(path: &str) -> Option<(Vec<Chapter>, Option<String>, Vec<TocEntry>)> {
+#[allow(clippy::type_complexity)]
+pub fn open_book(path: &str) -> Option<(Vec<Chapter>, Option<String>, Vec<TocEntry>, WordIndex)> {
     if let Some(cached) = load_cached_book(path) {
         info!(
             "book: {path}: loaded from cache ({} chapter(s))",
@@ -322,7 +370,7 @@ pub fn open_book(path: &str) -> Option<(Vec<Chapter>, Option<String>, Vec<TocEnt
             return None;
         }
         let lang = detect_language(&cached.chapters).or_else(|| cached.language.clone());
-        return Some((cached.chapters, lang, cached.toc_tree));
+        return Some((cached.chapters, lang, cached.toc_tree, cached.word_index));
     }
     let mtime = epub_mtime(path);
     match EpubBook::open(path) {
@@ -333,8 +381,19 @@ pub fn open_book(path: &str) -> Option<(Vec<Chapter>, Option<String>, Vec<TocEnt
                 return None;
             }
             let lang = detect_language(&book.chapters).or_else(|| book.language.clone());
-            save_cached_book(path, mtime, &lang, &book.chapters, &book.toc_tree);
-            Some((book.chapters, lang, book.toc_tree))
+            let mut chapters = book.chapters;
+            for ch in &mut chapters {
+                if ch.body.is_empty() && !ch.segments.is_empty() {
+                    let built = build_chapter_body(ch);
+                    ch.body = built.body;
+                    ch.seg_body_start = built.seg_body_start;
+                    ch.body_styles = built.styles;
+                    ch.body_links = built.links;
+                }
+            }
+            let word_index = build_word_index(&chapters);
+            save_cached_book(path, mtime, &lang, &chapters, &book.toc_tree, &word_index);
+            Some((chapters, lang, book.toc_tree, word_index))
         }
         Err(e) => {
             warn!("book: {path}: open error: {e}");

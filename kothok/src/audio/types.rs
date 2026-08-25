@@ -71,10 +71,12 @@ mod tests {
         assert_eq!(PARA_GAP_FRAMES, TARGET_RATE / 1000 * 700);
         let ms = ms_of(PARA_GAP_FRAMES);
         assert!((ms - 700.0).abs() < 3.0, "para gap ~700ms, got {ms}");
-        assert!(
-            PARA_GAP_FRAMES > SENTENCE_GAP_FRAMES,
-            "para gap must exceed sentence gap"
-        );
+        const {
+            assert!(
+                PARA_GAP_FRAMES > SENTENCE_GAP_FRAMES,
+                "para gap must exceed sentence gap"
+            )
+        };
     }
 
     #[test]

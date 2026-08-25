@@ -4,18 +4,28 @@ import { SelectorRow } from "selector.slint";
 
 export component ControlPanel inherits Rectangle {
     in property <bool> visible-flag: false;
+    in property <bool> picker-active: false;
     in property <int> brightness-val: 50;
     in property <int> tts-speed: 50;
     in property <int> font-size-val: 36;
+    in property <int> line-spacing-val: 140;
+    in property <bool> text-justify: true;
+    in property <int> margin-val: 24;
+    in property <bool> auto-hide-header: false;
+    in property <string> update-status: "";
+    in property <string> device-model: "";
+    in property <string> app-version: "";
+    in property <string> free-space: "";
     in property <int> volume-val: 100;
     in property <string> tts-voice-label: "Emma (English)";
-    in property <bool> wifi-on: true;
-    in property <bool> bt-on: true;
-    in property <string> wifi-name: "";
-    in property <string> bt-name: "";
-    in property <string> wifi-connected-name: "";
-    in property <string> bt-connected-name: "";
-    in property <string> sleep-label: "Off";
+    in-out property <bool> wifi-on: true;
+    in-out property <bool> bt-on: true;
+    in-out property <string> wifi-name: "";
+    in-out property <string> bt-name: "";
+    in-out property <string> wifi-connected-name: "";
+    in-out property <string> bt-connected-name: "";
+    in-out property <string> sleep-label: "Off";
+    in-out property <string> tts-sleep-label: "Off";
     in property <string> clock: "";
     in property <int> battery-pct: 0;
     in property <string> book-title: "";
@@ -23,6 +33,8 @@ export component ControlPanel inherits Rectangle {
     in property <string> chapter-name: "";
     in property <image> book-title-img;
     in property <int> book-title-img-h: 0;
+    in property <image> book-title-head-img;
+    in property <int> book-title-head-img-h: 0;
     in property <image> book-author-img;
     in property <int> book-author-img-h: 0;
     in property <image> chapter-name-img;
@@ -52,18 +64,14 @@ export component ControlPanel inherits Rectangle {
     callback panel-wifi-cycle(string);
     callback panel-bt-cycle(string);
     callback panel-sleep-cycle(string);
+    callback panel-tts-sleep-cycle(string);
+    callback panel-text-align-toggle();
+    callback panel-header-toggle();
+    callback panel-check-updates();
+    callback panel-reset-book();
 
     visible: root.visible-flag;
     background: #ffffff;
-
-    // Full-screen touch backdrop: intercepts all touches while the panel is
-    // open so they cannot reach the underlying Content/AudioPlayer progress
-    // bar TouchArea. Without this, dragging on the lower screen area behind
-    // the panel accidentally scrubs the book position.
-    TouchArea {
-        width: root.width;
-        height: root.height;
-    }
 
     // Shares the header geometry used by content.slint and audio_player.slint:
     // 110px tall, 76px buttons, 23px edge padding.
@@ -74,20 +82,48 @@ export component ControlPanel inherits Rectangle {
         Rectangle { y: 0px; height: 4px; width: root.width; background: root.brand-green; }
 
         ActionButton {
-            x: 23px; y: 17px;
+            x: root.width - 99px; y: 17px;
             width: 76px; height: 76px;
-            icon: @image-url("assets/back.svg");
+            icon: @image-url("assets/close.svg");
             bg: root.brand-red;
             radius: 38px;
             clicked => { root.panel-close(); }
         }
 
-        Text {
-            text: "Settings";
-            color: root.text-secondary; font-size: 33px; font-weight: 700;
-            horizontal-alignment: center; vertical-alignment: center;
-            x: 119px; width: root.width - 238px; height: 110px;
-            overflow: elide;
+        // Rust rasterises this line for every book (see `set_book_meta`), so
+        // Latin and Bengali titles come off the same engine and cannot sit on
+        // different baselines. The Text below is only the picker's "Device
+        // Settings" and the no-book case.
+        //
+        // Sized to the raster's own height and centred in the 76px button band
+        // by hand. Handing it the full band and leaving the width unset instead
+        // lets `image-fit: contain` scale the picture -- a 46px raster in a 76px
+        // box comes out ~1.6x, which is what made the Bangla title read as both
+        // bigger and off-line.
+        if !root.picker-active && root.book-title-head-img-h > 0 : Image {
+            source: root.book-title-head-img;
+            x: 23px;
+            y: 17px + (76px - root.book-title-head-img-h * 1px) / 2;
+            width: root.width - 320px;
+            height: root.book-title-head-img-h * 1px;
+            image-fit: contain;
+            horizontal-alignment: left;
+        }
+
+        if root.picker-active || root.book-title-head-img-h == 0 : HorizontalLayout {
+            x: 23px; y: 17px;
+            height: 76px;
+            alignment: start;
+            Text {
+                text: root.picker-active ? "Device" : (root.book-title != "" ? root.book-title : "Reader");
+                color: root.text-primary; font-size: 33px; font-weight: 700;
+                overflow: elide;
+                max-width: root.width - 320px;
+            }
+            Text {
+                text: " Settings";
+                color: root.text-secondary; font-size: 33px; font-weight: 700;
+            }
         }
 
         Rectangle {
@@ -96,9 +132,9 @@ export component ControlPanel inherits Rectangle {
         }
     }
 
-    VerticalLayout {
+    // Device mode: brightness, auto-off, volume, wifi, bt.
+    if root.picker-active : VerticalLayout {
         padding-left: 24px; padding-right: 24px;
-        // Clears the 110px header + 14px gap.
         padding-top: 124px; padding-bottom: 24px;
         spacing: 14px;
 
@@ -131,18 +167,8 @@ export component ControlPanel inherits Rectangle {
             set-frac(f) => { root.panel-frac(0, f); }
         }
 
-        CompactSlider {
-            name: "Font";
-            text-primary: root.text-primary;
-            text-hint: root.text-hint;
-            track-color: root.track-color;
-            value-text: root.font-size-val + "px";
-            fill-frac: (root.font-size-val - 20) / 40.0;
-            set-frac(f) => { root.panel-frac(2, f); }
-        }
-
         SelectorRow {
-            label: "Sleep: " + root.sleep-label;
+            label: "Auto-off: " + root.sleep-label;
             on-state: true;
             connected: true;
             center-toggle: false;
@@ -171,29 +197,6 @@ export component ControlPanel inherits Rectangle {
                     background: root.separator;
                 }
             }
-        }
-
-        SelectorRow {
-            label: root.tts-voice-label;
-            on-state: true;
-            connected: true;
-            center-toggle: false;
-            brand-green: root.brand-green;
-            brand-red: root.brand-red;
-            bg-off: root.bg-off;
-            bg-pressed: root.bg-pressed;
-            prev => { root.panel-voice("prev"); }
-            next => { root.panel-voice("next"); }
-        }
-
-        CompactSlider {
-            name: "Speed";
-            text-primary: root.text-primary;
-            text-hint: root.text-hint;
-            track-color: root.track-color;
-            value-text: (root.tts-speed == 50 ? "1.0x" : (root.tts-speed > 50 ? "+" : "") + (root.tts-speed - 50) * 2 + "%");
-            fill-frac: root.tts-speed / 100.0;
-            set-frac(f) => { root.panel-frac(1, f); }
         }
 
         CompactSlider {
@@ -259,21 +262,310 @@ export component ControlPanel inherits Rectangle {
             toggle => { root.panel-bt-toggle(); }
         }
 
+        HorizontalLayout {
+            height: 24px;
+            spacing: 10px;
+            Text {
+                text: "SYSTEM";
+                color: root.text-hint; font-size: 20px; font-weight: 700;
+                vertical-alignment: center;
+            }
+            Rectangle {
+                horizontal-stretch: 1;
+                height: 24px;
+                Rectangle {
+                    y: (parent.height - 2px) / 2;
+                    height: 2px; width: 100%;
+                    background: root.separator;
+                }
+            }
+        }
+
+        ActionButton {
+            height: 52px;
+            label: "Check for updates";
+            font-size: 22px;
+            bg: root.brand-green;
+            bg-pressed: root.bg-pressed;
+            radius: 10px;
+            clicked => { root.panel-check-updates(); }
+        }
+
+        Text {
+            text: root.update-status;
+            color: root.text-secondary; font-size: 19px;
+            horizontal-alignment: left;
+            visible: root.update-status != "";
+        }
+
         Rectangle { vertical-stretch: 1; }
 
-        Rectangle {
-            height: 2px; background: root.separator;
+        // The About page said all of this in a screen of its own. Here it costs
+        // nothing: this panel had ~550px of dead space under the last row.
+        //
+        // Laid out as aligned label/value pairs rather than a run of sentences
+        // -- a fixed label column is what makes four unrelated facts scannable
+        // instead of a paragraph to read.
+        VerticalLayout {
+            spacing: 8px;
+
+            Rectangle { height: 2px; background: root.separator; }
+
+            HorizontalLayout {
+                height: 24px;
+                spacing: 10px;
+                Text {
+                    text: "ABOUT THIS DEVICE";
+                    color: root.text-hint; font-size: 20px; font-weight: 700;
+                    vertical-alignment: center;
+                }
+                Rectangle { horizontal-stretch: 1; }
+            }
+
+            info-device := HorizontalLayout {
+                height: 32px;
+                Text {
+                    text: "Device";
+                    color: root.text-hint; font-size: 20px;
+                    vertical-alignment: center;
+                    width: 200px;
+                }
+                Text {
+                    text: root.device-model != "" ? root.device-model : "Kobo";
+                    color: root.text-primary; font-size: 20px; font-weight: 700;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                    overflow: elide;
+                }
+            }
+
+            HorizontalLayout {
+                height: 32px;
+                Text {
+                    text: "KoThok";
+                    color: root.text-hint; font-size: 20px;
+                    vertical-alignment: center;
+                    width: 200px;
+                }
+                Text {
+                    text: root.app-version;
+                    color: root.text-primary; font-size: 20px;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                    overflow: elide;
+                }
+            }
+
+            HorizontalLayout {
+                height: 32px;
+                Text {
+                    text: "Battery";
+                    color: root.text-hint; font-size: 20px;
+                    vertical-alignment: center;
+                    width: 200px;
+                }
+                Text {
+                    text: root.battery-pct + "%";
+                    color: root.text-primary; font-size: 20px;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                }
+            }
+
+            HorizontalLayout {
+                height: 32px;
+                Text {
+                    text: "Free space";
+                    color: root.text-hint; font-size: 20px;
+                    vertical-alignment: center;
+                    width: 200px;
+                }
+                Text {
+                    text: root.free-space != "" ? root.free-space : "-";
+                    color: root.text-primary; font-size: 20px;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                }
+            }
+        }
+
+        Text {
+            text: "Swipe up to close";
+            color: root.text-secondary; font-size: 18px;
+            horizontal-alignment: left;
+        }
+    }
+
+    // Book mode: font, voice, speed.
+    if !root.picker-active : VerticalLayout {
+        padding-left: 24px; padding-right: 24px;
+        padding-top: 124px; padding-bottom: 24px;
+        spacing: 14px;
+
+        HorizontalLayout {
+            height: 24px;
+            spacing: 10px;
+            Text {
+                text: "DISPLAY";
+                color: root.text-hint; font-size: 20px; font-weight: 700;
+                vertical-alignment: center;
+            }
+            Rectangle {
+                horizontal-stretch: 1;
+                height: 24px;
+                Rectangle {
+                    y: (parent.height - 2px) / 2;
+                    height: 2px; width: 100%;
+                    background: root.separator;
+                }
+            }
+        }
+
+        CompactSlider {
+            name: "Font";
+            text-primary: root.text-primary;
+            text-hint: root.text-hint;
+            track-color: root.track-color;
+            value-text: root.font-size-val + "px";
+            fill-frac: (root.font-size-val - 20) / 40.0;
+            set-frac(f) => { root.panel-frac(2, f); }
+        }
+
+        CompactSlider {
+            name: "Line Spacing";
+            text-primary: root.text-primary;
+            text-hint: root.text-hint;
+            track-color: root.track-color;
+            value-text: root.line-spacing-val / 100 + "." + (root.line-spacing-val - (root.line-spacing-val / 100) * 100) / 10 + "x";
+            fill-frac: (root.line-spacing-val - 100) / 100.0;  // 100-200 range → 0.0-1.0
+            set-frac(f) => { root.panel-frac(4, f); }
+        }
+
+        CompactSlider {
+            name: "Margins";
+            text-primary: root.text-primary;
+            text-hint: root.text-hint;
+            track-color: root.track-color;
+            value-text: root.margin-val + "px";
+            fill-frac: (root.margin-val - 12) / 84.0;  // 12-96 range -> 0.0-1.0
+            set-frac(f) => { root.panel-frac(5, f); }
+        }
+
+        SelectorRow {
+            label: root.text-justify ? "Alignment: Justify" : "Alignment: Left";
+            on-state: true;
+            connected: true;
+            center-toggle: false;
+            brand-green: root.brand-green;
+            brand-red: root.brand-red;
+            bg-off: root.bg-off;
+            bg-pressed: root.bg-pressed;
+            prev => { root.panel-text-align-toggle(); }
+            next => { root.panel-text-align-toggle(); }
+        }
+
+        SelectorRow {
+            label: root.auto-hide-header ? "Header: Auto-hide" : "Header: Always shown";
+            on-state: true;
+            connected: !root.auto-hide-header;
+            center-toggle: true;
+            brand-green: root.brand-green;
+            brand-red: root.brand-red;
+            bg-off: root.bg-off;
+            bg-pressed: root.bg-pressed;
+            prev => { root.panel-header-toggle(); }
+            next => { root.panel-header-toggle(); }
+            toggle => { root.panel-header-toggle(); }
         }
 
         HorizontalLayout {
+            height: 24px;
+            spacing: 10px;
+            Text {
+                text: "AUDIO";
+                color: root.text-hint; font-size: 20px; font-weight: 700;
+                vertical-alignment: center;
+            }
+            Rectangle {
+                horizontal-stretch: 1;
+                height: 24px;
+                Rectangle {
+                    y: (parent.height - 2px) / 2;
+                    height: 2px; width: 100%;
+                    background: root.separator;
+                }
+            }
+        }
+
+        SelectorRow {
+            label: "Sleep timer: " + root.tts-sleep-label;
+            on-state: true;
+            connected: true;
+            center-toggle: false;
+            brand-green: root.brand-green;
+            brand-red: root.brand-red;
+            bg-off: root.bg-off;
+            bg-pressed: root.bg-pressed;
+            prev => { root.panel-tts-sleep-cycle("prev"); }
+            next => { root.panel-tts-sleep-cycle("next"); }
+        }
+
+        SelectorRow {
+            label: root.tts-voice-label;
+            on-state: true;
+            connected: true;
+            center-toggle: false;
+            brand-green: root.brand-green;
+            brand-red: root.brand-red;
+            bg-off: root.bg-off;
+            bg-pressed: root.bg-pressed;
+            prev => { root.panel-voice("prev"); }
+            next => { root.panel-voice("next"); }
+        }
+
+        CompactSlider {
+            name: "Speed";
+            text-primary: root.text-primary;
+            text-hint: root.text-hint;
+            track-color: root.track-color;
+            value-text: (root.tts-speed == 50 ? "1.0x" : (root.tts-speed > 50 ? "+" : "") + (root.tts-speed - 50) * 2 + "%");
+            fill-frac: root.tts-speed / 100.0;
+            set-frac(f) => { root.panel-frac(1, f); }
+        }
+
+        Rectangle { vertical-stretch: 1; }
+
+        ActionButton {
+            height: 52px;
+            label: "Reset this book to defaults";
+            font-size: 20px;
+            bg: root.bg-off;
+            bg-pressed: root.bg-pressed;
+            radius: 10px;
+            clicked => { root.panel-reset-book(); }
+        }
+
+        // A plain Rectangle is not a layout, so the separator, the book block
+        // and the "Swipe up to close" hint were three overlapping children all
+        // pinned to its top-left corner -- the hint printed across the cover.
+        VerticalLayout {
+            spacing: 12px;
+
+            Rectangle {
+                height: 2px; background: root.separator;
+            }
+
+            HorizontalLayout {
             spacing: 16px;
 
             Image {
+                // The cover is decoded at up to 200x300 (see `cover_image`),
+                // so 260px tall stays inside the raster instead of upscaling.
                 source: root.book-cover-img;
-                height: 168px;
+                height: 260px;
                 width: root.book-cover-img.height > 0
-                    ? 168px * root.book-cover-img.width / root.book-cover-img.height
-                    : 112px;
+                    ? min(200px, 260px * root.book-cover-img.width / root.book-cover-img.height)
+                    : 174px;
                 image-fit: contain;
                 horizontal-alignment: center;
                 vertical-alignment: top;
@@ -370,13 +662,6 @@ export component ControlPanel inherits Rectangle {
                         visible: root.chapter-name-img-h > 0;
                     }
                 }
-                // `wrap` is not decoration here. A Text without it is no-wrap,
-                // and a no-wrap Text reports its *entire* string as its minimum
-                // width -- so a long chapter title ("Interpretable Features and
-                // Sparse Autoencoders") widened this column past the panel and
-                // cropped the page badge and progress bar above it. That is the
-                // same breakage a too-wide title raster caused, arriving by a
-                // different route, which is why it hit English books too.
                 Text {
                     text: (root.chapter-name != "" ? root.chapter-name : "-");
                     color: root.text-secondary; font-size: 19px;
@@ -386,10 +671,11 @@ export component ControlPanel inherits Rectangle {
                 }
             }
         }
+        }
 
         Text {
-            text: "swipe: pages - swipe down: menu - double-tap: play";
-            color: root.text-secondary; font-size: 18px; wrap: word-wrap;
+            text: "Swipe up to close";
+            color: root.text-secondary; font-size: 18px;
             horizontal-alignment: left;
         }
     }

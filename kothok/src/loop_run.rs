@@ -18,11 +18,14 @@ use crate::audio::{Cmd, Event};
 use crate::book_session;
 use crate::callbacks::Callbacks;
 use crate::capabilities::KoboCapabilities;
-use crate::data::config::AppConfig;
+use crate::data::config::{
+    load_config_from_base, save_settings_for, AppConfig, BOOK_SETTINGS_FILE, CONFIG_FILE,
+};
 use crate::data::library::open_book;
 use crate::data::library::EpubEntry;
 use crate::data::persistence::{
-    self, load_position, save_position, ReadingPosition, POSITIONS_FILE,
+    self, apply_book_settings, load_book_settings, load_position, push_book_settings_to_ui,
+    save_position, ReadingPosition, POSITIONS_FILE,
 };
 use crate::device::{fonts, input, touch};
 use crate::loop_state::{LoopContext, LoopState};
@@ -58,10 +61,13 @@ mod callbacks;
 mod link_nav;
 mod picker;
 mod power;
+mod sleep;
 mod status;
 pub(crate) use status::save_position_now;
+mod search;
 mod touch_dispatch;
 mod touch_release;
+pub(crate) mod tts_sleep;
 
 pub(super) enum LoopFlow {
     Normal,
@@ -87,6 +93,10 @@ const PICKER_DOUBLE_TAP_MS: u64 = 450;
 /// Window for a second footer play-button tap to count as a double-click
 /// (bookmark) instead of a single play/pause toggle.
 const PLAY_BUTTON_DOUBLE_MS: u64 = 350;
+/// How long a tapped-open header stays up before retracting again, when
+/// auto-hide is on. Long enough to read the page number and reach a button,
+/// short enough that the page gets the screen back without another tap.
+pub const HEADER_REVEAL_SECS: u64 = 10;
 
 pub fn run_loop(st: &mut LoopState, ctx: &mut LoopContext) {
     let mut iter = 0u32;
@@ -162,6 +172,22 @@ pub fn run_loop(st: &mut LoopState, ctx: &mut LoopContext) {
         status::autosave_position(st, ctx);
 
         render_and_present(st, ctx, had_event, ui_changed, page_changed);
+
+        // Per-frame TTS sleep-timer poll (timed fire + touch reset). Runs after
+        // the present and alongside power::auto_sleep, mirroring that sibling
+        // timer. Event-driven arming/freeze/disarm live in app::events.
+        tts_sleep::tts_sleep_timer(st, ctx, had_event);
+
+        // Drain a sleep request raised by the TTS sleep timer (timed
+        // deadline). Auto-off's activity clock is refreshed every tick
+        // while audio plays, so it can never elapse during playback - the timer
+        // owns the bedtime device-sleep itself. sleep_from_timer sleeps from
+        // every system state, keeping the current view (Asleep -> no-op).
+        if st.sleep_requested {
+            st.sleep_requested = false;
+            sleep::sleep_from_timer(st, ctx);
+            continue;
+        }
 
         match power::auto_sleep(st, ctx) {
             LoopFlow::Continue => continue,

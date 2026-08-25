@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (c) 2026 Nayeem Bin Ahsan
-use slint::platform::software_renderer::Rgb565Pixel;
-
 use log::info;
 
 use super::book_init::{BookInit, PickerInit};
@@ -12,6 +10,8 @@ pub(super) fn build_loop_state(
     body_px: f32,
     head_px: f32,
     line_h: i32,
+    line_spacing_pct: i32,
+    text_justify: bool,
     w: usize,
     h: usize,
     device_model: &'static str,
@@ -24,9 +24,13 @@ pub(super) fn build_loop_state(
         crate::panel::set_dynamic_voices(cached);
         info!("loaded {count} cached voices");
     }
-    let buffer = vec![Rgb565Pixel(0); w * h];
+    // Adopt the buffers the launch paint already filled rather than allocating
+    // fresh ones: in the library that paint *is* the screen, and `text_cache`
+    // is what a panel close restores from.
+    let buffer = picker.buffer;
     let prev_buffer = buffer.clone();
-    let text_cache = vec![Rgb565Pixel(0); w * h];
+    let text_cache = picker.text_cache;
+    debug_assert_eq!(buffer.len(), w * h, "launch buffer must match the panel");
     let now = std::time::Instant::now();
     crate::loop_state::LoopState {
         current_chapter: book.4,
@@ -39,23 +43,39 @@ pub(super) fn build_loop_state(
         body_px,
         head_px,
         line_h,
+        line_spacing_pct,
+        text_justify,
         current_book_path: book.11,
         reading_ch: book.7,
         reading_pg: book.8,
         reading_off: book.9,
         reading_end: book.10,
-        picker_active: picker.0,
-        picker_scroll: picker.1,
-        picker_cells: picker.2,
+        picker_active: picker.active,
+        picker_scroll: picker.scroll,
+        picker_cells: picker.cells,
         library_filter: crate::rendering::render::LibraryFilter::default(),
-        picker_cover_cache: picker.3,
-        picker_entered: picker.4,
+        picker_cover_cache: picker.cover_cache,
+        picker_entered: picker.entered,
         panel_open: false,
         prev_panel_open: false,
         prev_chapter_overlay: false,
         cover_page_visible: book.12,
         chapter_scroll: 0,
         press_chapter_scroll: 0,
+        word_index: book.18,
+        chapter_tab: Default::default(),
+        search_scroll: 0,
+        search_results_active: false,
+        search_results_scroll: 0,
+        search_selected_word: 0,
+        search_word_selected: false,
+        search_selected_result: 0,
+        search_result_selected: false,
+        press_search_scroll: 0,
+        press_search_results_scroll: 0,
+        sb_dragging: false,
+        sb_drag_tab: Default::default(),
+        sb_grab_offset: 0,
         bt_fail_count: 0,
         text_dirty: book.13,
         #[cfg(feature = "screenshot")]
@@ -65,7 +85,12 @@ pub(super) fn build_loop_state(
         system_state: crate::SystemState::Awake,
         view_mode: book.14,
         prev_view_mode: book.14,
-        bookmark: book.15,
+        bookmarks: book.15,
+        bookmark_scroll: 0,
+        press_bookmark_scroll: 0,
+        bm_press: None,
+        bm_selected: None,
+        pushed_bookmark_fracs: Vec::new(),
         lock_time: None,
         saved_brightness: 0,
         lock_radios_off: false,
@@ -82,6 +107,11 @@ pub(super) fn build_loop_state(
         disk_spin_only: false,
         disk_settle: false,
         prev_playing: false,
+        tts_sleep_mode: crate::data::config::TtsSleepMode::default(),
+        tts_sleep_armed: false,
+        tts_sleep_deadline: None,
+        tts_sleep_paused_remaining: None,
+        sleep_requested: false,
         prev_down: false,
         frame_down: false,
         frame_x: 0,
@@ -100,6 +130,7 @@ pub(super) fn build_loop_state(
         sleep_pressed: false,
         chapter_pressed: false,
         header_visible: true,
+        header_revealed_at: None,
         pending_tap_at: None,
         press_dispatched: false,
         press_x: 0,
@@ -128,6 +159,7 @@ pub(super) fn build_loop_state(
         voice_fetch_attempted: false,
         wifi_bt_list_rx: None,
         font_download_rx: None,
+        update_check_rx: None,
         wifi_list: Vec::new(),
         wifi_list_idx: 0,
         wifi_list_fetched: false,

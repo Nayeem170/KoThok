@@ -1,0 +1,4 @@
+HEAD: develop after merge of fix/word-list-interaction-issues
+TREE: clean
+TOTAL PASSED: 323
+BUILD: clean (no warnings)

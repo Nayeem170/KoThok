@@ -4,16 +4,20 @@ use std::cell::Cell;
 
 use slint::SharedString;
 
-use crate::data::config::{save_config, AppConfig};
+use crate::data::config::AppConfig;
 use crate::Reader;
 
 /// Reading-mode auto-sleep options: (seconds, label). 0 = never.
 const SLEEP_OPTIONS: [(u32, &str); 3] = [(0, "Off"), (300, "5 min"), (900, "15 min")];
 
-pub(super) fn handle_sleep_cycle(reader: &Reader, cfg: &mut AppConfig, cycle_cell: &Cell<i32>) {
+pub(super) fn handle_sleep_cycle(
+    reader: &Reader,
+    cfg: &mut AppConfig,
+    cycle_cell: &Cell<i32>,
+) -> bool {
     let dir = cycle_cell.replace(0);
     if dir == 0 {
-        return;
+        return false;
     }
     let cur_idx = SLEEP_OPTIONS
         .iter()
@@ -32,7 +36,8 @@ pub(super) fn handle_sleep_cycle(reader: &Reader, cfg: &mut AppConfig, cycle_cel
     let (secs, label) = SLEEP_OPTIONS[next_idx];
     cfg.reading_auto_sleep_secs = secs;
     reader.set_sleep_label(SharedString::from(label));
-    save_config(cfg);
+    log::info!("panel: sleep cycle to {} ({})", label, secs);
+    true
 }
 
 /// Label for the current config value, used when the panel opens.

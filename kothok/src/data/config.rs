@@ -5,14 +5,20 @@ use std::fs;
 
 use log::warn;
 
+use crate::rendering::transition::PanelTransition;
+
 pub use kobo_core::device::paths::{
-    CONFIG_FILE, CRASH_LOG, POWER_DEV, PPM_DEBUG, PPM_DEPLOY, TOUCH_DEV,
+    CONFIG_FILE, CRASH_LOG, DEBUG_LOG, POWER_DEV, PPM_DEBUG, PPM_DEPLOY, TOUCH_DEV,
 };
 
 pub const BOOK_DIR: &str = "/mnt/onboard";
 pub const DEVICE_BOOK: &str = "/mnt/onboard/.adds/book.epub";
+/// The onboarding guide epub. Visible in the library (not under .adds, which
+/// the scanner skips) so the reader can reopen it any time from the picker.
+pub const GUIDE_PATH: &str = "/mnt/onboard/books/KoThok - Getting Started.epub";
 pub const BOOK_CACHE_DIR: &str = "/mnt/onboard/.adds/bookcache";
 pub const POSITIONS_FILE: &str = "/mnt/onboard/.adds/positions";
+pub const BOOK_SETTINGS_FILE: &str = "/mnt/onboard/.adds/booksettings";
 pub const CACHE_DIR: &str = "/mnt/onboard/.adds/cache";
 pub const ELABEL_PATH_FILTER: &str = "/.kobo/eLabel/";
 pub const VOICE_CACHE_FILE: &str = "/mnt/onboard/.adds/kothok/voices.json";
@@ -29,11 +35,81 @@ const KEY_BRIGHTNESS: &str = "brightness";
 const KEY_NATURAL_SCROLL: &str = "natural_scroll";
 const KEY_READING_AUTO_SLEEP: &str = "reading_auto_sleep";
 const KEY_CHECK_UPDATES: &str = "check_updates";
+const KEY_PANEL_TRANSITION: &str = "panel_transition";
+const KEY_ONBOARDING_VERSION: &str = "onboarding_version";
 const KEY_VOICE_PREFIX: &str = "voice.";
+const KEY_LINE_SPACING_PCT: &str = "line_spacing_pct";
+const KEY_TEXT_JUSTIFY: &str = "text_justify";
+const KEY_MARGIN_PX: &str = "margin_px";
+const KEY_AUTO_HIDE_HEADER: &str = "auto_hide_header";
+const KEY_TTS_SLEEP: &str = "tts_sleep";
 
 const TTS_RATE_DEFAULT: i32 = 60;
 const VOLUME_DEFAULT: i32 = 100;
 const BRIGHTNESS_DEFAULT: i32 = 50;
+
+/// TTS sleep-timer mode. One setting, one countdown, identical in both modes;
+/// on expiry the device sleeps (Awake) or the audio pauses (audio-mode lock).
+/// Persisted via from_key/as_key and mirrored into LoopState so the
+/// audio-event handlers - which take `st`, not `cfg` - can read it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TtsSleepMode {
+    #[default]
+    Off,
+    Mins15,
+    Mins30,
+    Mins45,
+    Mins60,
+}
+
+impl TtsSleepMode {
+    /// Recover any unknown / hand-edited key to Off (safe: timer off). This is
+    /// an explicit, tested recovery - it does NOT silently trap like
+    /// PanelTransition::from_key's `_ => PanelTransition::default()`. The
+    /// legacy "eoc" key (dropped end-of-chapter mode) lands here too.
+    pub fn from_key(s: &str) -> Self {
+        match s {
+            "off" => Self::Off,
+            "15" => Self::Mins15,
+            "30" => Self::Mins30,
+            "45" => Self::Mins45,
+            "60" => Self::Mins60,
+            _ => Self::Off,
+        }
+    }
+
+    pub fn as_key(self) -> &'static str {
+        match self {
+            Self::Off => "off",
+            Self::Mins15 => "15",
+            Self::Mins30 => "30",
+            Self::Mins45 => "45",
+            Self::Mins60 => "60",
+        }
+    }
+
+    /// Countdown duration for timed modes; None for Off.
+    pub fn duration(self) -> Option<std::time::Duration> {
+        match self {
+            Self::Off => None,
+            Self::Mins15 => Some(std::time::Duration::from_secs(15 * 60)),
+            Self::Mins30 => Some(std::time::Duration::from_secs(30 * 60)),
+            Self::Mins45 => Some(std::time::Duration::from_secs(45 * 60)),
+            Self::Mins60 => Some(std::time::Duration::from_secs(60 * 60)),
+        }
+    }
+
+    /// Selector label in the panel (the SETTING, not the armed end-time display).
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Off => "Off",
+            Self::Mins15 => "15 min",
+            Self::Mins30 => "30 min",
+            Self::Mins45 => "45 min",
+            Self::Mins60 => "60 min",
+        }
+    }
+}
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct AppConfig {
@@ -50,10 +126,36 @@ pub struct AppConfig {
     /// until the power button). Matches e-reader convention: e-ink draws nothing
     /// when static, so the only drain is the frontlight the reader needs anyway.
     pub reading_auto_sleep_secs: u32,
+    /// TTS sleep-timer mode; pauses audio only (independent of device auto-sleep).
+    pub tts_sleep_mode: TtsSleepMode,
     /// Check GitHub for a newer release at launch, when WiFi is already up.
     /// The only outbound request the reader makes on its own, so it is a
     /// setting rather than a hardcoded behaviour.
     pub check_updates: bool,
+    /// Waveform + update mode for whole-screen transition presents. Which one
+    /// clears the Kaleido 3 colour filter without blinking is a panel/driver
+    /// property that can only be settled on the device, so it is settable
+    /// without a rebuild. See [`PanelTransition`].
+    pub panel_transition: PanelTransition,
+    /// The BUILD_TAG whose onboarding notes the reader has already seen.
+    /// Compared against BUILD_TAG via string inequality - a different value
+    /// (upgrade or downgrade) opens the guide. Empty on first install.
+    pub onboarding_version: String,
+    /// Line spacing as a percentage of the body font size (100 = single-spaced,
+    /// 140 = 1.4x, 200 = double-spaced). Default 140 matches the old hardcoded
+    /// LINE_HEIGHT_SCALE. Range 100-200.
+    pub line_spacing_pct: i32,
+    /// Whether body text is justified (full-justification) or left-aligned.
+    pub text_justify: bool,
+    /// Side margin in pixels, before the bookmark gutter. Range
+    /// `MARGIN_MIN_PX..=MARGIN_MAX_PX`; the default matches the old hardcoded
+    /// `layout::PAD_LEFT`.
+    pub margin_px: i32,
+    /// Let the reading header retract so the page owns the full screen. It
+    /// comes back on a tap and retracts again after
+    /// [`HEADER_REVEAL_SECS`](crate::loop_run::HEADER_REVEAL_SECS), and stays
+    /// down while TTS is playing.
+    pub auto_hide_header: bool,
 }
 
 impl Default for AppConfig {
@@ -68,7 +170,14 @@ impl Default for AppConfig {
             voices: HashMap::new(),
             natural_scroll: true,
             reading_auto_sleep_secs: 0,
+            tts_sleep_mode: TtsSleepMode::default(),
             check_updates: true,
+            panel_transition: PanelTransition::default(),
+            onboarding_version: String::new(),
+            line_spacing_pct: 140,
+            text_justify: true,
+            margin_px: crate::rendering::layout::PAD_LEFT as i32,
+            auto_hide_header: false,
         }
     }
 }
@@ -114,7 +223,24 @@ pub fn load_config_from_base(path: &str, base_font: i32) -> AppConfig {
                 KEY_READING_AUTO_SLEEP => {
                     cfg.reading_auto_sleep_secs = val.parse::<u32>().unwrap_or(0).min(3600)
                 }
+                KEY_TTS_SLEEP => cfg.tts_sleep_mode = TtsSleepMode::from_key(val),
                 KEY_CHECK_UPDATES => cfg.check_updates = val == "1" || val == "true",
+                KEY_PANEL_TRANSITION => cfg.panel_transition = PanelTransition::from_key(val),
+                KEY_ONBOARDING_VERSION => cfg.onboarding_version = val.into(),
+                KEY_LINE_SPACING_PCT => {
+                    cfg.line_spacing_pct = val.parse::<i32>().unwrap_or(140).clamp(100, 200)
+                }
+                KEY_TEXT_JUSTIFY => cfg.text_justify = val != "0" && val != "false",
+                KEY_MARGIN_PX => {
+                    cfg.margin_px = val
+                        .parse::<i32>()
+                        .unwrap_or(crate::rendering::layout::PAD_LEFT as i32)
+                        .clamp(
+                            crate::rendering::layout::MARGIN_MIN_PX,
+                            crate::rendering::layout::MARGIN_MAX_PX,
+                        )
+                }
+                KEY_AUTO_HIDE_HEADER => cfg.auto_hide_header = val == "1" || val == "true",
                 _ if key.starts_with(KEY_VOICE_PREFIX) => {
                     let lang = key.trim_start_matches(KEY_VOICE_PREFIX).to_string();
                     if !lang.is_empty() {
@@ -129,13 +255,27 @@ pub fn load_config_from_base(path: &str, base_font: i32) -> AppConfig {
 }
 
 pub fn save_config_to(cfg: &AppConfig, path: &str) {
+    // Every key the loader understands is written back. A key that is parsed
+    // but not saved is silently erased by the next settings change - which for
+    // `panel_transition` would revert an on-device waveform trial the moment
+    // the user touched the brightness slider.
     let mut data = format!(
-        "{KEY_FONT_SIZE}={}\n{KEY_TTS_LANG}={}\n{KEY_TTS_VOICE}={}\n{KEY_TTS_RATE}={}\n{KEY_VOLUME}={}\n{KEY_BRIGHTNESS}={}\n{KEY_NATURAL_SCROLL}={}\n{KEY_READING_AUTO_SLEEP}={}\n{KEY_CHECK_UPDATES}={}\n",
+        "{KEY_FONT_SIZE}={}\n{KEY_TTS_LANG}={}\n{KEY_TTS_VOICE}={}\n{KEY_TTS_RATE}={}\n{KEY_VOLUME}={}\n{KEY_BRIGHTNESS}={}\n{KEY_NATURAL_SCROLL}={}\n{KEY_READING_AUTO_SLEEP}={}\n{KEY_CHECK_UPDATES}={}\n{KEY_PANEL_TRANSITION}={}\n{KEY_ONBOARDING_VERSION}={}\n{KEY_LINE_SPACING_PCT}={}\n{KEY_TEXT_JUSTIFY}={}\n{KEY_MARGIN_PX}={}\n{KEY_AUTO_HIDE_HEADER}={}\n",
         cfg.font_size, cfg.tts_lang, cfg.tts_voice, cfg.tts_rate, cfg.volume, cfg.brightness,
         if cfg.natural_scroll { 1 } else { 0 },
         cfg.reading_auto_sleep_secs,
-        if cfg.check_updates { 1 } else { 0 }
+        if cfg.check_updates { 1 } else { 0 },
+        cfg.panel_transition.as_key(),
+        cfg.onboarding_version,
+        cfg.line_spacing_pct,
+        if cfg.text_justify { 1 } else { 0 },
+        cfg.margin_px,
+        if cfg.auto_hide_header { 1 } else { 0 },
     );
+    data.push_str(&format!(
+        "{KEY_TTS_SLEEP}={}\n",
+        cfg.tts_sleep_mode.as_key()
+    ));
     for (lang, voice) in &cfg.voices {
         data.push_str(&format!("{KEY_VOICE_PREFIX}{lang}={voice}\n"));
     }
@@ -146,6 +286,22 @@ pub fn save_config_to(cfg: &AppConfig, path: &str) {
 
 pub fn save_config(cfg: &AppConfig) {
     save_config_to(cfg, CONFIG_FILE);
+}
+
+pub fn save_book_settings(book_path: &str, cfg: &AppConfig) {
+    crate::data::persistence::save_book_settings(
+        std::path::Path::new(BOOK_SETTINGS_FILE),
+        book_path,
+        cfg,
+    );
+}
+
+pub fn save_settings_for(book_path: &str, cfg: &AppConfig, picker_active: bool) {
+    if picker_active {
+        save_config(cfg);
+    } else {
+        save_book_settings(book_path, cfg);
+    }
 }
 
 #[cfg(test)]
@@ -168,10 +324,12 @@ mod tests {
     #[test]
     fn config_roundtrip() {
         let p = tmp_path("roundtrip");
-        let mut cfg = AppConfig::default();
-        cfg.font_size = 44;
-        cfg.tts_rate = 70;
-        cfg.brightness = 30;
+        let cfg = AppConfig {
+            font_size: 44,
+            tts_rate: 70,
+            brightness: 30,
+            ..AppConfig::default()
+        };
         save_config_to(&cfg, &p);
         let loaded = load_config_from_base(&p, 36);
         assert_eq!(loaded, cfg);
@@ -276,8 +434,10 @@ mod tests {
     #[test]
     fn config_reading_auto_sleep_roundtrip() {
         let p = tmp_path("sleep");
-        let mut cfg = AppConfig::default();
-        cfg.reading_auto_sleep_secs = 300;
+        let cfg = AppConfig {
+            reading_auto_sleep_secs: 300,
+            ..AppConfig::default()
+        };
         save_config_to(&cfg, &p);
         let loaded = load_config_from_base(&p, 36);
         assert_eq!(loaded.reading_auto_sleep_secs, 300);
@@ -301,5 +461,84 @@ mod tests {
         let loaded = load_config_from_base(&p, 36);
         assert_eq!(loaded, AppConfig::default());
         let _ = std::fs::remove_file(&p);
+    }
+
+    #[test]
+    fn onboarding_version_roundtrip() {
+        let p = tmp_path("onboarding");
+        let cfg = AppConfig {
+            onboarding_version: "v0.2.0".into(),
+            ..AppConfig::default()
+        };
+        save_config_to(&cfg, &p);
+        let loaded = load_config_from_base(&p, 36);
+        assert_eq!(loaded.onboarding_version, "v0.2.0");
+        let _ = std::fs::remove_file(&p);
+    }
+
+    #[test]
+    fn onboarding_version_defaults_empty() {
+        assert_eq!(AppConfig::default().onboarding_version, "");
+    }
+
+    #[test]
+    fn tts_sleep_mode_defaults_off() {
+        assert_eq!(AppConfig::default().tts_sleep_mode, TtsSleepMode::Off);
+    }
+
+    #[test]
+    fn tts_sleep_mode_roundtrip() {
+        for mode in [
+            TtsSleepMode::Off,
+            TtsSleepMode::Mins15,
+            TtsSleepMode::Mins30,
+            TtsSleepMode::Mins45,
+            TtsSleepMode::Mins60,
+        ] {
+            let p = tmp_path("tts_sleep");
+            let cfg = AppConfig {
+                tts_sleep_mode: mode,
+                ..AppConfig::default()
+            };
+            save_config_to(&cfg, &p);
+            let loaded = load_config_from_base(&p, 36);
+            assert_eq!(loaded.tts_sleep_mode, mode, "{mode:?} did not roundtrip");
+            let _ = std::fs::remove_file(&p);
+        }
+    }
+
+    #[test]
+    fn tts_sleep_mode_unknown_key_recovers_to_off() {
+        let p = tmp_path("tts_sleep_garbage");
+        std::fs::write(&p, "tts_sleep=absolute-garbage\n").unwrap();
+        let cfg = load_config_from_base(&p, 36);
+        assert_eq!(cfg.tts_sleep_mode, TtsSleepMode::Off, "unknown key -> Off");
+        let _ = std::fs::remove_file(&p);
+    }
+
+    #[test]
+    fn tts_sleep_mode_legacy_eoc_key_recovers_to_off() {
+        let p = tmp_path("tts_sleep_eoc");
+        std::fs::write(&p, "tts_sleep=eoc\n").unwrap();
+        let cfg = load_config_from_base(&p, 36);
+        assert_eq!(cfg.tts_sleep_mode, TtsSleepMode::Off, "legacy eoc -> Off");
+        let _ = std::fs::remove_file(&p);
+    }
+
+    #[test]
+    fn tts_sleep_mode_duration() {
+        assert_eq!(TtsSleepMode::Off.duration(), None);
+        assert_eq!(
+            TtsSleepMode::Mins15.duration(),
+            Some(std::time::Duration::from_secs(15 * 60))
+        );
+        assert_eq!(
+            TtsSleepMode::Mins30.duration(),
+            Some(std::time::Duration::from_secs(30 * 60))
+        );
+        assert_eq!(
+            TtsSleepMode::Mins60.duration(),
+            Some(std::time::Duration::from_secs(60 * 60))
+        );
     }
 }

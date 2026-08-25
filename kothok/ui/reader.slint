@@ -51,6 +51,14 @@ export component Reader inherits Window {
     in-out property <string> clock: "";
     in-out property <int> brightness-val: 50;
     in-out property <int> font-size-val: 36;
+    in-out property <int> line-spacing-val: 140;
+    in-out property <bool> text-justify: true;
+    in-out property <int> margin-val: 24;
+    in-out property <bool> auto-hide-header: false;
+    in-out property <string> update-status: "";
+    in-out property <string> device-model: "";
+    in-out property <string> app-version: "";
+    in-out property <string> free-space: "";
     in-out property <string> tts-lang: "auto";
     in-out property <string> tts-voice: "en-US-EmmaMultilingualNeural";
     in-out property <string> tts-voice-label: "Emma (English)";
@@ -63,6 +71,17 @@ export component Reader inherits Window {
     in-out property <string> wifi-connected-name: "";
     in-out property <string> bt-connected-name: "";
     in-out property <string> sleep-label: "Off";
+    // The panel SETTING label ("Off"/"15 min"/.../"60 min").
+    in-out property <string> tts-sleep-label: "Off";
+    // The ARMED display string ("Sleep 9:20 PM"/"" when off).
+    // Drives the reading footer (content.slint); empty reverts it to page info.
+    in-out property <string> sleep-timer-label: "";
+    // Pre-rendered captions for the audio screen (Slint Text does not render in
+    // the audio body on device). page-info-img always; sleep-caption-img + armed
+    // gate the sleep line.
+    in-out property <image> page-info-img;
+    in-out property <image> sleep-caption-img;
+    in-out property <bool> sleep-caption-armed: false;
     in-out property <bool> chapter-overlay-open: false;
     in-out property <int> current-chapter-idx: 0;
     in-out property <int> chapter-count: 1;
@@ -75,6 +94,9 @@ export component Reader inherits Window {
     in-out property <string> book-author: "";
     in-out property <image> book-title-img;
     in-out property <int> book-title-img-h: 0;
+    // Same title, rendered at the settings panel's header size.
+    in-out property <image> book-title-head-img;
+    in-out property <int> book-title-head-img-h: 0;
     in-out property <image> book-author-img;
     in-out property <int> book-author-img-h: 0;
     in-out property <image> chapter-name-img;
@@ -86,6 +108,12 @@ export component Reader inherits Window {
     in-out property <image> audio-disk-img;
     in-out property <int> chapter-preview-idx: -1;
     in-out property <int> chapter-pending: -1;
+    in-out property <int> chapter-overlay-active-tab: 0;
+    in-out property <length> tab-seg-w: 148px;
+    in-out property <length> tab-gap: 8px;
+    in-out property <length> tab-font-px: 22px;
+    in-out property <bool> chapter-overlay-results-active: false;
+    in-out property <string> chapter-overlay-results-title: "";
     in-out property <bool> loading-visible: false;
     in-out property <int> loading-pct: 0;
 
@@ -95,20 +123,28 @@ export component Reader inherits Window {
     callback panel-wifi-cycle(string);
     callback panel-bt-cycle(string);
     callback panel-sleep-cycle(string);
+    callback panel-tts-sleep-cycle(string);
+    callback panel-text-align-toggle();
+    callback panel-header-toggle();
+    callback panel-check-updates();
+    callback panel-reset-book();
     callback panel-chapters();
     callback progress-tap(float);
     callback panel-frac(int, float);
     callback panel-close();
-    callback chapter-selected(int);
+    callback chapter-selected(int, int);
     callback jump-to-reading();
+    callback tab-switch(int);
+    callback back-from-results();
 
     in-out property <bool> audio-mode: false;
     in-out property <float> chapter-progress: 0.0;
     in-out property <float> book-progress: 0.0;
     in-out property <bool> has-bookmark: false;
-    in-out property <float> bookmark-frac: -1.0;
+    in-out property <[float]> bookmark-fracs: [];
     in-out property <bool> audio-locked: false;
     in-out property <bool> title-overflow: false;
+    in-out property <bool> selection-active: false;
 
     callback mode-toggle();
     callback bookmark-set();
@@ -117,6 +153,8 @@ export component Reader inherits Window {
     callback skip-forward();
     callback skip-rewind();
     callback settings-tap();
+    callback highlight-selection();
+    callback cancel-selection();
 
     content-area := ContentArea {
         x: 0px;
@@ -131,6 +169,7 @@ export component Reader inherits Window {
         playing: root.playing;
         play-enabled: root.play-enabled;
         status: root.status;
+        sleep-timer-label: root.sleep-timer-label;
         header-title: root.book-title;
         book-title-img: root.book-title-img;
         book-title-img-h: root.book-title-img-h;
@@ -138,7 +177,7 @@ export component Reader inherits Window {
         nav-recent: root.nav-recent;
         has-navigated: root.has-navigated;
         picker-active: root.picker-active;
-        bookmark-frac: root.bookmark-frac;
+        bookmark-fracs: root.bookmark-fracs;
         brand-green: root.brand-green;
         brand-red: root.brand-red;
         brand-gray: root.brand-gray;
@@ -147,9 +186,12 @@ export component Reader inherits Window {
         text-hint: root.text-hint;
         track-color: root.track-color;
         title-overflow: root.title_overflow;
+        selection-active <=> root.selection-active;
         play-pause-toggle => { root.play-pause-toggle(); }
         progress-tap(f) => { root.progress-tap(f); }
         chapters-tap => { root.panel-chapters(); }
+        highlight-selection => { root.highlight-selection(); }
+        cancel-selection => { root.cancel-selection(); }
     }
 
     audio-player := AudioPlayer {
@@ -176,11 +218,14 @@ export component Reader inherits Window {
         playing: root.playing;
         play-enabled: root.play-enabled;
         has-bookmark: root.has-bookmark;
-        bookmark-frac: root.bookmark-frac;
+        bookmark-fracs: root.bookmark-fracs;
         bar-progress: root.book-progress;
         header-visible: root.header-visible;
         locked: root.audio-locked;
         title-overflow: root.title_overflow;
+        page-info-img: root.page-info-img;
+        sleep-caption-img: root.sleep-caption-img;
+        sleep-caption-armed: root.sleep-caption-armed;
         brand-green: root.brand-green;
         brand-red: root.brand-red;
         mode-toggle => { root.mode-toggle(); }
@@ -202,9 +247,18 @@ export component Reader inherits Window {
         width: root.width;
         height: root.height;
         visible-flag: root.panel-open;
+        picker-active: root.picker-active;
         brightness-val: root.brightness-val;
         tts-speed: root.tts-speed;
         font-size-val: root.font-size-val;
+        line-spacing-val: root.line-spacing-val;
+        text-justify: root.text-justify;
+        margin-val: root.margin-val;
+        auto-hide-header: root.auto-hide-header;
+        update-status: root.update-status;
+        device-model: root.device-model;
+        app-version: root.app-version;
+        free-space: root.free-space;
         volume-val: root.volume-val;
         tts-voice-label: root.tts-voice-label;
         wifi-on: root.wifi-on;
@@ -214,6 +268,7 @@ export component Reader inherits Window {
         wifi-connected-name: root.wifi-connected-name;
         bt-connected-name: root.bt-connected-name;
         sleep-label: root.sleep-label;
+        tts-sleep-label: root.tts-sleep-label;
         clock: root.clock;
         battery-pct: root.battery-pct;
         book-title: root.book-title;
@@ -221,6 +276,8 @@ export component Reader inherits Window {
         chapter-name: root.chapter-name;
         book-title-img: root.book-title-img;
         book-title-img-h: root.book-title-img-h;
+        book-title-head-img: root.book-title-head-img;
+        book-title-head-img-h: root.book-title-head-img-h;
         book-author-img: root.book-author-img;
         book-author-img-h: root.book-author-img-h;
         chapter-name-img: root.chapter-name-img;
@@ -248,6 +305,11 @@ export component Reader inherits Window {
         panel-wifi-cycle(s) => { root.panel-wifi-cycle(s); }
         panel-bt-cycle(s) => { root.panel-bt-cycle(s); }
         panel-sleep-cycle(s) => { root.panel-sleep-cycle(s); }
+        panel-tts-sleep-cycle(s) => { root.panel-tts-sleep-cycle(s); }
+        panel-text-align-toggle => { root.panel-text-align-toggle(); }
+        panel-header-toggle => { root.panel-header-toggle(); }
+        panel-check-updates => { root.panel-check-updates(); }
+        panel-reset-book => { root.panel-reset-book(); }
     }
 
     chapter-overlay := ChapterOverlay {
@@ -262,12 +324,21 @@ export component Reader inherits Window {
         text-primary: root.text-primary;
         text-secondary: root.text-secondary;
         brand-red: root.brand-red;
+        brand-green: root.brand-green;
         track-color: root.track-color;
-        chapter-selected(i) => { root.chapter-selected(i); }
+        active-tab <=> root.chapter-overlay-active-tab;
+        results-active: root.chapter-overlay-results-active;
+        results-title: root.chapter-overlay-results-title;
+        tab-seg-w: root.tab-seg-w;
+        tab-gap: root.tab-gap;
+        tab-font-px: root.tab-font-px;
+        chapter-selected(i, tab) => { root.chapter-selected(i, tab); }
         close-to-book => {
             root.chapter-overlay-open = false;
             root.panel-close();
         }
+        tab-switch(tab) => { root.tab-switch(tab); }
+        back-from-results => { root.back-from-results(); }
     }
 
     loading-overlay := LoadingOverlay {

@@ -69,6 +69,28 @@ function Sync-Fonts($fontSrc, $addsDir) {
     else { Info "Fonts: $total on device (all current)" }
 }
 
+# The onboarding guide only ships inside the first-install tgz; without this
+# sync an update that bumps the version would re-open the guide (the app opens
+# it once per version change) with chapters from the old build. The chapter
+# cache keys on the epub's mtime, so a replaced file re-parses cleanly.
+function Sync-Guide($koboRoot) {
+    $src = Join-Path $ScriptDir '..\samples\welcome.epub'
+    if (-not (Test-Path -LiteralPath $src)) {
+        Info "No guide staged at $src - run kothok-media\make-tutorial.ps1"
+        return
+    }
+    $booksDir = Join-Path $koboRoot 'books'
+    $dest = Join-Path $booksDir 'KoThok - Getting Started.epub'
+    if (Test-Path -LiteralPath $dest) {
+        $srcHash = (Get-FileHash -LiteralPath $src -Algorithm MD5).Hash
+        $dstHash = (Get-FileHash -LiteralPath $dest -Algorithm MD5).Hash
+        if ($srcHash -eq $dstHash) { Info "Guide: current"; return }
+    }
+    New-Item -ItemType Directory -Force -Path $booksDir | Out-Null
+    Copy-Item -LiteralPath $src -Destination $dest -Force
+    Ok "Guide: updated"
+}
+
 function Find-Kobo {
     if ($IsWindows -or $PSVersionTable.Platform -ne 'Unix') {
         $d = Get-PSDrive -PSProvider FileSystem | Where-Object {
@@ -96,25 +118,29 @@ Step "Checking prerequisites..."
 
 $missing = @()
 
-$rustOk = $false
-try { $rustVer = & rustc --version 2>$null; if ($LASTEXITCODE -eq 0) { $rustOk = $true } } catch {}
-if (-not $rustOk) {
+# Presence is checked with Get-Command, not by running the tool. Under
+# `$ErrorActionPreference = 'Stop'` a native command that writes *anything* to
+# stderr raises a NativeCommandError, which the catch then swallows as "not
+# installed" -- and `cross --version` always prints a host-target warning. That
+# reported a perfectly good toolchain as missing.
+if (-not (Get-Command rustc -ErrorAction SilentlyContinue)) {
     $missing += "Rust (install from https://rustup.rs)"
 }
 
-$crossOk = $false
-try { $crossVer = & cross --version 2>$null; if ($LASTEXITCODE -eq 0) { $crossOk = $true } } catch {}
-if (-not $crossOk) {
+if (-not (Get-Command cross -ErrorAction SilentlyContinue)) {
     $missing += "cross (run: cargo install cross)"
 }
 
-$dockerOk = $false
-try { $dockerVer = & docker --version 2>$null; if ($LASTEXITCODE -eq 0) { $dockerOk = $true } } catch {}
-if (-not $dockerOk) {
+if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
     $missing += "Docker (install from https://docker.com)"
 } else {
+    # The daemon has to actually be reachable, so this one does run -- with
+    # stderr merged into stdout so a warning cannot be mistaken for a failure.
     $dockerRunning = $false
-    try { & docker info 2>$null | Out-Null; if ($LASTEXITCODE -eq 0) { $dockerRunning = $true } } catch {}
+    try {
+        & docker info 2>&1 | Out-Null
+        if ($LASTEXITCODE -eq 0) { $dockerRunning = $true }
+    } catch {}
     if (-not $dockerRunning) {
         $missing += "Docker daemon not running (start Docker Desktop)"
     }
@@ -261,7 +287,17 @@ if ($isFirstInstall) {
         $sampleDir = Join-Path $stage 'mnt\onboard\books'
         New-Item -ItemType Directory -Force -Path $sampleDir | Out-Null
         foreach ($epub in (Get-ChildItem -LiteralPath $sampleSrc -Filter '*.epub')) {
-            Copy-Item -LiteralPath $epub.FullName -Destination $sampleDir
+            # The guide is looked up by name (GUIDE_PATH), so it must land as
+            # "KoThok - Getting Started.epub", same as make-release.ps1 stages
+            # it. Under its build name the app never finds it and onboarding
+            # silently never runs - plus the shelf shows a "welcome" duplicate.
+            if ($epub.Name -eq 'welcome.epub') {
+                Copy-Item -LiteralPath $epub.FullName `
+                    -Destination (Join-Path $sampleDir 'KoThok - Getting Started.epub')
+                Info "Bundling onboarding guide"
+            } else {
+                Copy-Item -LiteralPath $epub.FullName -Destination $sampleDir
+            }
         }
         Info "Bundling sample book(s) so a fresh device has something to read"
     }
@@ -313,16 +349,55 @@ else {
 
     Sync-Fonts $FontSrc $addsDir
 
+    Sync-Guide $koboRoot
+
+    # The build stamp the app will show for this binary. Read back from the
+    # device copy, so it describes the file that was actually written.
+    #
+    # The MD5 check above is weaker than it looks: it re-reads through the same
+    # Windows file cache the copy just went into, so it confirms bytes that may
+    # still only exist in RAM. Comparing this pair against the settings panel is
+    # what proves the binary reached flash and survived the reboot run.sh does
+    # on exit.
+    $devFile  = Get-Item -LiteralPath $binaryOnDevice
+    $epoch    = [int64](New-TimeSpan -Start ([datetime]'1970-01-01Z').ToUniversalTime() `
+                                     -End $devFile.LastWriteTimeUtc).TotalSeconds
+    # kc: suffix must match the binary's own BUILD stamp, which build.rs bakes
+    # from the kobo-core version resolved in Cargo.lock (not the local git rev --
+    # the path patch is gone; kobo-core comes from crates.io). Same source, or
+    # the host print and the device BUILD line disagree.
+    $lockFile = Join-Path $PSScriptRoot "../Cargo.lock"
+    $kcVer    = "?"
+    if (Test-Path $lockFile) {
+        $want = $false
+        foreach ($ln in Get-Content -LiteralPath $lockFile) {
+            $t = $ln.Trim()
+            if ($t -eq "[[package]]") { $want = $false }
+            elseif ($t.StartsWith('name = "kobo-core"')) { $want = $true }
+            elseif ($want -and $t.StartsWith("version =")) {
+                $kcVer = ($t -replace '^version =\s*"([^"]*)".*', '$1')
+                break
+            }
+        }
+    }
+    $stamp    = "$([int64]($devFile.Length / 1024))k/$($epoch % 1000000) kc:$kcVer"
+
     Write-Host ""
     Write-Host "  ============================" -ForegroundColor Green
     Write-Host "  UPDATE COMPLETE" -ForegroundColor Green
     Write-Host "  ============================" -ForegroundColor Green
-    Info "MD5: $hostHash"
+    Info "MD5:   $hostHash"
+    Write-Host "  BUILD: $stamp" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "  DONE! Follow these steps:" -ForegroundColor Yellow
     Write-Host ""
     Write-Host "  1. Eject the Kobo (system tray -> Safely Remove -> KOBOeReader)" -ForegroundColor White
+    Write-Host "     Do NOT just unplug -- an unflushed copy is lost on the next reboot," -ForegroundColor DarkGray
+    Write-Host "     and run.sh reboots the device every time you exit the reader." -ForegroundColor DarkGray
     Write-Host "  2. Unplug USB cable" -ForegroundColor White
     Write-Host "  3. Tap the hamburger menu (bottom-right) -> tap 'KoThok'" -ForegroundColor White
+    Write-Host "  4. Library -> gear -> check the build line reads:" -ForegroundColor White
+    Write-Host "        build $stamp" -ForegroundColor Cyan
+    Write-Host "     If it does not, the copy did not survive. Re-run with a proper eject." -ForegroundColor DarkGray
     Write-Host ""
 }

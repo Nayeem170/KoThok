@@ -4,9 +4,12 @@ use kobo_core::{Capabilities, Chapter};
 use slint::platform::software_renderer::{MinimalSoftwareWindow, Rgb565Pixel};
 
 use crate::capabilities::KoboCapabilities;
-use crate::data::config::AppConfig;
+use crate::data::config::{self, AppConfig};
 use crate::data::library::{self, EpubEntry};
-use crate::data::persistence::{self, POSITIONS_FILE};
+use crate::data::persistence::{
+    self, apply_book_settings, load_book_settings, push_book_settings_to_ui, POSITIONS_FILE,
+};
+use crate::data::word_index::WordIndex;
 use crate::rendering::common::rgb565_as_bytes_ref;
 use crate::rendering::fb::{Fb, WAVE_GC16};
 use crate::rendering::layout::{ChapterState, OffsetComputation, PAD_TOP};
@@ -31,13 +34,24 @@ pub(super) struct ScreenCtx<'a> {
     pub h: usize,
 }
 
-pub(super) type PickerInit = (
-    bool,
-    i32,
-    Vec<GridCell>,
-    CoverCache,
-    Option<std::time::Instant>,
-);
+pub(super) struct PickerInit {
+    pub active: bool,
+    pub scroll: i32,
+    pub cells: Vec<GridCell>,
+    pub cover_cache: CoverCache,
+    pub entered: Option<std::time::Instant>,
+    /// The screen as painted at launch, and the library image behind it.
+    ///
+    /// These have to be the buffers the loop goes on to use. `init_picker`
+    /// used to paint into locals and drop them, leaving `LoopState.text_cache`
+    /// as the all-zero (i.e. **black**) vector it was allocated as. Closing the
+    /// settings panel over the library restores the screen with
+    /// `buffer.copy_from_slice(&text_cache)`, so the first close painted the
+    /// whole screen black -- and only the first, because any later picker
+    /// interaction repaints `text_cache` on the way through.
+    pub buffer: Vec<Rgb565Pixel>,
+    pub text_cache: Vec<Rgb565Pixel>,
+}
 
 pub(super) fn init_picker(
     setup: &ReaderSetup,
@@ -45,8 +59,8 @@ pub(super) fn init_picker(
     all_books: &[EpubEntry],
 ) -> Option<PickerInit> {
     let picker_scroll = 0;
-    let mut buffer = vec![Rgb565Pixel(0); screen.w * screen.h];
-    let mut text_cache = vec![Rgb565Pixel(0); screen.w * screen.h];
+    let mut buffer = vec![Rgb565Pixel(0xFFFF); screen.w * screen.h];
+    let mut text_cache = vec![Rgb565Pixel(0xFFFF); screen.w * screen.h];
     let mut picker_cover_cache: CoverCache = std::collections::HashMap::new();
     render::show_book_picker(
         &setup.reader,
@@ -65,13 +79,15 @@ pub(super) fn init_picker(
     );
     let picker_cells =
         render::picker_scroll_cells(all_books, picker_scroll, render::LibraryFilter::default());
-    Some((
-        true,
-        picker_scroll,
-        picker_cells,
-        picker_cover_cache,
-        Some(std::time::Instant::now()),
-    ))
+    Some(PickerInit {
+        active: true,
+        scroll: picker_scroll,
+        cells: picker_cells,
+        cover_cache: picker_cover_cache,
+        entered: Some(std::time::Instant::now()),
+        buffer,
+        text_cache,
+    })
 }
 
 pub(super) type BookInit = (
@@ -90,9 +106,10 @@ pub(super) type BookInit = (
     bool,
     bool,
     crate::ViewMode,
-    Option<crate::Bookmark>,
+    Vec<crate::Bookmark>,
     Option<std::time::Instant>,
     Vec<library::FlatTocRow>,
+    WordIndex,
 );
 
 pub(super) fn init_book(
@@ -100,10 +117,11 @@ pub(super) fn init_book(
     screen: &ScreenCtx,
     all_books: &[EpubEntry],
     initial_path: &Option<String>,
+    reset_position: bool,
 ) -> (Option<BookInit>, Option<PickerInit>) {
     let reader = &setup.reader;
     let book_path = initial_path.clone().unwrap_or_default();
-    let (loaded_chapters, book_lang, toc_tree) = initial_path
+    let (loaded_chapters, book_lang, toc_tree, word_index) = initial_path
         .as_ref()
         .and_then(|p| library::open_book(p))
         .unwrap_or_else(|| {
@@ -111,6 +129,7 @@ pub(super) fn init_book(
                 vec![Chapter::from_xhtml(0, None, SAMPLE_CHAPTER)],
                 None,
                 Vec::new(),
+                Default::default(),
             )
         });
 
@@ -118,7 +137,25 @@ pub(super) fn init_book(
     let toc_rows = library::toc_rows(&toc_tree, &chapters);
     let current_book_path = book_path.clone();
     render::set_rtl(is_rtl(book_lang.as_deref()));
+    let voice_before = setup.cfg.tts_voice.clone();
+    let lang_before = setup.cfg.tts_lang.clone();
     apply_book_voice(&mut setup.cfg, book_lang.as_deref(), reader, None);
+
+    let book_settings =
+        load_book_settings(std::path::Path::new(config::BOOK_SETTINGS_FILE), &book_path);
+    apply_book_settings(&mut setup.cfg, &book_settings);
+    push_book_settings_to_ui(reader, &setup.cfg);
+
+    crate::rendering::layout::set_margin_px(setup.cfg.margin_px);
+    if book_settings.font_size.is_some() || book_settings.line_spacing_pct.is_some() {
+        setup.body_px = setup.cfg.font_size as f32;
+        setup.head_px = setup.cfg.font_size as f32 * crate::rendering::layout::HEADING_SCALE;
+        setup.line_h =
+            (setup.cfg.font_size as f32 * setup.cfg.line_spacing_pct as f32 / 100.0) as i32;
+    }
+    if setup.cfg.tts_voice != voice_before || setup.cfg.tts_lang != lang_before {
+        config::save_book_settings(&book_path, &setup.cfg);
+    }
     if let Some(b) = all_books.iter().find(|b| b.path == book_path) {
         set_book_meta(reader, &b.title, b.author.as_deref().unwrap_or(""));
         reader.set_book_cover_img(render::cover_image(b.cover_bytes.as_deref(), 200, 300));
@@ -144,26 +181,38 @@ pub(super) fn init_book(
         WAVE_GC16,
     );
 
-    let pos = persistence::load_position(std::path::Path::new(POSITIONS_FILE), &book_path)
-        .filter(|p| p.chapter < chapter_count)
-        .unwrap_or(persistence::ReadingPosition {
+    let pos = if reset_position {
+        persistence::ReadingPosition {
             chapter: 0,
             page: 0,
             cur_start: 0,
             cur_end: 0,
             view_mode: crate::ViewMode::Reading,
-            bookmark: None,
+            bookmarks: Vec::new(),
             progress: 0.0,
-        });
+        }
+    } else {
+        persistence::load_position(std::path::Path::new(POSITIONS_FILE), &book_path)
+            .filter(|p| p.chapter < chapter_count)
+            .unwrap_or(persistence::ReadingPosition {
+                chapter: 0,
+                page: 0,
+                cur_start: 0,
+                cur_end: 0,
+                view_mode: crate::ViewMode::Reading,
+                bookmarks: Vec::new(),
+                progress: 0.0,
+            })
+    };
     let current_chapter = pos.chapter;
     let initial_view_mode = pos.view_mode;
-    let initial_bookmark = pos.bookmark;
+    let initial_bookmarks = pos.bookmarks.clone();
 
     let mut chapters_mut = chapters.clone();
     let session = crate::book_session::open_book_session(
         &mut chapters_mut,
         &pos,
-        &mut setup.cfg,
+        &setup.cfg,
         setup.body_px,
         setup.head_px,
         setup.line_h,
@@ -249,9 +298,10 @@ pub(super) fn init_book(
             cover_page_visible,
             text_dirty,
             initial_view_mode,
-            initial_bookmark,
+            initial_bookmarks,
             None,
             toc_rows,
+            word_index,
         )),
         None,
     )

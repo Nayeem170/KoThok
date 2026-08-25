@@ -34,15 +34,17 @@ pub(super) fn open_book_from_picker(
     show_status(reader, window, fb, w, h, st, "Opening...");
 
     let t0 = std::time::Instant::now();
-    let (loaded_chapters, book_lang, toc_tree) = open_book(&book_path)
-        .filter(|(c, _, _)| !c.is_empty())
+    let (loaded_chapters, book_lang, toc_tree, word_index) = open_book(&book_path)
+        .filter(|(c, _, _, _)| !c.is_empty())
         .unwrap_or_else(|| {
             (
                 vec![Chapter::from_xhtml(0, None, SAMPLE_CHAPTER)],
                 None,
                 Vec::new(),
+                Default::default(),
             )
         });
+    st.word_index = word_index;
     log::info!("perf: open_book {}ms", t0.elapsed().as_millis());
     st.chapters = loaded_chapters;
     st.toc_rows = crate::data::library::toc_rows(&toc_tree, &st.chapters);
@@ -85,7 +87,26 @@ pub(super) fn open_book_from_picker(
         show_status(reader, window, fb, w, h, st, &status);
     }
     log::info!("perf: ensure_font {}ms", t1.elapsed().as_millis());
-    apply_book_voice(cfg, book_lang.as_deref(), reader, Some(&cmd_tx));
+    let voice_before = cfg.tts_voice.clone();
+    let lang_before = cfg.tts_lang.clone();
+    apply_book_voice(cfg, book_lang.as_deref(), reader, Some(cmd_tx));
+    let book_settings = load_book_settings(std::path::Path::new(BOOK_SETTINGS_FILE), &book_path);
+    apply_book_settings(cfg, &book_settings);
+    push_book_settings_to_ui(reader, cfg);
+    // The loop state carries the *previous* book's typography, and
+    // `open_book_session` below lays the new book out from these three fields --
+    // so without re-deriving them here the book's own font size and line
+    // spacing are loaded into `cfg`, shown in the panel, and then ignored by the
+    // pagination. Launch-time open (`setup::book_init`) already does this.
+    crate::rendering::layout::set_margin_px(cfg.margin_px);
+    st.body_px = cfg.font_size as f32;
+    st.head_px = cfg.font_size as f32 * crate::rendering::layout::HEADING_SCALE;
+    st.line_h = (cfg.font_size as f32 * cfg.line_spacing_pct as f32 / 100.0) as i32;
+    st.line_spacing_pct = cfg.line_spacing_pct;
+    st.text_justify = cfg.text_justify;
+    if cfg.tts_voice != voice_before || cfg.tts_lang != lang_before {
+        save_settings_for(&book_path, cfg, false);
+    }
     st.chapter_count = st.chapters.len();
     reader.set_chapter_count(st.chapter_count as i32);
     reader.set_toc_row_count(st.toc_rows.len().max(1) as i32);
@@ -101,12 +122,17 @@ pub(super) fn open_book_from_picker(
             cur_start: 0,
             cur_end: 0,
             view_mode: crate::ViewMode::Reading,
-            bookmark: None,
+            bookmarks: Vec::new(),
             progress: 0.0,
         });
     st.current_book_path = book_path.to_string();
     st.view_mode = pos.view_mode;
-    st.bookmark = pos.bookmark.filter(|bm| bm.chapter < st.chapter_count);
+    st.bookmarks = pos
+        .bookmarks
+        .iter()
+        .filter(|bm| bm.chapter < st.chapter_count)
+        .copied()
+        .collect();
     st.current_chapter = pos.chapter;
     set_book_meta(
         reader,
@@ -163,7 +189,7 @@ pub(super) fn open_book_from_picker(
     set_chapter_name(reader, &pick_cn);
     let audio = matches!(st.view_mode, ViewMode::Audio);
     reader.set_audio_mode(audio);
-    reader.set_has_bookmark(st.bookmark.is_some());
+    reader.set_has_bookmark(!st.bookmarks.is_empty());
     if session.show_cover {
         st.cover_page_visible = true;
         render_book_cover_scaled(&st.current_book_path, &mut st.buffer);
@@ -211,14 +237,14 @@ pub(super) fn open_book_from_picker(
         st.prev_buffer.copy_from_slice(&st.buffer);
         st.prev_view_mode = st.view_mode;
         if audio {
-            crate::audio::glue::load_chapter_audio(&st.state, &cmd_tx);
+            crate::audio::glue::load_chapter_audio(&st.state, cmd_tx);
             let off = reader.get_cur_start().max(0) as usize;
             if off > 0 {
                 let idx = crate::audio::glue::utterance_index_for_offset(&st.state.utterances, off);
-                crate::audio::glue::best_effort_send(&cmd_tx, Cmd::Seek(idx));
+                crate::audio::glue::best_effort_send(cmd_tx, Cmd::Seek(idx));
             }
         } else {
-            load_page_audio(st.current_page, &st.state, &cmd_tx);
+            load_page_audio(st.current_page, &st.state, cmd_tx);
         }
         reader.set_status("".into());
     }

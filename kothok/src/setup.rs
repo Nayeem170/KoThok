@@ -2,9 +2,11 @@
 // Copyright (c) 2026 Nayeem Bin Ahsan
 mod book_init;
 mod loop_init;
+mod startup;
 
 use book_init::{init_book, init_picker, BookInit, PickerInit, ReaderSetup, ScreenCtx};
 use loop_init::build_loop_state;
+use startup::{startup_target, StartupTarget};
 use std::sync::atomic::Ordering;
 
 use kobo_core::{Capabilities, Chapter};
@@ -56,8 +58,31 @@ pub fn run() -> Option<InitResult> {
     let (initial_path, all_books) = scan_and_resolve(&fb, w, h, &cli_path);
 
     crate::crash_report::check_on_startup(hw_cfg.model);
+    crate::debug_log::check_on_startup(hw_cfg.model);
+    crate::debug_log::log(&format!(
+        "startup: device={} w={} h={} touch_dev={} power_dev={}",
+        hw_cfg.model, w, h, input_devs.touch_dev, input_devs.power_dev
+    ));
 
     let mut setup = init_reader_and_config(w, &hw_cfg);
+
+    let guide_exists = std::path::Path::new(config::GUIDE_PATH).exists();
+    let target = startup_target(
+        &cli_path,
+        all_books.len(),
+        &setup.cfg.onboarding_version,
+        BUILD_TAG,
+        guide_exists,
+    );
+    let (initial_path, reset_position) = match target {
+        StartupTarget::Onboarding => {
+            setup.cfg.onboarding_version = BUILD_TAG.to_string();
+            config::save_config(&setup.cfg);
+            info!("onboarding: opening guide at {BUILD_TAG}");
+            (Some(config::GUIDE_PATH.to_string()), true)
+        }
+        _ => (initial_path, false),
+    };
 
     let (book, picker) = init_book_or_picker(
         &mut setup,
@@ -66,8 +91,9 @@ pub fn run() -> Option<InitResult> {
         w,
         h,
         &all_books,
-        &cli_path,
+        &target,
         &initial_path,
+        reset_position,
     );
 
     let st = build_loop_state(
@@ -76,6 +102,8 @@ pub fn run() -> Option<InitResult> {
         setup.body_px,
         setup.head_px,
         setup.line_h,
+        setup.cfg.line_spacing_pct,
+        setup.cfg.text_justify,
         w,
         h,
         hw_cfg.model,
@@ -86,7 +114,7 @@ pub fn run() -> Option<InitResult> {
     setup
         .reader
         .set_audio_mode(matches!(st.view_mode, crate::ViewMode::Audio));
-    setup.reader.set_has_bookmark(st.bookmark.is_some());
+    setup.reader.set_has_bookmark(!st.bookmarks.is_empty());
 
     Some(InitResult {
         fb,
@@ -141,6 +169,7 @@ fn advance_splash(fb: &Fb, splash: &mut [Rgb565Pixel], w: usize, h: usize, stage
             h,
             &kobo_core::device::fb::UpdateRegion { x, y, w: rw, h: rh },
             wave,
+            false,
         );
         fb.wait_for_update_complete();
     };
@@ -215,19 +244,30 @@ fn init_platform(w: usize, h: usize) -> std::rc::Rc<MinimalSoftwareWindow> {
 
 fn init_reader_and_config(w: usize, hw_cfg: &hw::DeviceConfig) -> ReaderSetup {
     let reader = crate::Reader::new().expect("Reader::new");
-    let device_default_font = (w as i32 / 30).clamp(20, 60);
+    let device_default_font = (w as i32 / 38).clamp(20, 60);
     let cfg = config::load_config_from_base(config::CONFIG_FILE, device_default_font);
     let body_px: f32 = cfg.font_size as f32;
     let head_px: f32 = cfg.font_size as f32 * layout::HEADING_SCALE;
-    let line_h: i32 = (cfg.font_size as f32 * layout::LINE_HEIGHT_SCALE) as i32;
+    let line_h: i32 = (cfg.font_size as f32 * cfg.line_spacing_pct as f32 / 100.0) as i32;
     reader.set_tts_lang(SharedString::from(cfg.tts_lang.clone()));
     reader.set_tts_voice(SharedString::from(cfg.tts_voice.clone()));
     reader.set_tts_speed(cfg.tts_rate);
     reader.set_font_size_val(cfg.font_size);
+    reader.set_line_spacing_val(cfg.line_spacing_pct);
+    reader.set_text_justify(cfg.text_justify);
+    reader.set_margin_val(cfg.margin_px);
+    layout::set_margin_px(cfg.margin_px);
+    reader.set_auto_hide_header(cfg.auto_hide_header);
+    reader.set_header_visible(!cfg.auto_hide_header);
     crate::update_check::set_enabled(cfg.check_updates);
     reader.set_sleep_label(
         crate::panel::callbacks::sleep::sleep_label(cfg.reading_auto_sleep_secs).into(),
     );
+    // Mirror the saved TTS sleep mode into the panel row at startup. The row's
+    // tts-sleep-label is an in-out property that persists across panel opens;
+    // without this it defaults to "Off" after a reboot until the audio-gear
+    // panel-open path (the only other writer) runs.
+    reader.set_tts_sleep_label(cfg.tts_sleep_mode.label().into());
     let caps = KoboCapabilities;
     reader.set_wifi_on(caps.network_available());
     reader.set_bt_on(caps.audio_sink_available());
@@ -265,14 +305,16 @@ fn init_book_or_picker(
     w: usize,
     h: usize,
     all_books: &[EpubEntry],
-    cli_path: &Option<String>,
+    target: &StartupTarget,
     initial_path: &Option<String>,
+    reset_position: bool,
 ) -> (BookInit, PickerInit) {
     let screen = ScreenCtx { fb, window, w, h };
-    let (book_state, picker_state) = if cli_path.is_none() && all_books.len() >= 2 {
-        (None, init_picker(setup, &screen, all_books))
-    } else {
-        init_book(setup, &screen, all_books, initial_path)
+    let (book_state, picker_state) = match target {
+        StartupTarget::Picker => (None, init_picker(setup, &screen, all_books)),
+        StartupTarget::Book | StartupTarget::Onboarding => {
+            init_book(setup, &screen, all_books, initial_path, reset_position)
+        }
     };
     let book = book_state.unwrap_or_else(|| {
         let st = layout::build_state(
@@ -280,6 +322,7 @@ fn init_book_or_picker(
             setup.body_px,
             setup.head_px,
             setup.line_h,
+            true,
         );
         (
             vec![setup.dummy_ch.clone()],
@@ -297,13 +340,23 @@ fn init_book_or_picker(
             false,
             true,
             crate::ViewMode::Reading,
-            None,
+            Vec::new(),
             None,
             Vec::new(),
+            Default::default(),
         )
     });
-    let picker = picker_state
-        .unwrap_or_else(|| (false, 0, Vec::new(), std::collections::HashMap::new(), None));
+    // Book mode: the loop paints the page itself, so these start blank -- but
+    // white, not the zeroed (black) vectors they used to be.
+    let picker = picker_state.unwrap_or_else(|| PickerInit {
+        active: false,
+        scroll: 0,
+        cells: Vec::new(),
+        cover_cache: std::collections::HashMap::new(),
+        entered: None,
+        buffer: vec![Rgb565Pixel(0xFFFF); w * h],
+        text_cache: vec![Rgb565Pixel(0xFFFF); w * h],
+    });
     (book, picker)
 }
 

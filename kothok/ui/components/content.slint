@@ -9,6 +9,7 @@ export component ContentArea inherits Rectangle {
     in property <bool> playing: false;
     in property <bool> play-enabled: false;
     in property <string> status: "";
+    in property <string> sleep-timer-label: "";
     in property <string> header-title: "";
     in property <image> book-title-img;
     in property <int> book-title-img-h: 0;
@@ -16,7 +17,7 @@ export component ContentArea inherits Rectangle {
     in property <bool> nav-recent: false;
     in property <bool> has-navigated: false;
     in property <bool> picker-active: false;
-    in property <float> bookmark-frac: -1.0;
+    in property <[float]> bookmark-fracs: [];
     in property <color> brand-green: #006A4E;
     in property <color> brand-red: #F42A41;
     in property <color> brand-gray: #8a8a8a;
@@ -25,10 +26,13 @@ export component ContentArea inherits Rectangle {
     in property <color> text-hint: #999999;
     in property <color> track-color: #d0d0d0;
     in property <bool> title-overflow: false;
+    in-out property <bool> selection-active: false;
 
     callback play-pause-toggle();
     callback progress-tap(float);
     callback chapters-tap();
+    callback highlight-selection();
+    callback cancel-selection();
 
     VerticalLayout {
         padding-left: 56px; padding-right: 56px;
@@ -66,29 +70,30 @@ export component ContentArea inherits Rectangle {
         background: #ffffff;
         visible: root.header-visible && !root.picker-active && root.page-count > 0;
 
-        Rectangle {
-            x: 23px; y: 17px;
-            width: 76px; height: 76px;
-            border-radius: 38px;
-            background: root.brand-red;
-            Image {
-                source: @image-url("assets/library.svg");
-                image-fit: contain;
-                width: 38px; height: 38px;
-                x: 19px; y: 19px;
-            }
+        // Title owns the left edge; every button is in the right-hand cluster.
+        // `gesture::classify_header_zone` mirrors these x positions -- change
+        // one and the other has to follow.
+        Image {
+            source: root.book-title-img;
+            x: 23px;
+            width: root.width - 710px;
+            height: 76px;
+            y: 17px;
+            image-fit: contain;
+            horizontal-alignment: left;
+            vertical-alignment: center;
+            visible: root.book-title-img-h > 0;
         }
-
         ScrollableText {
             txt: root.header-title;
             txt-color: root.text-secondary; font-size: 33px; bold: true;
             overflow: root.title-overflow;
-            x: 119px; width: root.width - 686px; y: 17px; height: 76px;
+            x: 23px; width: root.width - 710px; y: 17px; height: 76px;
             visible: root.book-title-img-h == 0;
         }
 
         Rectangle {
-            x: root.width - 557px; y: 17px;
+            x: root.width - 671px; y: 17px;
             width: 76px; height: 76px;
             border-radius: 38px;
             background: root.brand-green;
@@ -101,7 +106,7 @@ export component ContentArea inherits Rectangle {
         }
 
         Rectangle {
-            x: root.width - 471px; y: 17px;
+            x: root.width - 585px; y: 17px;
             width: 76px; height: 76px;
             border-radius: 38px;
             background: root.brand-green;
@@ -114,7 +119,7 @@ export component ContentArea inherits Rectangle {
         }
 
         Rectangle {
-            x: root.width - 385px; y: 17px;
+            x: root.width - 499px; y: 17px;
             width: 76px; height: 76px;
             border-radius: 38px;
             background: root.brand-green;
@@ -127,13 +132,13 @@ export component ContentArea inherits Rectangle {
         }
 
         Rectangle {
-            x: root.width - 290px; y: 30px;
+            x: root.width - 404px; y: 30px;
             width: 3px; height: 50px;
             background: root.track-color;
         }
 
         Rectangle {
-            x: root.width - 271px; y: 17px;
+            x: root.width - 385px; y: 17px;
             width: 76px; height: 76px;
             border-radius: 38px;
             background: root.brand-green;
@@ -146,7 +151,7 @@ export component ContentArea inherits Rectangle {
         }
 
         Rectangle {
-            x: root.width - 185px; y: 17px;
+            x: root.width - 299px; y: 17px;
             width: 76px; height: 76px;
             border-radius: 38px;
             background: root.brand-green;
@@ -159,12 +164,34 @@ export component ContentArea inherits Rectangle {
         }
 
         Rectangle {
-            x: root.width - 99px; y: 17px;
+            x: root.width - 213px; y: 17px;
             width: 76px; height: 76px;
             border-radius: 38px;
             background: root.brand-green;
             Image {
                 source: @image-url("assets/chapters.svg");
+                image-fit: contain;
+                width: 38px; height: 38px;
+                x: 19px; y: 19px;
+            }
+        }
+
+        Rectangle {
+            x: root.width - 118px; y: 30px;
+            width: 3px; height: 50px;
+            background: root.track-color;
+        }
+
+        // Library is the one control that leaves the book, so it keeps its own
+        // colour and sits past a divider at the far right -- the same place the
+        // settings and chapter overlays put their exit button.
+        Rectangle {
+            x: root.width - 99px; y: 17px;
+            width: 76px; height: 76px;
+            border-radius: 38px;
+            background: root.brand-red;
+            Image {
+                source: @image-url("assets/library.svg");
                 image-fit: contain;
                 width: 38px; height: 38px;
                 x: 19px; y: 19px;
@@ -201,16 +228,16 @@ export component ContentArea inherits Rectangle {
                 border-radius: 5px;
             }
 
-            // Same marker as audio mode: one green tab straddling the bar.
-            // Declared before the knob so the knob paints on top of it.
-            Rectangle {
-                x: root.bookmark-frac >= 0.0 ? root.bookmark-frac * (root.width - 200px) - 7px : -400px;
+            // Same markers as audio mode: green tabs straddling the bar, one
+            // per bookmark. Declared before the knob so the knob paints on
+            // top of them.
+            for f in root.bookmark-fracs : Rectangle {
+                x: f * (root.width - 200px) - 7px;
                 y: -13px;
                 width: 15px;
                 height: 36px;
                 background: root.brand-green;
                 border-radius: 5px;
-                visible: root.bookmark-frac >= 0.0;
             }
 
             Rectangle {
@@ -236,7 +263,8 @@ export component ContentArea inherits Rectangle {
             text: root.status != ""
                   ? root.status
                   : ((root.playing || root.nav-recent || root.has-navigated)
-                     ? ("Page " + (root.page + 1) + " of " + root.page-count)
+                     ? ("Page " + (root.page + 1) + " of " + root.page-count
+                        + (root.sleep-timer-label != "" ? " - " + root.sleep-timer-label : ""))
                      : (root.play-enabled
 ? "Swipe down: menu - double-tap: play - swipe: pages"
                          : "Connect WiFi & Bluetooth to play - swipe down: menu"));
@@ -290,6 +318,55 @@ export component ContentArea inherits Rectangle {
             Rectangle { visible: !root.playing; x: 29px; y: 42px; width: 16px; height: 4px; background: #ffffff; }
             Rectangle { visible: !root.playing; x: 29px; y: 46px; width: 10px; height: 4px; background: #ffffff; }
             Rectangle { visible: !root.playing; x: 29px; y: 50px; width: 4px;  height: 4px; background: #ffffff; }
+        }
+
+        if root.selection-active : Rectangle {
+            x: (root.width - 280px) / 2;
+            y: root.height - 140px;
+            width: 280px;
+            height: 72px;
+            border-radius: 36px;
+            background: #ffffff;
+
+            TouchArea {
+                x: 16px; y: 8px;
+                width: 120px; height: 56px;
+                clicked => { root.highlight-selection(); }
+            }
+            Rectangle {
+                x: 16px; y: 8px;
+                width: 120px; height: 56px;
+                background: root.brand-green;
+                border-radius: 28px;
+                Text {
+                    text: "Highlight";
+                    color: #ffffff;
+                    font-size: 22px;
+                    font-weight: 700;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+
+            TouchArea {
+                x: 144px; y: 8px;
+                width: 120px; height: 56px;
+                clicked => { root.cancel-selection(); }
+            }
+            Rectangle {
+                x: 144px; y: 8px;
+                width: 120px; height: 56px;
+                background: #e0e0e0;
+                border-radius: 28px;
+                Text {
+                    text: "Cancel";
+                    color: #333333;
+                    font-size: 22px;
+                    font-weight: 700;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
         }
     }
 }

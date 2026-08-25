@@ -181,6 +181,11 @@ fn grains_fit_the_annulus() {
     }
 }
 
+const _: () = assert!(
+    GRAIN_COUNT >= 3,
+    "fewer than three grains cannot read as a body"
+);
+
 /// Rotation is only legible if the grains are irregular.
 ///
 /// Equal phases alias -- the field returns to an identical picture on a short
@@ -189,10 +194,6 @@ fn grains_fit_the_annulus() {
 /// Both are easy to reintroduce by "tidying" the table, so both are asserted.
 #[test]
 fn grains_are_irregular() {
-    assert!(
-        GRAIN_COUNT >= 3,
-        "fewer than three grains cannot read as a body"
-    );
     for a in 0..GRAIN_COUNT {
         for b in (a + 1)..GRAIN_COUNT {
             assert!(

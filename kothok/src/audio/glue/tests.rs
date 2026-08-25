@@ -449,7 +449,7 @@ fn no_utterance_dropped_across_all_pages_realistic_text() {
             .collect::<String>()
     );
     let mut ch = Chapter::from_xhtml(0, None, &xhtml);
-    let st = build_state(&mut ch, BODY_PX, 60.0, 48);
+    let st = build_state(&mut ch, BODY_PX, 60.0, 48, true);
 
     assert!(st.pages.len() > 1, "test text must span multiple pages");
     assert!(!st.utterances.is_empty(), "must produce utterances");

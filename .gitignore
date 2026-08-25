@@ -1,7 +1,6 @@
 # Rust / Cargo
 target/
 **/*.rs.bk
-Cargo.lock
 # Python (spike/test scripts)
 __pycache__/
 *.py[cod]
@@ -21,6 +20,7 @@ Thumbs.db
 *.o
 *.so
 *.a
+/build-latest.log
 
 # Kobo device binaries
 kothok/crates/kobo/kobo
@@ -37,11 +37,17 @@ kothok/dist/fonts/
 kothok/crates/kobo/measure-baseline.sh
 graphify-out/
 
+# Agentic pipeline
+# Root-level task tracking (local audit trail, not committed)
+.agentic-tasks/
+kothok/.agentic-tasks/
+
 # AGENTS.md (project config, not repo code)
 AGENTS.md
 
 # Local-only docs (kept for dev, not committed)
-docs/
+docs/*
+!docs/REVIEW_RULES.md
 mockups/
 
 # Release binaries (built locally, downloaded from GitHub releases by users)
@@ -69,4 +75,9 @@ kothok/kobo
 kothok/grab-tester
 kothok/grab-tester.c
 kothok/measure-baseline.sh
+kothok/reload.sh
 .kilo/
+
+# Local CLI launchers
+claude-direct.ps1
+claude-proxy.ps1

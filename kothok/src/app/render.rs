@@ -4,8 +4,8 @@ use slint::platform::software_renderer::Rgb565Pixel;
 
 use log::info;
 
-use crate::loop_state::{LoopContext, LoopState};
-use crate::rendering::common::rgb565_as_bytes_ref;
+use crate::loop_state::{ChapterTab, LoopContext, LoopState};
+use crate::rendering::common::{rgb565_as_bytes, rgb565_as_bytes_ref};
 use crate::rendering::fb::{diff_rows, waveform_for, RenderScenario, WAVE_A2, WAVE_GC16};
 use crate::rendering::layout::{self, PAD_TOP};
 use crate::rendering::render::{composite_text, refresh_text_cache};
@@ -118,16 +118,98 @@ pub fn render_and_present(
                 st.buffer[strip_start..ctx.h * ctx.w].fill(Rgb565Pixel(0xFFFF));
             }
         } else if chapter_overlay {
-            let current_row =
-                crate::rendering::render::current_toc_row(&st.toc_rows, st.current_chapter)
-                    .unwrap_or(0) as i32;
-            crate::rendering::render::paint_chapter_list(
-                &mut st.buffer,
-                &st.toc_rows,
-                st.chapter_scroll,
-                ctx.reader.get_chapter_preview_idx(),
-                current_row,
-            );
+            if chapter_overlay != st.prev_chapter_overlay {
+                info!(
+                    "overlay: paint tab={:?} results={} words={}",
+                    st.chapter_tab,
+                    st.search_results_active,
+                    st.word_index.words.len(),
+                );
+            }
+            if st.search_results_active {
+                let word = st
+                    .word_index
+                    .words
+                    .get(st.search_selected_word)
+                    .map(|s| s.as_str())
+                    .unwrap_or("");
+                let hits = st
+                    .word_index
+                    .occurrences
+                    .get(st.search_selected_word)
+                    .map(|h| h.as_slice())
+                    .unwrap_or(&[]);
+                let total = hits.len();
+                crate::rendering::search_results::paint_search_results(
+                    &mut st.buffer,
+                    word,
+                    hits,
+                    &st.chapters,
+                    st.search_results_scroll,
+                    st.body_px,
+                    total,
+                    if st.search_result_selected {
+                        st.search_selected_result
+                    } else {
+                        usize::MAX
+                    },
+                    st.sb_dragging && st.search_results_active,
+                );
+            } else {
+                match st.chapter_tab {
+                    ChapterTab::Chapters => {
+                        let current_row = crate::rendering::render::current_toc_row(
+                            &st.toc_rows,
+                            st.current_chapter,
+                        )
+                        .unwrap_or(0) as i32;
+                        crate::rendering::render::paint_chapter_list(
+                            &mut st.buffer,
+                            &st.toc_rows,
+                            st.chapter_scroll,
+                            ctx.reader.get_chapter_preview_idx(),
+                            current_row,
+                        );
+                        let buf_bytes = rgb565_as_bytes(&mut st.buffer);
+                        crate::rendering::chapter_list::paint_scrollbar(
+                            buf_bytes,
+                            ctx.w,
+                            ctx.h,
+                            st.toc_rows.len(),
+                            st.chapter_scroll,
+                            st.sb_dragging && st.sb_drag_tab == ChapterTab::Chapters,
+                        );
+                    }
+                    ChapterTab::Words => {
+                        crate::rendering::word_list::paint_word_list(
+                            &mut st.buffer,
+                            &st.word_index.words,
+                            st.search_scroll,
+                            st.body_px,
+                            if st.search_word_selected {
+                                st.search_selected_word
+                            } else {
+                                usize::MAX
+                            },
+                            st.sb_dragging && st.sb_drag_tab == ChapterTab::Words,
+                        );
+                    }
+                    ChapterTab::Bookmarks => {
+                        let rows = crate::rendering::bookmark_list::bookmark_rows(
+                            &st.bookmarks,
+                            &st.chapters,
+                            &st.chapter_offsets,
+                        );
+                        crate::rendering::bookmark_list::paint_bookmark_list(
+                            &mut st.buffer,
+                            &rows,
+                            st.bookmark_scroll,
+                            st.bm_selected,
+                            st.sb_dragging && st.sb_drag_tab == ChapterTab::Bookmarks,
+                        );
+                    }
+                }
+            }
         }
         // Marker fast path: refresh ONLY the box the marker moved through, with A2.
         //
@@ -191,8 +273,8 @@ pub fn render_and_present(
                         w: rw,
                         h: rh,
                     },
-                    // One 16-level pass once the disk stops, to clear A2's ghosting.
                     if settle { WAVE_GC16 } else { WAVE_A2 },
+                    false,
                 );
                 for row in ry..(ry + rh).min(ctx.h) {
                     let s = row * ctx.w + rx;
@@ -224,28 +306,18 @@ pub fn render_and_present(
         // chapter_list.rs). Chasing that with waveform swaps (GC16 -> GL16 ->
         // A2, none of which fixed the ghosting because none of them address
         // the actual amount of grey being refreshed) is why this kept
-        // recurring; REAGL was tried project-wide for the same class of
-        // problem and reverted (commit b72a323) for the same reason. With
-        // the large grey fill gone, the chapter list is content-wise the same
-        // shape as every other quiet screen, so it uses the same waveform.
-        let heavy_swap = mode_transition || matches!(st.view_mode, crate::ViewMode::Audio);
-        let trans_wf = if heavy_swap {
-            WAVE_GC16
-        } else {
-            waveform_for(RenderScenario::Transition)
-        };
+        // recurring. With the large grey fill gone, the chapter list is
+        // content-wise the same shape as every other quiet screen, so every
+        // transition present now goes through the same policy
+        // (`PanelTransition`) instead of a per-case waveform guess.
+        //
+        // The PPM/nonwhite diagnostic that used to run here has served its
+        // purpose: the buffer is white-filled and clean, so the residue is on
+        // the glass. What is left to settle is the waveform, which the policy
+        // logs below.
         let content_wf = waveform_for(RenderScenario::Content);
         if panel_transition || overlay_transition {
-            ctx.fb.present(
-                rgb565_as_bytes_ref(&st.buffer),
-                ctx.w,
-                ctx.h,
-                false,
-                0,
-                ctx.h,
-                trans_wf,
-            );
-            st.prev_buffer.copy_from_slice(&st.buffer);
+            present_transition(st, ctx);
         } else if let Some((top, rh)) = diff_rows(
             rgb565_as_bytes_ref(&st.prev_buffer),
             rgb565_as_bytes_ref(&st.buffer),
@@ -293,4 +365,48 @@ pub fn render_and_present(
     } else {
         false
     }
+}
+
+/// Present a whole-screen transition (panel open/close, mode switch, chapter
+/// overlay) under the configured waveform policy.
+///
+/// The white clearing pass reuses `prev_buffer` rather than allocating one:
+/// it is overwritten with the new frame immediately afterwards, and a
+/// full-screen RGB565 buffer is ~4 MB to allocate on a transition.
+fn present_transition(st: &mut LoopState, ctx: &LoopContext) {
+    let mode = ctx.cfg.panel_transition;
+    let wf = mode.waveform();
+    let full = mode.full();
+    info!(
+        "transition: mode={} wf={} um={} panel_open={}",
+        mode.as_key(),
+        wf,
+        u8::from(full),
+        st.panel_open
+    );
+    if mode.needs_white_pass() {
+        st.prev_buffer.fill(Rgb565Pixel(0xFFFF));
+        ctx.fb.present(
+            rgb565_as_bytes_ref(&st.prev_buffer),
+            ctx.w,
+            ctx.h,
+            false,
+            0,
+            ctx.h,
+            wf,
+        );
+        // The second pass must not be merged with the white one by the
+        // driver's update queue, or the clear never reaches the glass.
+        ctx.fb.wait_for_update_complete();
+    }
+    ctx.fb.present(
+        rgb565_as_bytes_ref(&st.buffer),
+        ctx.w,
+        ctx.h,
+        full,
+        0,
+        ctx.h,
+        wf,
+    );
+    st.prev_buffer.copy_from_slice(&st.buffer);
 }

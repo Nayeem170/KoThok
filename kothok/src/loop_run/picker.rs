@@ -50,10 +50,10 @@ pub(super) fn handle_picker(st: &mut LoopState, ctx: &mut LoopContext) -> LoopFl
         let in_debounce = st.picker_entered.is_some_and(|t| {
             t.elapsed() <= std::time::Duration::from_millis(PICKER_ENTER_DEBOUNCE_MS)
         });
-        if in_debounce {
+        if in_debounce || st.panel_open {
             st.tap_xy = None;
         }
-        if !in_debounce {
+        if !in_debounce && !st.panel_open {
             if let Some((dx, dy)) = st.tap_xy.take() {
                 if st.about_open {
                     about::handle_about_close(
@@ -103,13 +103,79 @@ pub(super) fn handle_picker(st: &mut LoopState, ctx: &mut LoopContext) -> LoopFl
                         st.prev_buffer.copy_from_slice(&st.buffer);
                         return LoopFlow::Continue;
                     }
+                    gesture::PickerTarget::Settings => {
+                        st.tap_xy = None;
+                        st.exit_armed = false;
+                        st.panel_open = true;
+                        cb.panel_open_cell.set(true);
+                        reader.set_panel_open(true);
+                        reader.set_battery_pct(caps.battery_pct());
+                        reader.set_clock(SharedString::from(caps.current_clock()));
+                        reader.set_sleep_label(
+                            crate::panel::callbacks::sleep::sleep_label(
+                                ctx.cfg.reading_auto_sleep_secs,
+                            )
+                            .into(),
+                        );
+                        reader.set_device_model(SharedString::from(st.device_model.as_str()));
+                        // The build stamp, not BUILD_TAG: that one is derived
+                        // from VERSION, so this line used to print the same
+                        // number twice and say nothing about which binary was
+                        // running. See `device::build_stamp`.
+                        reader.set_app_version(SharedString::from(format!(
+                            "KoThok {} - build {}",
+                            crate::VERSION,
+                            crate::device::build_stamp()
+                        )));
+                        reader.set_free_space(
+                            crate::device::free_space_label()
+                                .map(SharedString::from)
+                                .unwrap_or_default(),
+                        );
+                        reader.set_update_status(Default::default());
+                        let wifi = caps.network_available();
+                        let bt = caps.audio_sink_available();
+                        log::info!("picker: device settings OPEN, wifi={}, bt={}", wifi, bt);
+                        reader.set_wifi_on(wifi);
+                        if !crate::device::bt_reconnect_busy() {
+                            reader.set_bt_on(bt);
+                            if bt {
+                                st.bt_fail_count = 0;
+                            }
+                            if let Some(n) = caps.bt_name() {
+                                reader.set_bt_connected_name(SharedString::from(n));
+                            }
+                        }
+                        reader.set_play_enabled(wifi && bt);
+                        if let Some(n) = caps.wifi_name() {
+                            log::info!("picker: wifi connected name={}", n);
+                            reader.set_wifi_connected_name(SharedString::from(n.clone()));
+                            reader.set_wifi_name(SharedString::from(n));
+                        } else {
+                            log::info!("picker: no wifi name available");
+                        }
+                        if let Some(n) = caps.bt_name() {
+                            log::info!("picker: bt connected name={}", n);
+                            reader.set_bt_name(SharedString::from(n));
+                        } else {
+                            log::info!("picker: no bt name available");
+                        }
+                        if let Some(ref path) = ctx.fl_path {
+                            if let Some(hw) = frontlight_get(path) {
+                                reader.set_brightness_val(hw as i32);
+                            }
+                        }
+                        st.text_dirty = true;
+                        crate::debug_log::log("picker: panel OPEN (gear tap)");
+                        return LoopFlow::Continue;
+                    }
                     gesture::PickerTarget::Logo => {
                         st.tap_xy = None;
                         st.picker_last_tap_idx = None;
                         st.exit_armed = false;
                         st.about_open = true;
                         crate::update_check::try_check_if_wifi();
-                        crate::rendering::about::show_about(&fb, &mut st.buffer, &st.device_model);
+                        crate::rendering::about::show_about(&fb, &mut st.buffer);
                         st.prev_buffer.copy_from_slice(&st.buffer);
                         return LoopFlow::Continue;
                     }

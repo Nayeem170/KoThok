@@ -1,6 +1,6 @@
 [package]
 name = "kothok-app"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 authors = ["Nayeem Bin Ahsan"]
 license = "PolyForm-Noncommercial-1.0.0"
@@ -29,6 +29,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 bincode = "1"
 ureq = { version = "2", features = ["tls"] }
+unicode-segmentation = "1"
 
 [build-dependencies]
 slint-build = "=1.8.0"
@@ -43,3 +44,4 @@ panic = "unwind"
 lto = true
 codegen-units = 1
 strip = true
+
