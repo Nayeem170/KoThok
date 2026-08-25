@@ -122,6 +122,13 @@ fn apply_bookmark_jump(
         let target = crate::audio::glue::utterance_index_for_offset(&utts, bm.offset);
         best_effort_send(cmd_tx, Cmd::Reload(utts));
         best_effort_send(cmd_tx, Cmd::Seek(target));
+    } else {
+        // Reading mode keeps the driver on the current page's utterances (see
+        // apply_page_display). Without this, a same-chapter jump left the
+        // driver on the old page, so read-along playback (playing while in
+        // reading mode) kept reading the pre-jump page and auto page-turn
+        // dragged the view back, undoing the jump.
+        load_page_audio(st.current_page, &st.state, cmd_tx);
     }
     st.text_dirty = true;
     ctx.window.request_redraw();
