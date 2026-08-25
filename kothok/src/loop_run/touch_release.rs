@@ -458,7 +458,7 @@ fn chapter_overlay_release(
         return;
     }
     if st.chapter_tab == crate::loop_state::ChapterTab::Bookmarks {
-        bookmark_row_release(st, ctx, dy, swipe_dx, swipe_dy, hold_ms);
+        bookmark_row_release(st, ctx, swipe_dx, swipe_dy, hold_ms);
         return;
     }
     match gesture::chapter_overlay_target(
@@ -483,33 +483,24 @@ fn chapter_overlay_release(
 
 /// Release on a Bookmarks-tab row. A hold on the row pressed at touchdown
 /// deletes that bookmark; a tap selects it (the Open strip jumps to the
-/// selection). A flick keeps the drag-scroll and selects nothing.
+/// selection). A flick keeps the drag-scroll and selects nothing. Selection
+/// and delete act on the row the finger went DOWN on, not the release
+/// position: at a scroll boundary the clamp breaks the press/release
+/// cancellation, and a re-hit-test there picks a row the user never touched.
 fn bookmark_row_release(
     st: &mut LoopState,
     ctx: &mut LoopContext,
-    dy: f32,
     swipe_dx: f32,
     swipe_dy: f32,
     hold_ms: u128,
 ) {
-    let pressed = st.bm_press.take();
+    let Some(orig) = st.bm_press.take() else {
+        return;
+    };
     if swipe_dy.abs() > 40.0 && swipe_dy.abs() > swipe_dx.abs() {
         return;
     }
-    let Some(row) = crate::rendering::bookmark_list::bookmark_list_hit_test(
-        dy as i32,
-        st.bookmark_scroll,
-        st.bookmarks.len(),
-    ) else {
-        return;
-    };
-    let Some(orig) = crate::rendering::bookmark_list::sorted_orig(&st.bookmarks)
-        .get(row)
-        .copied()
-    else {
-        return;
-    };
-    if pressed == Some(orig) && hold_ms >= BM_DELETE_HOLD_MS {
+    if hold_ms >= BM_DELETE_HOLD_MS {
         let bm = st.bookmarks.remove(orig);
         st.bm_selected =
             crate::rendering::bookmark_list::selected_after_remove(st.bm_selected, orig);
