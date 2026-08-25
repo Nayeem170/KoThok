@@ -287,7 +287,17 @@ if ($isFirstInstall) {
         $sampleDir = Join-Path $stage 'mnt\onboard\books'
         New-Item -ItemType Directory -Force -Path $sampleDir | Out-Null
         foreach ($epub in (Get-ChildItem -LiteralPath $sampleSrc -Filter '*.epub')) {
-            Copy-Item -LiteralPath $epub.FullName -Destination $sampleDir
+            # The guide is looked up by name (GUIDE_PATH), so it must land as
+            # "KoThok - Getting Started.epub", same as make-release.ps1 stages
+            # it. Under its build name the app never finds it and onboarding
+            # silently never runs - plus the shelf shows a "welcome" duplicate.
+            if ($epub.Name -eq 'welcome.epub') {
+                Copy-Item -LiteralPath $epub.FullName `
+                    -Destination (Join-Path $sampleDir 'KoThok - Getting Started.epub')
+                Info "Bundling onboarding guide"
+            } else {
+                Copy-Item -LiteralPath $epub.FullName -Destination $sampleDir
+            }
         }
         Info "Bundling sample book(s) so a fresh device has something to read"
     }
