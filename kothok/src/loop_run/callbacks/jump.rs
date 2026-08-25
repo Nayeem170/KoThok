@@ -127,6 +127,8 @@ fn apply_bookmark_jump(
     ctx.window.request_redraw();
 }
 
+/// Audio-mode entry: the reading-position panel's jump while in audio mode
+/// targets the most recently set bookmark, same as the header button.
 fn jump_audio_bookmark(
     st: &mut LoopState,
     reader: &Reader,
@@ -136,40 +138,7 @@ fn jump_audio_bookmark(
     let Some(bm) = latest_valid_bookmark(&st.bookmarks, st.chapters.len()) else {
         return;
     };
-    if bm.chapter != st.current_chapter {
-        switch_chapter(
-            st,
-            reader,
-            cmd_tx,
-            bm.chapter,
-            ChapterSwitchOpts {
-                to_last_page: false,
-                update_cursor: false,
-                load_audio: true,
-            },
-        );
-    }
-    st.current_page = page_for_bookmark(st, &bm);
-    apply_page(
-        reader,
-        &st.state,
-        st.current_page,
-        &st.chapter_offsets,
-        st.current_chapter,
-    );
-    restore_cursor_line(st, reader, bm.offset);
-    let base = st
-        .chapter_offsets
-        .get(st.current_chapter)
-        .copied()
-        .unwrap_or(0);
-    reader.set_saved_page((base + st.current_page) as i32);
-    let utts = crate::audio::glue::page_utterances(st.current_page, &st.state);
-    let target = crate::audio::glue::utterance_index_for_offset(&utts, bm.offset);
-    best_effort_send(cmd_tx, Cmd::Reload(utts));
-    best_effort_send(cmd_tx, Cmd::Seek(target));
-    st.text_dirty = true;
-    ctx.window.request_redraw();
+    apply_bookmark_jump(st, reader, cmd_tx, ctx, bm);
 }
 
 fn jump_reading_position(
