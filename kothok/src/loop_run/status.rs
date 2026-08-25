@@ -27,7 +27,7 @@ fn current_position(st: &LoopState, reader: &Reader) -> persistence::ReadingPosi
         cur_start: reader.get_cur_start().max(0) as usize,
         cur_end: reader.get_cur_end().max(0) as usize,
         view_mode: st.view_mode,
-        bookmark: st.bookmark,
+        bookmarks: st.bookmarks.clone(),
         progress: reader.get_book_progress(),
     }
 }

@@ -26,8 +26,8 @@ export component AudioPlayer inherits Rectangle {
     in property <bool> playing: false;
     in property <bool> play-enabled: false;
     in property <bool> has-bookmark: false;
-    /// Book-level, matching the bottom bar's scope and reading mode's marker.
-    in property <float> bookmark-frac: -1.0;
+    /// Book-level, matching the bottom bar's scope and reading mode's markers.
+    in property <[float]> bookmark-fracs: [];
     /// Book-level progress for the bottom bar. The ring carries chapter-level
     /// progress; the two scopes are deliberately different.
     in property <float> bar-progress: 0.0;
@@ -317,18 +317,16 @@ export component AudioPlayer inherits Rectangle {
                 border-radius: 5px;
             }
 
-            // Bookmark marker, parked off-screen when unset. Declared BEFORE the
-            // thumb so the thumb draws on top, matching reading mode -- the knob
-            // sits above the tick when the two coincide.
-            Rectangle {
-                x: root.has-bookmark && root.bookmark-frac >= 0.0
-                    ? root.bookmark-frac * parent.width - 7px : -400px;
+            // Bookmark markers, one per bookmark. Declared BEFORE the thumb so
+            // the thumb draws on top, matching reading mode -- the knob sits
+            // above the tick when the two coincide.
+            for f in root.bookmark-fracs : Rectangle {
+                x: f * parent.width - 7px;
                 y: -13px;
                 width: 15px;
                 height: 36px;
                 background: root.brand-green;
                 border-radius: 5px;
-                visible: root.has-bookmark && root.bookmark-frac >= 0.0;
             }
 
             Rectangle {

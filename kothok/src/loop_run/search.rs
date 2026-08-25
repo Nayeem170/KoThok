@@ -56,6 +56,7 @@ pub(super) fn handle_search_release(
             return true;
         }
         ChapterTab::Chapters => {}
+        ChapterTab::Bookmarks => {}
     }
     false
 }
@@ -225,7 +226,12 @@ mod tests {
             system_state: crate::SystemState::Awake,
             view_mode: crate::ViewMode::Reading,
             prev_view_mode: crate::ViewMode::Reading,
-            bookmark: None,
+            bookmarks: Vec::new(),
+            bookmark_scroll: 0,
+            press_bookmark_scroll: 0,
+            bm_press: None,
+            bm_selected: None,
+            pushed_bookmark_fracs: Vec::new(),
             lock_time: None,
             saved_brightness: 0,
             lock_radios_off: false,

@@ -21,7 +21,7 @@ fn progress_survives_a_roundtrip() {
             cur_start: 10,
             cur_end: 20,
             view_mode: ViewMode::Reading,
-            bookmark: None,
+            bookmarks: Vec::new(),
             progress: 0.4137,
         },
     )
@@ -67,7 +67,7 @@ fn progress_endpoints_are_exact() {
                 cur_start: 0,
                 cur_end: 0,
                 view_mode: ViewMode::Reading,
-                bookmark: None,
+                bookmarks: Vec::new(),
                 progress: p,
             },
         )

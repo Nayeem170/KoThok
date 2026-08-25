@@ -113,6 +113,7 @@ pub(super) fn poll_and_dispatch_touch(st: &mut LoopState, ctx: &mut LoopContext)
                     st.press_chapter_scroll = st.chapter_scroll;
                     st.press_search_scroll = st.search_scroll;
                     st.press_search_results_scroll = st.search_results_scroll;
+                    st.press_bookmark_scroll = st.bookmark_scroll;
                     #[cfg(feature = "screenshot")]
                     {
                         st.shot_armed =
@@ -221,6 +222,9 @@ pub(super) fn poll_and_dispatch_touch(st: &mut LoopState, ctx: &mut LoopContext)
                                         crate::loop_state::ChapterTab::Chapters => {
                                             (st.toc_rows.len(), st.chapter_scroll)
                                         }
+                                        crate::loop_state::ChapterTab::Bookmarks => {
+                                            (st.bookmarks.len(), st.bookmark_scroll)
+                                        }
                                     }
                                 };
                                 let sb_dx = dx as i32;
@@ -264,6 +268,10 @@ pub(super) fn poll_and_dispatch_touch(st: &mut LoopState, ctx: &mut LoopContext)
                                                         st.chapter_scroll = new_scroll;
                                                         st.press_chapter_scroll = new_scroll;
                                                     }
+                                                    crate::loop_state::ChapterTab::Bookmarks => {
+                                                        st.bookmark_scroll = new_scroll;
+                                                        st.press_bookmark_scroll = new_scroll;
+                                                    }
                                                 }
                                             }
                                             st.text_dirty = true;
@@ -295,6 +303,10 @@ pub(super) fn poll_and_dispatch_touch(st: &mut LoopState, ctx: &mut LoopContext)
                                                             st.chapter_scroll = new_scroll;
                                                             st.press_chapter_scroll = new_scroll;
                                                         }
+                                                        crate::loop_state::ChapterTab::Bookmarks => {
+                                                            st.bookmark_scroll = new_scroll;
+                                                            st.press_bookmark_scroll = new_scroll;
+                                                        }
                                                     }
                                                 }
                                             } else {
@@ -312,6 +324,10 @@ pub(super) fn poll_and_dispatch_touch(st: &mut LoopState, ctx: &mut LoopContext)
                                                             st.chapter_scroll = new_scroll;
                                                             st.press_chapter_scroll = new_scroll;
                                                         }
+                                                        crate::loop_state::ChapterTab::Bookmarks => {
+                                                            st.bookmark_scroll = new_scroll;
+                                                            st.press_bookmark_scroll = new_scroll;
+                                                        }
                                                     }
                                                 }
                                             }
@@ -325,6 +341,26 @@ pub(super) fn poll_and_dispatch_touch(st: &mut LoopState, ctx: &mut LoopContext)
                                         st.press_dispatched = false;
                                     } else {
                                         st.press_dispatched = true;
+                                        // Remember which bookmark row the finger
+                                        // went down on, so release can tell a
+                                        // tap from a delete-hold on that row.
+                                        if st.chapter_tab
+                                            == crate::loop_state::ChapterTab::Bookmarks
+                                            && !st.search_results_active
+                                        {
+                                            st.bm_press = crate::rendering::bookmark_list::bookmark_list_hit_test(
+                                                dy as i32,
+                                                st.bookmark_scroll,
+                                                st.bookmarks.len(),
+                                            )
+                                            .and_then(|row| {
+                                                crate::rendering::bookmark_list::sorted_orig(
+                                                    &st.bookmarks,
+                                                )
+                                                .get(row)
+                                                .copied()
+                                            });
+                                        }
                                         ctx.window.window().dispatch_event(
                                             slint::platform::WindowEvent::PointerPressed {
                                                 position: slint::LogicalPosition::new(dx, dy),
@@ -424,6 +460,17 @@ pub(super) fn poll_and_dispatch_touch(st: &mut LoopState, ctx: &mut LoopContext)
                                     st.chapter_scroll = new_scroll;
                                     st.press_chapter_scroll = new_scroll;
                                 }
+                                crate::loop_state::ChapterTab::Bookmarks => {
+                                    let new_scroll = scrollbar_y_to_scroll(
+                                        dy as i32,
+                                        list_top,
+                                        list_bottom,
+                                        st.bookmarks.len(),
+                                        st.sb_grab_offset,
+                                    );
+                                    st.bookmark_scroll = new_scroll;
+                                    st.press_bookmark_scroll = new_scroll;
+                                }
                             }
                         }
                         st.text_dirty = true;
@@ -463,6 +510,15 @@ pub(super) fn poll_and_dispatch_touch(st: &mut LoopState, ctx: &mut LoopContext)
                                         let raw = (st.press_chapter_scroll - swipe_dy as i32)
                                             .clamp(0, max_scroll);
                                         st.chapter_scroll = raw;
+                                    }
+                                    crate::loop_state::ChapterTab::Bookmarks => {
+                                        let list_h =
+                                            ctx.h as i32 - CH_LIST_TOP - CH_LIST_BOTTOM_PAD;
+                                        let max_scroll =
+                                            list_scroll_max(st.bookmarks.len(), list_h);
+                                        let raw = (st.press_bookmark_scroll - swipe_dy as i32)
+                                            .clamp(0, max_scroll);
+                                        st.bookmark_scroll = raw;
                                     }
                                 }
                             }

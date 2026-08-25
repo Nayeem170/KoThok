@@ -141,7 +141,7 @@ export component Reader inherits Window {
     in-out property <float> chapter-progress: 0.0;
     in-out property <float> book-progress: 0.0;
     in-out property <bool> has-bookmark: false;
-    in-out property <float> bookmark-frac: -1.0;
+    in-out property <[float]> bookmark-fracs: [];
     in-out property <bool> audio-locked: false;
     in-out property <bool> title-overflow: false;
     in-out property <bool> selection-active: false;
@@ -177,7 +177,7 @@ export component Reader inherits Window {
         nav-recent: root.nav-recent;
         has-navigated: root.has-navigated;
         picker-active: root.picker-active;
-        bookmark-frac: root.bookmark-frac;
+        bookmark-fracs: root.bookmark-fracs;
         brand-green: root.brand-green;
         brand-red: root.brand-red;
         brand-gray: root.brand-gray;
@@ -218,7 +218,7 @@ export component Reader inherits Window {
         playing: root.playing;
         play-enabled: root.play-enabled;
         has-bookmark: root.has-bookmark;
-        bookmark-frac: root.bookmark-frac;
+        bookmark-fracs: root.bookmark-fracs;
         bar-progress: root.book-progress;
         header-visible: root.header-visible;
         locked: root.audio-locked;

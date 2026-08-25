@@ -114,7 +114,7 @@ pub fn run() -> Option<InitResult> {
     setup
         .reader
         .set_audio_mode(matches!(st.view_mode, crate::ViewMode::Audio));
-    setup.reader.set_has_bookmark(st.bookmark.is_some());
+    setup.reader.set_has_bookmark(!st.bookmarks.is_empty());
 
     Some(InitResult {
         fb,
@@ -340,7 +340,7 @@ fn init_book_or_picker(
             false,
             true,
             crate::ViewMode::Reading,
-            None,
+            Vec::new(),
             None,
             Vec::new(),
             Default::default(),

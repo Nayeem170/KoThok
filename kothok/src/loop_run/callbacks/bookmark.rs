@@ -20,43 +20,58 @@ pub(super) fn handle_bookmark_set(st: &mut LoopState, reader: &Reader, cb: &Call
     if !reader.get_playing() {
         restore_cursor_line(st, reader, off);
     }
-    let already_here = st
-        .bookmark
-        .map(|bm| bm.chapter == st.current_chapter && bm.offset == off)
-        .unwrap_or(false);
-    if already_here {
-        st.bookmark = None;
-        reader.set_has_bookmark(false);
-    } else {
-        st.bookmark = Some(crate::Bookmark {
+    let added = toggle_bookmark_at(
+        &mut st.bookmarks,
+        crate::Bookmark {
             chapter: st.current_chapter,
             page: st.current_page,
             offset: off,
-        });
-        reader.set_has_bookmark(true);
-    }
+        },
+    );
+    reader.set_has_bookmark(!st.bookmarks.is_empty());
     let global_page = st
         .chapter_offsets
         .get(st.current_chapter)
         .copied()
         .unwrap_or(0)
         + st.current_page;
-    let msg = if st.bookmark.is_some() {
+    let msg = if added {
         format!("Bookmarked page {}", global_page + 1)
     } else {
         "Bookmark removed".to_string()
     };
     reader.set_status(msg.into());
     info!(
-        "bookmark-set: ch={} pg={} off={} playing={} on_page={} set={}",
+        "bookmark-set: ch={} pg={} off={} playing={} on_page={} added={} total={}",
         st.current_chapter + 1,
         st.current_page + 1,
         off,
         reader.get_playing(),
         cursor_on_page,
-        st.bookmark.is_some(),
+        added,
+        st.bookmarks.len(),
     );
     true
+}
+
+/// Toggle a bookmark at `cur`'s spot. Identity is chapter + offset (the page
+/// number is a repagination-volatile estimate), so re-setting a bookmark whose
+/// page drifted after a font change still removes the original entry. Returns
+/// true when the bookmark was added, false when an existing one was removed.
+pub(crate) fn toggle_bookmark_at(bms: &mut Vec<crate::Bookmark>, cur: crate::Bookmark) -> bool {
+    match bms
+        .iter()
+        .position(|b| b.chapter == cur.chapter && b.offset == cur.offset)
+    {
+        Some(i) => {
+            bms.remove(i);
+            false
+        }
+        None => {
+            bms.push(cur);
+            true
+        }
+    }
 }
 
 /// Byte offset of the first text-bearing row on the current page. Used as the
@@ -133,4 +148,43 @@ pub(crate) fn restore_cursor_line(st: &LoopState, reader: &Reader, offset: usize
         }
     }
     restored
+}
+
+#[cfg(test)]
+mod tests {
+    use super::toggle_bookmark_at;
+    use crate::Bookmark;
+
+    fn bm(chapter: usize, page: usize, offset: usize) -> Bookmark {
+        Bookmark {
+            chapter,
+            page,
+            offset,
+        }
+    }
+
+    #[test]
+    fn toggle_adds_new_spot_and_removes_existing() {
+        let mut bms = vec![bm(0, 5, 100), bm(2, 1, 900)];
+        assert!(toggle_bookmark_at(&mut bms, bm(1, 2, 400)));
+        assert_eq!(bms.len(), 3);
+        // Same spot as an existing entry (page estimate differs): removes it.
+        assert!(!toggle_bookmark_at(&mut bms, bm(2, 9, 900)));
+        assert_eq!(bms, vec![bm(0, 5, 100), bm(1, 2, 400)]);
+    }
+
+    #[test]
+    fn identity_is_chapter_and_offset_not_page() {
+        let mut bms = vec![bm(1, 4, 500)];
+        // Same text spot, repaginated page estimate: still the same bookmark.
+        assert!(!toggle_bookmark_at(&mut bms, bm(1, 7, 500)));
+        assert!(bms.is_empty());
+    }
+
+    #[test]
+    fn same_offset_in_other_chapter_is_a_new_bookmark() {
+        let mut bms = vec![bm(1, 4, 500)];
+        assert!(toggle_bookmark_at(&mut bms, bm(3, 0, 500)));
+        assert_eq!(bms.len(), 2);
+    }
 }

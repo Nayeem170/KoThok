@@ -32,20 +32,63 @@ pub(super) fn handle_jump_to_reading(
     }
 }
 
-/// Jump straight to the single bookmark from the bookmark-jump header button.
-/// Switches chapter if needed, lands on the bookmark's page, restores the
-/// reading cursor, and - in audio mode - reloads + seeks the driver so the
-/// page-break markers match the new layout.
+/// The most recently set bookmark that still points into this book, or None.
+/// The Vec's last element is the newest by construction; invalid chapter
+/// indices (an edited/shorter book) fall back to the next-newest.
+pub(super) fn latest_valid_bookmark(
+    bms: &[crate::Bookmark],
+    chapter_count: usize,
+) -> Option<crate::Bookmark> {
+    bms.iter()
+        .rev()
+        .find(|b| b.chapter < chapter_count)
+        .copied()
+}
+
+/// Jump straight to the most recently set bookmark from the bookmark-jump
+/// header button. Switches chapter if needed, lands on the bookmark's page,
+/// restores the reading cursor, and - in audio mode - reloads + seeks the
+/// driver so the page-break markers match the new layout.
 pub(super) fn jump_to_bookmark(
     st: &mut LoopState,
     reader: &Reader,
     cmd_tx: &std::sync::mpsc::Sender<Cmd>,
     ctx: &mut LoopContext,
 ) {
-    let Some(bm) = st.bookmark.filter(|b| b.chapter < st.chapters.len()) else {
+    let Some(bm) = latest_valid_bookmark(&st.bookmarks, st.chapters.len()) else {
         reader.set_status("No bookmark".into());
         return;
     };
+    apply_bookmark_jump(st, reader, cmd_tx, ctx, bm);
+}
+
+/// Jump to the bookmark stored at `idx` (overlay Bookmarks-tab row or Open
+/// button target). Falls back to the most recently set one when `idx` no
+/// longer resolves (e.g. the row's bookmark was just deleted).
+pub(in crate::loop_run) fn jump_to_bookmark_idx(
+    st: &mut LoopState,
+    reader: &Reader,
+    cmd_tx: &std::sync::mpsc::Sender<Cmd>,
+    ctx: &mut LoopContext,
+    idx: usize,
+) {
+    let bm = match st.bookmarks.get(idx) {
+        Some(bm) if bm.chapter < st.chapters.len() => *bm,
+        _ => match latest_valid_bookmark(&st.bookmarks, st.chapters.len()) {
+            Some(bm) => bm,
+            None => return,
+        },
+    };
+    apply_bookmark_jump(st, reader, cmd_tx, ctx, bm);
+}
+
+fn apply_bookmark_jump(
+    st: &mut LoopState,
+    reader: &Reader,
+    cmd_tx: &std::sync::mpsc::Sender<Cmd>,
+    ctx: &mut LoopContext,
+    bm: crate::Bookmark,
+) {
     if bm.chapter != st.current_chapter {
         switch_chapter(
             st,
@@ -90,7 +133,7 @@ fn jump_audio_bookmark(
     cmd_tx: &std::sync::mpsc::Sender<Cmd>,
     ctx: &mut LoopContext,
 ) {
-    let Some(bm) = st.bookmark.filter(|b| b.chapter < st.chapters.len()) else {
+    let Some(bm) = latest_valid_bookmark(&st.bookmarks, st.chapters.len()) else {
         return;
     };
     if bm.chapter != st.current_chapter {
@@ -189,4 +232,36 @@ fn jump_reading_position(
     load_page_audio(st.current_page, &st.state, cmd_tx);
     st.text_dirty = true;
     ctx.window.request_redraw();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::latest_valid_bookmark;
+    use crate::Bookmark;
+
+    fn bm(chapter: usize, offset: usize) -> Bookmark {
+        Bookmark {
+            chapter,
+            page: 0,
+            offset,
+        }
+    }
+
+    #[test]
+    fn latest_set_wins() {
+        let bms = vec![bm(0, 10), bm(4, 90), bm(2, 50)];
+        assert_eq!(latest_valid_bookmark(&bms, 10), Some(bm(2, 50)));
+    }
+
+    #[test]
+    fn invalid_newest_falls_back_to_next_newest() {
+        let bms = vec![bm(0, 10), bm(9, 90)];
+        // 9 chapters exist; the newest bookmark points past the book.
+        assert_eq!(latest_valid_bookmark(&bms, 9), Some(bm(0, 10)));
+    }
+
+    #[test]
+    fn empty_list_has_no_target() {
+        assert_eq!(latest_valid_bookmark(&[], 10), None);
+    }
 }
