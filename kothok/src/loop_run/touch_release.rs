@@ -511,9 +511,8 @@ fn bookmark_row_release(
     };
     if pressed == Some(orig) && hold_ms >= BM_DELETE_HOLD_MS {
         let bm = st.bookmarks.remove(orig);
-        if st.bm_selected == Some(orig) {
-            st.bm_selected = None;
-        }
+        st.bm_selected =
+            crate::rendering::bookmark_list::selected_after_remove(st.bm_selected, orig);
         let list_h =
             (ctx.h as i32) - crate::rendering::chapter_list::CH_LIST_TOP - CH_LIST_BOTTOM_PAD;
         let max_scroll =

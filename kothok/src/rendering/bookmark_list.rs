@@ -142,6 +142,19 @@ pub fn bookmark_list_hit_test(tap_y: i32, scroll: i32, row_count: usize) -> Opti
     }
 }
 
+/// What `bm_selected` (an orig Vec index) must become after the bookmark at
+/// `removed` is deleted: the deleted row's own selection dies, every later
+/// index shifts down to keep naming the same bookmark, earlier ones are
+/// untouched. Without the shift, deleting an earlier row silently moves the
+/// selection onto a different bookmark.
+pub fn selected_after_remove(selected: Option<usize>, removed: usize) -> Option<usize> {
+    match selected {
+        Some(s) if s == removed => None,
+        Some(s) if s > removed => Some(s - 1),
+        other => other,
+    }
+}
+
 fn paint_empty_message(buf: &mut [Rgb565Pixel], w: usize, h: usize, msg: &str) {
     let buf_bytes = rgb565_as_bytes(buf);
     let px = 28.0;
@@ -212,5 +225,25 @@ mod tests {
         let last = CH_LIST_TOP + 4 * CH_ROW_PITCH;
         assert_eq!(bookmark_list_hit_test(last, 0, 5), Some(4));
         assert_eq!(bookmark_list_hit_test(last + CH_ROW_PITCH, 0, 5), None);
+    }
+
+    #[test]
+    fn deleting_the_selected_row_clears_selection() {
+        assert_eq!(selected_after_remove(Some(2), 2), None);
+    }
+
+    #[test]
+    fn deleting_an_earlier_row_shifts_selection_down() {
+        assert_eq!(selected_after_remove(Some(2), 0), Some(1));
+    }
+
+    #[test]
+    fn deleting_a_later_row_keeps_selection() {
+        assert_eq!(selected_after_remove(Some(1), 3), Some(1));
+    }
+
+    #[test]
+    fn no_selection_stays_none() {
+        assert_eq!(selected_after_remove(None, 1), None);
     }
 }
