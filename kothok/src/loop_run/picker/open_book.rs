@@ -122,12 +122,17 @@ pub(super) fn open_book_from_picker(
             cur_start: 0,
             cur_end: 0,
             view_mode: crate::ViewMode::Reading,
-            bookmark: None,
+            bookmarks: Vec::new(),
             progress: 0.0,
         });
     st.current_book_path = book_path.to_string();
     st.view_mode = pos.view_mode;
-    st.bookmark = pos.bookmark.filter(|bm| bm.chapter < st.chapter_count);
+    st.bookmarks = pos
+        .bookmarks
+        .iter()
+        .filter(|bm| bm.chapter < st.chapter_count)
+        .copied()
+        .collect();
     st.current_chapter = pos.chapter;
     set_book_meta(
         reader,
@@ -184,7 +189,7 @@ pub(super) fn open_book_from_picker(
     set_chapter_name(reader, &pick_cn);
     let audio = matches!(st.view_mode, ViewMode::Audio);
     reader.set_audio_mode(audio);
-    reader.set_has_bookmark(st.bookmark.is_some());
+    reader.set_has_bookmark(!st.bookmarks.is_empty());
     if session.show_cover {
         st.cover_page_visible = true;
         render_book_cover_scaled(&st.current_book_path, &mut st.buffer);

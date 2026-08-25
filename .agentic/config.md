@@ -7,8 +7,8 @@
 # Activated when the user's command/request mentions worktree, parallel,
 # or multiple tickets. Not a config field -- detected from the prompt.
 
-reviewer_id = azure-foundry/claude-sonnet-5
-reviewer_variant = high
+reviewer_id = zai/glm-5.2
+reviewer_variant = xhigh
 
 # worktree mode only: model/variant for the developer worktree session
 # direct mode does not use these (current session IS the developer)

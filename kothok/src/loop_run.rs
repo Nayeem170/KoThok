@@ -61,11 +61,13 @@ mod callbacks;
 mod link_nav;
 mod picker;
 mod power;
+mod sleep;
 mod status;
 pub(crate) use status::save_position_now;
 mod search;
 mod touch_dispatch;
 mod touch_release;
+pub(crate) mod tts_sleep;
 
 pub(super) enum LoopFlow {
     Normal,
@@ -170,6 +172,22 @@ pub fn run_loop(st: &mut LoopState, ctx: &mut LoopContext) {
         status::autosave_position(st, ctx);
 
         render_and_present(st, ctx, had_event, ui_changed, page_changed);
+
+        // Per-frame TTS sleep-timer poll (timed fire + touch reset). Runs after
+        // the present and alongside power::auto_sleep, mirroring that sibling
+        // timer. Event-driven arming/freeze/disarm live in app::events.
+        tts_sleep::tts_sleep_timer(st, ctx, had_event);
+
+        // Drain a sleep request raised by the TTS sleep timer (timed
+        // deadline). Auto-off's activity clock is refreshed every tick
+        // while audio plays, so it can never elapse during playback - the timer
+        // owns the bedtime device-sleep itself. sleep_from_timer sleeps from
+        // every system state, keeping the current view (Asleep -> no-op).
+        if st.sleep_requested {
+            st.sleep_requested = false;
+            sleep::sleep_from_timer(st, ctx);
+            continue;
+        }
 
         match power::auto_sleep(st, ctx) {
             LoopFlow::Continue => continue,

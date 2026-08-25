@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (c) 2026 Nayeem Bin Ahsan
 pub mod about;
+pub mod bookmark_list;
 pub mod chapter_list;
 pub mod common;
 pub mod covers;

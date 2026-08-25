@@ -69,6 +69,28 @@ function Sync-Fonts($fontSrc, $addsDir) {
     else { Info "Fonts: $total on device (all current)" }
 }
 
+# The onboarding guide only ships inside the first-install tgz; without this
+# sync an update that bumps the version would re-open the guide (the app opens
+# it once per version change) with chapters from the old build. The chapter
+# cache keys on the epub's mtime, so a replaced file re-parses cleanly.
+function Sync-Guide($koboRoot) {
+    $src = Join-Path $ScriptDir '..\samples\welcome.epub'
+    if (-not (Test-Path -LiteralPath $src)) {
+        Info "No guide staged at $src - run kothok-media\make-tutorial.ps1"
+        return
+    }
+    $booksDir = Join-Path $koboRoot 'books'
+    $dest = Join-Path $booksDir 'KoThok - Getting Started.epub'
+    if (Test-Path -LiteralPath $dest) {
+        $srcHash = (Get-FileHash -LiteralPath $src -Algorithm MD5).Hash
+        $dstHash = (Get-FileHash -LiteralPath $dest -Algorithm MD5).Hash
+        if ($srcHash -eq $dstHash) { Info "Guide: current"; return }
+    }
+    New-Item -ItemType Directory -Force -Path $booksDir | Out-Null
+    Copy-Item -LiteralPath $src -Destination $dest -Force
+    Ok "Guide: updated"
+}
+
 function Find-Kobo {
     if ($IsWindows -or $PSVersionTable.Platform -ne 'Unix') {
         $d = Get-PSDrive -PSProvider FileSystem | Where-Object {
@@ -265,7 +287,17 @@ if ($isFirstInstall) {
         $sampleDir = Join-Path $stage 'mnt\onboard\books'
         New-Item -ItemType Directory -Force -Path $sampleDir | Out-Null
         foreach ($epub in (Get-ChildItem -LiteralPath $sampleSrc -Filter '*.epub')) {
-            Copy-Item -LiteralPath $epub.FullName -Destination $sampleDir
+            # The guide is looked up by name (GUIDE_PATH), so it must land as
+            # "KoThok - Getting Started.epub", same as make-release.ps1 stages
+            # it. Under its build name the app never finds it and onboarding
+            # silently never runs - plus the shelf shows a "welcome" duplicate.
+            if ($epub.Name -eq 'welcome.epub') {
+                Copy-Item -LiteralPath $epub.FullName `
+                    -Destination (Join-Path $sampleDir 'KoThok - Getting Started.epub')
+                Info "Bundling onboarding guide"
+            } else {
+                Copy-Item -LiteralPath $epub.FullName -Destination $sampleDir
+            }
         }
         Info "Bundling sample book(s) so a fresh device has something to read"
     }
@@ -316,6 +348,8 @@ else {
     }
 
     Sync-Fonts $FontSrc $addsDir
+
+    Sync-Guide $koboRoot
 
     # The build stamp the app will show for this binary. Read back from the
     # device copy, so it describes the file that was actually written.

@@ -42,10 +42,74 @@ const KEY_LINE_SPACING_PCT: &str = "line_spacing_pct";
 const KEY_TEXT_JUSTIFY: &str = "text_justify";
 const KEY_MARGIN_PX: &str = "margin_px";
 const KEY_AUTO_HIDE_HEADER: &str = "auto_hide_header";
+const KEY_TTS_SLEEP: &str = "tts_sleep";
 
 const TTS_RATE_DEFAULT: i32 = 60;
 const VOLUME_DEFAULT: i32 = 100;
 const BRIGHTNESS_DEFAULT: i32 = 50;
+
+/// TTS sleep-timer mode. One setting, one countdown, identical in both modes;
+/// on expiry the device sleeps (Awake) or the audio pauses (audio-mode lock).
+/// Persisted via from_key/as_key and mirrored into LoopState so the
+/// audio-event handlers - which take `st`, not `cfg` - can read it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TtsSleepMode {
+    #[default]
+    Off,
+    Mins15,
+    Mins30,
+    Mins45,
+    Mins60,
+}
+
+impl TtsSleepMode {
+    /// Recover any unknown / hand-edited key to Off (safe: timer off). This is
+    /// an explicit, tested recovery - it does NOT silently trap like
+    /// PanelTransition::from_key's `_ => PanelTransition::default()`. The
+    /// legacy "eoc" key (dropped end-of-chapter mode) lands here too.
+    pub fn from_key(s: &str) -> Self {
+        match s {
+            "off" => Self::Off,
+            "15" => Self::Mins15,
+            "30" => Self::Mins30,
+            "45" => Self::Mins45,
+            "60" => Self::Mins60,
+            _ => Self::Off,
+        }
+    }
+
+    pub fn as_key(self) -> &'static str {
+        match self {
+            Self::Off => "off",
+            Self::Mins15 => "15",
+            Self::Mins30 => "30",
+            Self::Mins45 => "45",
+            Self::Mins60 => "60",
+        }
+    }
+
+    /// Countdown duration for timed modes; None for Off.
+    pub fn duration(self) -> Option<std::time::Duration> {
+        match self {
+            Self::Off => None,
+            Self::Mins15 => Some(std::time::Duration::from_secs(15 * 60)),
+            Self::Mins30 => Some(std::time::Duration::from_secs(30 * 60)),
+            Self::Mins45 => Some(std::time::Duration::from_secs(45 * 60)),
+            Self::Mins60 => Some(std::time::Duration::from_secs(60 * 60)),
+        }
+    }
+
+    /// Selector label in the panel (the SETTING, not the armed end-time display).
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Off => "Off",
+            Self::Mins15 => "15 min",
+            Self::Mins30 => "30 min",
+            Self::Mins45 => "45 min",
+            Self::Mins60 => "60 min",
+        }
+    }
+}
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct AppConfig {
@@ -62,6 +126,8 @@ pub struct AppConfig {
     /// until the power button). Matches e-reader convention: e-ink draws nothing
     /// when static, so the only drain is the frontlight the reader needs anyway.
     pub reading_auto_sleep_secs: u32,
+    /// TTS sleep-timer mode; pauses audio only (independent of device auto-sleep).
+    pub tts_sleep_mode: TtsSleepMode,
     /// Check GitHub for a newer release at launch, when WiFi is already up.
     /// The only outbound request the reader makes on its own, so it is a
     /// setting rather than a hardcoded behaviour.
@@ -104,6 +170,7 @@ impl Default for AppConfig {
             voices: HashMap::new(),
             natural_scroll: true,
             reading_auto_sleep_secs: 0,
+            tts_sleep_mode: TtsSleepMode::default(),
             check_updates: true,
             panel_transition: PanelTransition::default(),
             onboarding_version: String::new(),
@@ -156,6 +223,7 @@ pub fn load_config_from_base(path: &str, base_font: i32) -> AppConfig {
                 KEY_READING_AUTO_SLEEP => {
                     cfg.reading_auto_sleep_secs = val.parse::<u32>().unwrap_or(0).min(3600)
                 }
+                KEY_TTS_SLEEP => cfg.tts_sleep_mode = TtsSleepMode::from_key(val),
                 KEY_CHECK_UPDATES => cfg.check_updates = val == "1" || val == "true",
                 KEY_PANEL_TRANSITION => cfg.panel_transition = PanelTransition::from_key(val),
                 KEY_ONBOARDING_VERSION => cfg.onboarding_version = val.into(),
@@ -204,6 +272,10 @@ pub fn save_config_to(cfg: &AppConfig, path: &str) {
         cfg.margin_px,
         if cfg.auto_hide_header { 1 } else { 0 },
     );
+    data.push_str(&format!(
+        "{KEY_TTS_SLEEP}={}\n",
+        cfg.tts_sleep_mode.as_key()
+    ));
     for (lang, voice) in &cfg.voices {
         data.push_str(&format!("{KEY_VOICE_PREFIX}{lang}={voice}\n"));
     }
@@ -407,5 +479,66 @@ mod tests {
     #[test]
     fn onboarding_version_defaults_empty() {
         assert_eq!(AppConfig::default().onboarding_version, "");
+    }
+
+    #[test]
+    fn tts_sleep_mode_defaults_off() {
+        assert_eq!(AppConfig::default().tts_sleep_mode, TtsSleepMode::Off);
+    }
+
+    #[test]
+    fn tts_sleep_mode_roundtrip() {
+        for mode in [
+            TtsSleepMode::Off,
+            TtsSleepMode::Mins15,
+            TtsSleepMode::Mins30,
+            TtsSleepMode::Mins45,
+            TtsSleepMode::Mins60,
+        ] {
+            let p = tmp_path("tts_sleep");
+            let cfg = AppConfig {
+                tts_sleep_mode: mode,
+                ..AppConfig::default()
+            };
+            save_config_to(&cfg, &p);
+            let loaded = load_config_from_base(&p, 36);
+            assert_eq!(loaded.tts_sleep_mode, mode, "{mode:?} did not roundtrip");
+            let _ = std::fs::remove_file(&p);
+        }
+    }
+
+    #[test]
+    fn tts_sleep_mode_unknown_key_recovers_to_off() {
+        let p = tmp_path("tts_sleep_garbage");
+        std::fs::write(&p, "tts_sleep=absolute-garbage\n").unwrap();
+        let cfg = load_config_from_base(&p, 36);
+        assert_eq!(cfg.tts_sleep_mode, TtsSleepMode::Off, "unknown key -> Off");
+        let _ = std::fs::remove_file(&p);
+    }
+
+    #[test]
+    fn tts_sleep_mode_legacy_eoc_key_recovers_to_off() {
+        let p = tmp_path("tts_sleep_eoc");
+        std::fs::write(&p, "tts_sleep=eoc\n").unwrap();
+        let cfg = load_config_from_base(&p, 36);
+        assert_eq!(cfg.tts_sleep_mode, TtsSleepMode::Off, "legacy eoc -> Off");
+        let _ = std::fs::remove_file(&p);
+    }
+
+    #[test]
+    fn tts_sleep_mode_duration() {
+        assert_eq!(TtsSleepMode::Off.duration(), None);
+        assert_eq!(
+            TtsSleepMode::Mins15.duration(),
+            Some(std::time::Duration::from_secs(15 * 60))
+        );
+        assert_eq!(
+            TtsSleepMode::Mins30.duration(),
+            Some(std::time::Duration::from_secs(30 * 60))
+        );
+        assert_eq!(
+            TtsSleepMode::Mins60.duration(),
+            Some(std::time::Duration::from_secs(60 * 60))
+        );
     }
 }

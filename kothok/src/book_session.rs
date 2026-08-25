@@ -106,7 +106,7 @@ pub fn open_book_session(
         reading_pg,
         reading_off,
         reading_end,
-        show_cover: pos.bookmark.is_none() && pos.cur_start == 0,
+        show_cover: pos.bookmarks.is_empty() && pos.cur_start == 0,
     }
 }
 
@@ -180,7 +180,7 @@ mod tests {
             cur_start: 0,
             cur_end: 0,
             view_mode: crate::ViewMode::Reading,
-            bookmark: None,
+            bookmarks: Vec::new(),
             progress: 0.0,
         }
     }

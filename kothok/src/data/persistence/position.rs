@@ -20,7 +20,10 @@ pub struct ReadingPosition {
     pub cur_start: usize,
     pub cur_end: usize,
     pub view_mode: ViewMode,
-    pub bookmark: Option<Bookmark>,
+    /// Bookmarks in set order: the LAST entry is the most recently set (the
+    /// header jump button's target). Ordered by recency rather than position
+    /// so jump order survives re-setting and repagination.
+    pub bookmarks: Vec<Bookmark>,
     /// Fraction of the book read, 0..1, as the reader knew it when this
     /// position was saved.
     ///
@@ -33,11 +36,19 @@ pub struct ReadingPosition {
     pub progress: f32,
 }
 
-fn format_bookmark(bm: Option<Bookmark>) -> String {
-    match bm {
-        Some(b) => format!("{}:{}:{}", b.chapter, b.page, b.offset),
-        None => "0:0:0".into(),
+/// Bookmarks field: `;`-joined `chapter:page:offset` triples, `0:0:0` when
+/// empty. A colon separates fields within one bookmark, a semicolon separates
+/// bookmarks, so neither can appear in a path-hostile way inside the
+/// pipe-separated line. Old single-bookmark lines (no `;`) parse as a
+/// one-element list.
+fn format_bookmarks(bms: &[Bookmark]) -> String {
+    if bms.is_empty() {
+        return "0:0:0".into();
     }
+    bms.iter()
+        .map(|b| format!("{}:{}:{}", b.chapter, b.page, b.offset))
+        .collect::<Vec<_>>()
+        .join(";")
 }
 
 fn format_mode(mode: ViewMode) -> char {
@@ -69,7 +80,7 @@ pub fn save_position(file: &Path, book_path: &str, pos: &ReadingPosition) -> std
         pos.page,
         pos.cur_start,
         pos.cur_end,
-        format_bookmark(pos.bookmark),
+        format_bookmarks(&pos.bookmarks),
         format_mode(pos.view_mode),
         pos.progress.clamp(0.0, 1.0),
     ));
@@ -94,6 +105,10 @@ fn parse_bookmark(s: &str) -> Option<Bookmark> {
     None
 }
 
+fn parse_bookmarks(s: &str) -> Vec<Bookmark> {
+    s.split(';').filter_map(parse_bookmark).collect()
+}
+
 fn parse_mode(s: Option<&str>) -> ViewMode {
     match s {
         Some("a") => ViewMode::Audio,
@@ -110,7 +125,7 @@ pub fn load_position(file: &Path, book_path: &str) -> Option<ReadingPosition> {
             let pg = parts[2].parse().ok()?;
             let cs = parts[3].parse().ok()?;
             let ce = parts[4].parse().ok()?;
-            let bookmark = parts.get(5).and_then(|s| parse_bookmark(s));
+            let bookmarks = parts.get(5).map(|s| parse_bookmarks(s)).unwrap_or_default();
             let view_mode = parse_mode(parts.get(6).copied());
             // Field 8 is newer than the format; lines written before it exists
             // simply have no stored progress, and the caller falls back to
@@ -126,7 +141,7 @@ pub fn load_position(file: &Path, book_path: &str) -> Option<ReadingPosition> {
                 cur_start: cs,
                 cur_end: ce,
                 view_mode,
-                bookmark,
+                bookmarks,
                 progress,
             });
         }
@@ -159,7 +174,7 @@ mod tests {
                 cur_start: 150,
                 cur_end: 200,
                 view_mode: ViewMode::Reading,
-                bookmark: None,
+                bookmarks: Vec::new(),
                 progress: 0.0,
             },
         )
@@ -170,7 +185,7 @@ mod tests {
         assert_eq!(pos.cur_start, 150);
         assert_eq!(pos.cur_end, 200);
         assert_eq!(pos.view_mode, ViewMode::Reading);
-        assert!(pos.bookmark.is_none());
+        assert!(pos.bookmarks.is_empty());
     }
 
     #[test]
@@ -187,7 +202,7 @@ mod tests {
                 cur_start: 10,
                 cur_end: 20,
                 view_mode: ViewMode::Reading,
-                bookmark: None,
+                bookmarks: Vec::new(),
                 progress: 0.0,
             },
         )
@@ -201,11 +216,11 @@ mod tests {
                 cur_start: 100,
                 cur_end: 200,
                 view_mode: ViewMode::Audio,
-                bookmark: Some(Bookmark {
+                bookmarks: vec![Bookmark {
                     chapter: 5,
                     page: 3,
                     offset: 42,
-                }),
+                }],
                 progress: 0.0,
             },
         )
@@ -215,12 +230,12 @@ mod tests {
         assert_eq!(pos.page, 9);
         assert_eq!(pos.view_mode, ViewMode::Audio);
         assert_eq!(
-            pos.bookmark,
-            Some(Bookmark {
+            pos.bookmarks,
+            vec![Bookmark {
                 chapter: 5,
                 page: 3,
                 offset: 42
-            })
+            }]
         );
     }
 
@@ -238,7 +253,7 @@ mod tests {
                 cur_start: 10,
                 cur_end: 20,
                 view_mode: ViewMode::Reading,
-                bookmark: None,
+                bookmarks: Vec::new(),
                 progress: 0.0,
             },
         )
@@ -252,7 +267,7 @@ mod tests {
                 cur_start: 30,
                 cur_end: 40,
                 view_mode: ViewMode::Reading,
-                bookmark: None,
+                bookmarks: Vec::new(),
                 progress: 0.0,
             },
         )
@@ -278,7 +293,7 @@ mod tests {
                 cur_start: 0,
                 cur_end: 0,
                 view_mode: ViewMode::Reading,
-                bookmark: None,
+                bookmarks: Vec::new(),
                 progress: 0.0,
             },
         )
@@ -292,7 +307,7 @@ mod tests {
                 cur_start: 10,
                 cur_end: 20,
                 view_mode: ViewMode::Reading,
-                bookmark: None,
+                bookmarks: Vec::new(),
                 progress: 0.0,
             },
         )
@@ -326,25 +341,79 @@ mod tests {
                 cur_start: 100,
                 cur_end: 150,
                 view_mode: ViewMode::Audio,
-                bookmark: Some(Bookmark {
-                    chapter: 2,
-                    page: 3,
-                    offset: 80,
-                }),
+                // Three bookmarks, deliberately out of position order: the
+                // list order is set-recency and must survive the roundtrip.
+                bookmarks: vec![
+                    Bookmark {
+                        chapter: 2,
+                        page: 3,
+                        offset: 80,
+                    },
+                    Bookmark {
+                        chapter: 0,
+                        page: 1,
+                        offset: 7,
+                    },
+                    Bookmark {
+                        chapter: 2,
+                        page: 3,
+                        offset: 200,
+                    },
+                ],
                 progress: 0.0,
             },
         )
         .unwrap();
         let pos = load_position(&file, "/mnt/onboard/X.epub").unwrap();
         assert_eq!(
-            pos.bookmark,
-            Some(Bookmark {
-                chapter: 2,
-                page: 3,
-                offset: 80
-            })
+            pos.bookmarks,
+            vec![
+                Bookmark {
+                    chapter: 2,
+                    page: 3,
+                    offset: 80
+                },
+                Bookmark {
+                    chapter: 0,
+                    page: 1,
+                    offset: 7
+                },
+                Bookmark {
+                    chapter: 2,
+                    page: 3,
+                    offset: 200
+                }
+            ]
         );
         assert_eq!(pos.view_mode, ViewMode::Audio);
+    }
+
+    #[test]
+    fn legacy_single_bookmark_line_loads_as_one_entry() {
+        // Pre-multiples format: exactly one `ch:pg:off` triple in field 6.
+        let dir = std::env::temp_dir().join("kothok_test_bm_legacy_one");
+        let _ = std::fs::create_dir_all(&dir);
+        let file = dir.join("positions");
+        std::fs::write(&file, "/mnt/onboard/Old.epub|3|7|150|200|4:2:99|r|0.5000\n").unwrap();
+        let pos = load_position(&file, "/mnt/onboard/Old.epub").unwrap();
+        assert_eq!(
+            pos.bookmarks,
+            vec![Bookmark {
+                chapter: 4,
+                page: 2,
+                offset: 99
+            }]
+        );
+    }
+
+    #[test]
+    fn sentinel_bookmark_field_loads_empty() {
+        let dir = std::env::temp_dir().join("kothok_test_bm_sentinel");
+        let _ = std::fs::create_dir_all(&dir);
+        let file = dir.join("positions");
+        std::fs::write(&file, "/mnt/onboard/Old.epub|3|7|150|200|0:0:0|r|0.5000\n").unwrap();
+        let pos = load_position(&file, "/mnt/onboard/Old.epub").unwrap();
+        assert!(pos.bookmarks.is_empty());
     }
 
     #[test]
@@ -356,7 +425,7 @@ mod tests {
         let pos = load_position(&file, "/mnt/onboard/Old.epub").unwrap();
         assert_eq!(pos.chapter, 3);
         assert_eq!(pos.page, 7);
-        assert!(pos.bookmark.is_none());
+        assert!(pos.bookmarks.is_empty());
         assert_eq!(pos.view_mode, ViewMode::Reading);
     }
 
@@ -385,7 +454,7 @@ mod tests {
                 cur_start: 90,
                 cur_end: 99,
                 view_mode: ViewMode::Reading,
-                bookmark: None,
+                bookmarks: Vec::new(),
                 progress: 0.9,
             },
         );
@@ -412,7 +481,7 @@ mod tests {
                 cur_start: 0,
                 cur_end: 0,
                 view_mode: ViewMode::Reading,
-                bookmark: None,
+                bookmarks: Vec::new(),
                 progress: 0.0,
             },
         )
@@ -440,7 +509,7 @@ mod tests {
         assert_eq!(pos.page, 5);
         assert_eq!(pos.cur_start, 10);
         assert_eq!(pos.cur_end, 20);
-        assert!(pos.bookmark.is_none());
+        assert!(pos.bookmarks.is_empty());
         assert_eq!(pos.view_mode, ViewMode::Reading);
         assert_eq!(pos.progress, 0.0);
     }
@@ -466,7 +535,7 @@ mod tests {
                 cur_start: 10,
                 cur_end: 20,
                 view_mode: ViewMode::Reading,
-                bookmark: None,
+                bookmarks: Vec::new(),
                 progress: 0.1,
             },
         )

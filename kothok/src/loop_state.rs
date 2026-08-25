@@ -27,6 +27,7 @@ pub enum ChapterTab {
     #[default]
     Chapters,
     Words,
+    Bookmarks,
 }
 
 pub struct LoopState {
@@ -106,7 +107,25 @@ pub struct LoopState {
     /// the whole screen, so it needs a full GC16 present; a partial refresh
     /// leaves the outgoing mode's pixels ghosted on the panel.
     pub prev_view_mode: ViewMode,
-    pub bookmark: Option<Bookmark>,
+    /// Bookmarks in set order; the LAST is the most recently set (the header
+    /// jump button's target). The overlay lists them sorted by position.
+    pub bookmarks: Vec<Bookmark>,
+    /// Scroll offset of the overlay's Bookmarks tab and its press-time copy
+    /// for drag restore, mirroring chapter_scroll/search_scroll.
+    pub bookmark_scroll: i32,
+    pub press_bookmark_scroll: i32,
+    /// Index into `bookmarks` of the row a finger went down on in the
+    /// overlay's Bookmarks tab. Consumed on release: a hold deletes that
+    /// bookmark, a tap selects it.
+    pub bm_press: Option<usize>,
+    /// Selected bookmark row in the overlay's Bookmarks tab (index into
+    /// `bookmarks`). Cleared when the overlay opens or its bookmark is
+    /// deleted; drives the row highlight and the Open button's target.
+    pub bm_selected: Option<usize>,
+    /// Fracs currently pushed to the Slint marker model. The model set is
+    /// skipped unless this changes, so the per-frame refresh cannot dirty the
+    /// window and spin the render loop.
+    pub pushed_bookmark_fracs: Vec<f32>,
     pub lock_time: Option<Instant>,
     pub saved_brightness: u32,
     /// True when the lock disconnected BT and/or WiFi (entered while paused), so
@@ -153,6 +172,23 @@ pub struct LoopState {
     /// GL16 pass to settle once it is no longer moving.
     pub disk_settle: bool,
     pub prev_playing: bool,
+
+    /// TTS sleep timer: mirrored mode (from cfg) + countdown state. Pauses audio
+    /// only; see loop_run::tts_sleep. deadline=None & remaining=None = disarmed.
+    pub tts_sleep_mode: crate::data::config::TtsSleepMode,
+    /// True between arm (Event::Playing) and fire/stop. End-of-chapter mode has
+    /// no deadline yet is still armed, so deadline/remaining alone cannot tell it
+    /// apart from disarmed.
+    pub tts_sleep_armed: bool,
+    pub tts_sleep_deadline: Option<Instant>,
+    pub tts_sleep_paused_remaining: Option<std::time::Duration>,
+    /// Set by the TTS sleep timer (timed deadline) to ask the run loop to put
+    /// the device to sleep. Auto-off's activity clock is refreshed every tick
+    /// while audio plays, so it can never elapse during playback - the timer
+    /// owns the bedtime sleep itself; the loop drains this flag into
+    /// sleep::sleep_from_timer once per frame (Awake and Locked alike ->
+    /// device sleep keeping the current view; Asleep -> no-op).
+    pub sleep_requested: bool,
 
     pub prev_down: bool,
     pub frame_down: bool,

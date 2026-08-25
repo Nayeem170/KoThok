@@ -106,7 +106,7 @@ pub(super) type BookInit = (
     bool,
     bool,
     crate::ViewMode,
-    Option<crate::Bookmark>,
+    Vec<crate::Bookmark>,
     Option<std::time::Instant>,
     Vec<library::FlatTocRow>,
     WordIndex,
@@ -188,7 +188,7 @@ pub(super) fn init_book(
             cur_start: 0,
             cur_end: 0,
             view_mode: crate::ViewMode::Reading,
-            bookmark: None,
+            bookmarks: Vec::new(),
             progress: 0.0,
         }
     } else {
@@ -200,13 +200,13 @@ pub(super) fn init_book(
                 cur_start: 0,
                 cur_end: 0,
                 view_mode: crate::ViewMode::Reading,
-                bookmark: None,
+                bookmarks: Vec::new(),
                 progress: 0.0,
             })
     };
     let current_chapter = pos.chapter;
     let initial_view_mode = pos.view_mode;
-    let initial_bookmark = pos.bookmark;
+    let initial_bookmarks = pos.bookmarks.clone();
 
     let mut chapters_mut = chapters.clone();
     let session = crate::book_session::open_book_session(
@@ -298,7 +298,7 @@ pub(super) fn init_book(
             cover_page_visible,
             text_dirty,
             initial_view_mode,
-            initial_bookmark,
+            initial_bookmarks,
             None,
             toc_rows,
             word_index,

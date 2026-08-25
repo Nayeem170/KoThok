@@ -114,7 +114,7 @@ pub fn run() -> Option<InitResult> {
     setup
         .reader
         .set_audio_mode(matches!(st.view_mode, crate::ViewMode::Audio));
-    setup.reader.set_has_bookmark(st.bookmark.is_some());
+    setup.reader.set_has_bookmark(!st.bookmarks.is_empty());
 
     Some(InitResult {
         fb,
@@ -263,6 +263,11 @@ fn init_reader_and_config(w: usize, hw_cfg: &hw::DeviceConfig) -> ReaderSetup {
     reader.set_sleep_label(
         crate::panel::callbacks::sleep::sleep_label(cfg.reading_auto_sleep_secs).into(),
     );
+    // Mirror the saved TTS sleep mode into the panel row at startup. The row's
+    // tts-sleep-label is an in-out property that persists across panel opens;
+    // without this it defaults to "Off" after a reboot until the audio-gear
+    // panel-open path (the only other writer) runs.
+    reader.set_tts_sleep_label(cfg.tts_sleep_mode.label().into());
     let caps = KoboCapabilities;
     reader.set_wifi_on(caps.network_available());
     reader.set_bt_on(caps.audio_sink_available());
@@ -335,7 +340,7 @@ fn init_book_or_picker(
             false,
             true,
             crate::ViewMode::Reading,
-            None,
+            Vec::new(),
             None,
             Vec::new(),
             Default::default(),

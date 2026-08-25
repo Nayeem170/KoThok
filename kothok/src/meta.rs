@@ -340,30 +340,33 @@ const AUDIO_CAPTION_PX: f32 = 40.0;
 pub(crate) fn set_chapter_name(reader: &Reader, name: &str) {
     let name = clean_ws(name);
     reader.set_chapter_name(SharedString::from(&name));
-    if !name.is_empty() && has_bangla(&name) {
-        let (img, h) = crate::rendering::render::text_image(&name, 22.0, panel_text_w(), 1);
-        reader.set_chapter_name_img(img);
-        reader.set_chapter_name_img_h(h as i32);
-        // The audio screen sets the same name at nearly twice the size, and it
-        // gets its own raster rather than scaling this one up. The control
-        // panel binds its Image to the picture's *natural* height, so raising
-        // the shared render to suit the audio screen would silently enlarge the
-        // caption in the panel; scaling a 22px raster up to 40px instead just
-        // renders it soft. Rendering twice costs one extra text_image per
-        // chapter change, and only for Bangla.
-        let (hero, hero_h) = crate::rendering::render::text_image(
-            &name,
-            AUDIO_CAPTION_PX,
-            crate::w().saturating_sub(AUDIO_CAPTION_PAD).max(120),
-            1,
-        );
-        reader.set_chapter_name_hero_img(hero);
-        reader.set_chapter_name_hero_img_h(hero_h as i32);
-    } else {
+    if name.is_empty() {
         reader.set_chapter_name_img(slint::Image::default());
         reader.set_chapter_name_img_h(0);
         reader.set_chapter_name_hero_img(slint::Image::default());
         reader.set_chapter_name_hero_img_h(0);
+        return;
+    }
+    // The audio screen shows the chapter name as an image (Slint Text does not
+    // render in the audio body on device), so the hero raster is produced for
+    // every name - Latin-script titles too, not just Bangla.
+    let (hero, hero_h) = crate::rendering::render::text_image(
+        &name,
+        AUDIO_CAPTION_PX,
+        crate::w().saturating_sub(AUDIO_CAPTION_PAD).max(120),
+        1,
+    );
+    reader.set_chapter_name_hero_img(hero);
+    reader.set_chapter_name_hero_img_h(hero_h as i32);
+    // The control panel's Slint Text renders Latin fine, so its smaller raster
+    // is only needed for Bangla (no Bengali glyphs in the bundled face).
+    if has_bangla(&name) {
+        let (img, h) = crate::rendering::render::text_image(&name, 22.0, panel_text_w(), 1);
+        reader.set_chapter_name_img(img);
+        reader.set_chapter_name_img_h(h as i32);
+    } else {
+        reader.set_chapter_name_img(slint::Image::default());
+        reader.set_chapter_name_img_h(0);
     }
 }
 

@@ -5,7 +5,7 @@ use crate::Reader;
 
 mod audio;
 pub(super) mod bookmark;
-mod jump;
+pub(super) mod jump;
 mod mode_toggle;
 mod navigation;
 
@@ -159,6 +159,7 @@ pub(super) fn process_loop_callbacks(st: &mut LoopState, ctx: &mut LoopContext) 
         reader.set_sleep_label(
             crate::panel::callbacks::sleep::sleep_label(ctx.cfg.reading_auto_sleep_secs).into(),
         );
+        reader.set_tts_sleep_label(ctx.cfg.tts_sleep_mode.label().into());
         if let Some(ref path) = ctx.fl_path {
             if let Some(hw) = frontlight_get(path) {
                 reader.set_brightness_val(hw as i32);
@@ -178,8 +179,9 @@ pub(super) fn process_loop_callbacks(st: &mut LoopState, ctx: &mut LoopContext) 
 
     {
         let total = *st.chapter_offsets.last().unwrap_or(&1).max(&1) as f32;
-        let frac = st
-            .bookmark
+        let mut fracs: Vec<f32> = st
+            .bookmarks
+            .iter()
             .map(|bm| {
                 // A font-size change repaginates the loaded chapter, so the
                 // stored page number drifts and the seek-bar marker would
@@ -188,7 +190,7 @@ pub(super) fn process_loop_callbacks(st: &mut LoopState, ctx: &mut LoopContext) 
                 // other chapters keep the stored estimate (their pagination is
                 // not rebuilt until they are opened).
                 let page_in_chapter = if bm.chapter == st.current_chapter {
-                    bookmark::page_for_bookmark(st, &bm)
+                    bookmark::page_for_bookmark(st, bm)
                 } else {
                     bm.page
                 };
@@ -196,9 +198,16 @@ pub(super) fn process_loop_callbacks(st: &mut LoopState, ctx: &mut LoopContext) 
                     st.chapter_offsets.get(bm.chapter).copied().unwrap_or(0) + page_in_chapter;
                 (global as f32 / total).clamp(0.0, 1.0)
             })
-            .unwrap_or(-1.0);
-        reader.set_bookmark_frac(frac);
-        reader.set_has_bookmark(st.bookmark.is_some());
+            .collect();
+        fracs.sort_by(|a, b| a.total_cmp(b));
+        // Push a fresh model only when the set changed: this runs every
+        // callback pass, and re-setting the model would dirty the window and
+        // spin the render loop for a frame with nothing new on it.
+        if fracs != st.pushed_bookmark_fracs {
+            reader.set_bookmark_fracs(slint::ModelRc::new(slint::VecModel::from(fracs.clone())));
+            st.pushed_bookmark_fracs = fracs;
+        }
+        reader.set_has_bookmark(!st.bookmarks.is_empty());
     }
 
     {
@@ -280,15 +289,20 @@ pub(super) fn process_loop_callbacks(st: &mut LoopState, ctx: &mut LoopContext) 
         st.search_results_active = false;
         st.search_results_scroll = 0;
         st.search_word_selected = false;
+        st.bookmark_scroll = 0;
+        st.bm_selected = None;
+        st.bm_press = None;
         let requested = cb.overlay_requested_tab_cell.replace(-1);
         let tab = match requested {
             1 => crate::loop_state::ChapterTab::Words,
+            2 => crate::loop_state::ChapterTab::Bookmarks,
             _ => crate::loop_state::ChapterTab::Chapters,
         };
         st.chapter_tab = tab;
         let tab_int = match tab {
             crate::loop_state::ChapterTab::Chapters => 0,
             crate::loop_state::ChapterTab::Words => 1,
+            crate::loop_state::ChapterTab::Bookmarks => 2,
         };
         reader.set_chapter_overlay_active_tab(tab_int);
         let (seg_w, gap, font_px) = crate::rendering::tab_bar_geom::tab_bar_geom(ctx.w);
@@ -329,6 +343,11 @@ pub(super) fn process_loop_callbacks(st: &mut LoopState, ctx: &mut LoopContext) 
             1 => {
                 st.chapter_tab = crate::loop_state::ChapterTab::Words;
                 st.search_scroll = 0;
+            }
+            2 => {
+                st.chapter_tab = crate::loop_state::ChapterTab::Bookmarks;
+                st.bookmark_scroll = 0;
+                st.bm_selected = None;
             }
             _ => {}
         }

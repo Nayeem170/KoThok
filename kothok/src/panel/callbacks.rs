@@ -7,6 +7,7 @@ pub(crate) mod sleep;
 mod sliders;
 mod system;
 mod text_align;
+mod tts_sleep;
 mod voice;
 
 use std::sync::mpsc::Sender;
@@ -51,6 +52,7 @@ pub fn process_panel_callbacks(
         text_align::handle_text_align_toggle(st, reader, cmd_tx, cfg, &cb.text_align_cell);
     book_changed |= voice::handle_voice_cycle(reader, cmd_tx, cfg, &cb.panel_voice_cell);
     global_changed |= sleep::handle_sleep_cycle(reader, cfg, &cb.sleep_cycle_cell);
+    global_changed |= tts_sleep::handle_tts_sleep_cycle(st, reader, cfg, &cb.tts_sleep_cycle_cell);
     // Not a saved setting -- a one-shot request whose answer goes on screen.
     ui_changed |= system::handle_update_check(st, reader, &cb.update_check_cell);
     // Auto-hide is a reading-behaviour preference, not typography, so it is

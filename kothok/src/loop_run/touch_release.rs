@@ -89,7 +89,7 @@ pub(super) fn on_release(
                         button: slint::platform::PointerEventButton::Left,
                     });
             }
-            chapter_overlay_release(st, ctx, dx, dy, swipe_dx, swipe_dy);
+            chapter_overlay_release(st, ctx, dx, dy, swipe_dx, swipe_dy, dt.as_millis());
             return;
         }
         if st.press_dispatched {
@@ -381,6 +381,11 @@ pub(super) fn on_release(
     }
 }
 
+/// Hold time after which releasing on a Bookmarks-tab row deletes the
+/// bookmark instead of selecting it. Above any realistic tap dwell, below
+/// the point a hold starts to feel broken.
+const BM_DELETE_HOLD_MS: u128 = 550;
+
 fn chapter_overlay_release(
     st: &mut LoopState,
     ctx: &mut LoopContext,
@@ -388,9 +393,11 @@ fn chapter_overlay_release(
     dy: f32,
     swipe_dx: f32,
     swipe_dy: f32,
+    hold_ms: u128,
 ) {
     let reader = ctx.reader;
     let cb = ctx.cb;
+    let cmd_tx = ctx.cmd_tx;
     let list_bottom = (ctx.h as f32) - CH_LIST_BOTTOM_PAD as f32;
     if dy >= list_bottom {
         if st.search_results_active {
@@ -428,10 +435,30 @@ fn chapter_overlay_release(
                 cb.chapter_select_cell.set(Some(idx));
                 st.text_dirty = true;
             }
+            // Open jumps to the selected row, or to the most recently set
+            // bookmark when nothing is selected (same target as the header
+            // jump button).
+            crate::loop_state::ChapterTab::Bookmarks => {
+                if st.bookmarks.is_empty() {
+                    return;
+                }
+                let idx = st
+                    .bm_selected
+                    .filter(|&i| i < st.bookmarks.len())
+                    .unwrap_or(st.bookmarks.len() - 1);
+                reader.set_chapter_overlay_open(false);
+                reader.set_chapter_preview_idx(-1);
+                st.bm_press = None;
+                super::callbacks::jump::jump_to_bookmark_idx(st, reader, cmd_tx, ctx, idx);
+            }
         }
         return;
     }
     if search::handle_search_release(st, ctx, dx, dy) {
+        return;
+    }
+    if st.chapter_tab == crate::loop_state::ChapterTab::Bookmarks {
+        bookmark_row_release(st, ctx, swipe_dx, swipe_dy, hold_ms);
         return;
     }
     match gesture::chapter_overlay_target(
@@ -452,6 +479,50 @@ fn chapter_overlay_release(
         }
         gesture::ChapterOverlayAction::None => {}
     }
+}
+
+/// Release on a Bookmarks-tab row. A hold on the row pressed at touchdown
+/// deletes that bookmark; a tap selects it (the Open strip jumps to the
+/// selection). A flick keeps the drag-scroll and selects nothing. Selection
+/// and delete act on the row the finger went DOWN on, not the release
+/// position: at a scroll boundary the clamp breaks the press/release
+/// cancellation, and a re-hit-test there picks a row the user never touched.
+fn bookmark_row_release(
+    st: &mut LoopState,
+    ctx: &mut LoopContext,
+    swipe_dx: f32,
+    swipe_dy: f32,
+    hold_ms: u128,
+) {
+    let Some(orig) = st.bm_press.take() else {
+        return;
+    };
+    if swipe_dy.abs() > 40.0 && swipe_dy.abs() > swipe_dx.abs() {
+        return;
+    }
+    if hold_ms >= BM_DELETE_HOLD_MS {
+        let bm = st.bookmarks.remove(orig);
+        st.bm_selected =
+            crate::rendering::bookmark_list::selected_after_remove(st.bm_selected, orig);
+        let list_h =
+            (ctx.h as i32) - crate::rendering::chapter_list::CH_LIST_TOP - CH_LIST_BOTTOM_PAD;
+        let max_scroll =
+            crate::rendering::chapter_list::list_scroll_max(st.bookmarks.len(), list_h);
+        st.bookmark_scroll = st.bookmark_scroll.min(max_scroll);
+        info!(
+            "bookmark-delete: ch={} off={} hold={}ms remaining={}",
+            bm.chapter + 1,
+            bm.offset,
+            hold_ms,
+            st.bookmarks.len(),
+        );
+        st.text_dirty = true;
+        ctx.window.request_redraw();
+        return;
+    }
+    st.bm_selected = Some(orig);
+    st.text_dirty = true;
+    ctx.window.request_redraw();
 }
 
 /// Clamp a raw tap position into the content region for the zoom crop centre.

@@ -94,6 +94,11 @@ pub fn wake_from_sleep(st: &mut LoopState, ctx: &LoopContext) {
         return;
     }
 
+    if matches!(st.view_mode, crate::ViewMode::Audio) {
+        wake_from_sleep_audio(st, ctx);
+        return;
+    }
+
     let reader = ctx.reader;
     let window = ctx.window;
     let fb = ctx.fb;
@@ -262,6 +267,46 @@ pub fn teardown(
         }
     }
     info!("teardown complete");
+}
+
+/// Wake into the audio screen. enter_sleep's `Cmd::Stop` reset the audio queue
+/// to the chapter head and dropped the player, so the driver is repaired the
+/// same way the mode-toggle into audio repairs it: reload the chapter
+/// utterances and seek to the pre-sleep cursor. The screen itself is the
+/// persistent Slint AudioPlayer scene (its properties survive the sleep), so
+/// one full draw + GC16 present restores it. Frontlight and radios return the
+/// same way as the reading wake, with Bluetooth added because audio mode's
+/// speaker needs it.
+fn wake_from_sleep_audio(st: &mut LoopState, ctx: &LoopContext) {
+    let reader = ctx.reader;
+    let off = reader.get_cur_start().max(0) as usize;
+    crate::audio::glue::load_chapter_audio(&st.state, &ctx.cmd_tx);
+    let idx = crate::audio::glue::utterance_index_for_offset(&st.state.utterances, off);
+    best_effort_send(&ctx.cmd_tx, Cmd::Seek(idx));
+    ctx.window.request_redraw();
+    let _ = ctx.window.draw_if_needed(|r| {
+        r.render(&mut st.buffer, ctx.w);
+    });
+    ctx.fb.present(
+        rgb565_as_bytes_ref(&st.buffer),
+        ctx.w,
+        ctx.h,
+        false,
+        0,
+        ctx.h,
+        WAVE_GC16,
+    );
+    ctx.fb.wait_for_update_complete();
+    st.prev_buffer.copy_from_slice(&st.buffer);
+    if let Some(ref path) = ctx.fl_path {
+        crate::device::power::restore_frontlight(path, st.saved_brightness);
+    }
+    if st.bt_user_on && !crate::device::bt_status() {
+        bt_toggle(true);
+    }
+    if st.wifi_user_on {
+        wifi_toggle(true);
+    }
 }
 
 fn wake_from_sleep_picker(st: &mut LoopState, ctx: &LoopContext) {

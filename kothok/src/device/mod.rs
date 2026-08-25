@@ -55,7 +55,8 @@ pub fn build_stamp() -> String {
         .clone()
 }
 
-/// Free space on the book partition, as a short human label ("12.1 GB").
+/// Free and total space on the book partition, as a short human label
+/// ("12.1 GB / 28.9 GB").
 ///
 /// Reported for the partition the reader's own books and caches live on, not
 /// the root filesystem: that is the number that decides whether another book
@@ -72,11 +73,46 @@ pub fn free_space_label() -> Option<String> {
         }
         s
     };
-    let bytes = stat.f_bavail as u64 * stat.f_frsize as u64;
+    let free_bytes = stat.f_bavail as u64 * stat.f_frsize as u64;
+    let total_bytes = stat.f_blocks as u64 * stat.f_frsize as u64;
+    Some(storage_label(free_bytes, total_bytes))
+}
+
+fn storage_label(free_bytes: u64, total_bytes: u64) -> String {
+    format!("{} / {}", size_label(free_bytes), size_label(total_bytes))
+}
+
+fn size_label(bytes: u64) -> String {
     let gb = bytes as f64 / 1_000_000_000.0;
     if gb >= 1.0 {
-        Some(format!("{gb:.1} GB"))
+        format!("{gb:.1} GB")
     } else {
-        Some(format!("{:.0} MB", bytes as f64 / 1_000_000.0))
+        format!("{:.0} MB", bytes as f64 / 1_000_000.0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::storage_label;
+
+    #[test]
+    fn both_sides_in_gb() {
+        assert_eq!(
+            storage_label(12_100_000_000, 28_900_000_000),
+            "12.1 GB / 28.9 GB"
+        );
+    }
+
+    #[test]
+    fn free_below_one_gb_uses_mb_total_stays_gb() {
+        assert_eq!(
+            storage_label(820_000_000, 28_900_000_000),
+            "820 MB / 28.9 GB"
+        );
+    }
+
+    #[test]
+    fn zero_free_space() {
+        assert_eq!(storage_label(0, 28_900_000_000), "0 MB / 28.9 GB");
     }
 }

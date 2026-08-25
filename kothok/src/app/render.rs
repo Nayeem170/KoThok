@@ -194,6 +194,20 @@ pub fn render_and_present(
                             st.sb_dragging && st.sb_drag_tab == ChapterTab::Words,
                         );
                     }
+                    ChapterTab::Bookmarks => {
+                        let rows = crate::rendering::bookmark_list::bookmark_rows(
+                            &st.bookmarks,
+                            &st.chapters,
+                            &st.chapter_offsets,
+                        );
+                        crate::rendering::bookmark_list::paint_bookmark_list(
+                            &mut st.buffer,
+                            &rows,
+                            st.bookmark_scroll,
+                            st.bm_selected,
+                            st.sb_dragging && st.sb_drag_tab == ChapterTab::Bookmarks,
+                        );
+                    }
                 }
             }
         }

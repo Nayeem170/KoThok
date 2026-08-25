@@ -2,6 +2,25 @@
 
 All notable changes to KoThok are documented here.
 
+## [0.3.0] - 2026-08-25
+
+### Reading
+- Multiple bookmarks per book. The header bookmark icon toggles a bookmark at the current spot, and a book can hold any number of them.
+- Every bookmark draws its own green tab on the progress bar, in reading and audio mode.
+- The header jump arrow returns to the most recently set bookmark.
+- The chapter overlay gains a Bookmarks tab beside Chapters and Words. Rows list page and chapter title in book order; tap a row then tap Open to jump; press and hold a row for half a second to delete that bookmark.
+- Bookmarks persist per book. A position saved by an older single-bookmark build loads as a one-bookmark list.
+
+### Read-aloud (TTS)
+- Sleep timer in Settings: Off / 15 / 30 / 45 / 60 minutes, one countdown for both reading and audio mode. At expiry the device sleeps; a locked device sleeps too, and the view mode is kept across sleep and wake.
+- The countdown keeps its deadline across auto chapter advance and A2DP sink reopen instead of restarting. A fresh play and a panel mode change restart it; resuming from pause keeps the frozen remaining time.
+- Audio caption reworked: page info and sleep time stack on two lines, drawn as images (Slint Text failed in the audio body), darkened for e-ink, and spaced so the sleep line clears the footer. The chapter name moves up to make the gap instead of pushing page info down.
+- Sleep timer arms on mode change while playing.
+
+### Panel / UI
+- Device panel shows total storage beside free space ("12.1 GB / 28.9 GB").
+- Update deploys now sync the onboarding guide, so the version-change guide reopening shows current chapters.
+
 ## [0.2.0] - 2026-07-26
 
 ### Reading

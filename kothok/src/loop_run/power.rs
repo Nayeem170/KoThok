@@ -295,25 +295,11 @@ pub(super) fn auto_sleep(st: &mut LoopState, ctx: &mut LoopContext) -> LoopFlow 
     if st.system_state == SystemState::Locked {
         if let Some(lock_time) = st.lock_time {
             if lock_time.elapsed().as_secs() > LOCK_SLEEP_SECS {
-                let locked_brightness = st.saved_brightness;
                 crate::debug_log::log(&format!(
                     "sleep: LOCK->Asleep after {}s locked, picker={}",
                     LOCK_SLEEP_SECS, st.picker_active
                 ));
-                enter_sleep(st, ctx, st.picker_active);
-                st.saved_brightness = locked_brightness;
-                st.system_state = SystemState::Asleep {
-                    from_picker: st.picker_active,
-                };
-                st.lock_time = None;
-                // enter_sleep + wake now own the radios; drop the lock markers so
-                // a later unlock does not double-reconnect.
-                st.lock_radios_off = false;
-                st.lock_wifi_off = false;
-                st.lock_bt_off = false;
-                reader.set_audio_locked(false);
-                st.view_mode = crate::ViewMode::Reading;
-                reader.set_audio_mode(false);
+                sleep::sleep_locked(st, ctx);
                 info!("LOCK-SLEEP after {}s locked", LOCK_SLEEP_SECS);
                 st.last_activity = std::time::Instant::now();
                 return LoopFlow::Continue;
