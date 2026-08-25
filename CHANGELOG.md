@@ -2,7 +2,7 @@
 
 All notable changes to KoThok are documented here.
 
-## [0.3.0] - 2026-08-25
+## [Unreleased]
 
 ### Reading
 - Multiple bookmarks per book. The header bookmark icon toggles a bookmark at the current spot, and a book can hold any number of them.
